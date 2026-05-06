@@ -490,7 +490,7 @@ export default function App() {
           if (userRole) {
             setCurrentUser(user);
             setRole(userRole as UserRole);
-            if (view === "login") {
+            if (view === "login" || view === "first_password_setup") {
               setView("dashboard");
             }
           } else {
