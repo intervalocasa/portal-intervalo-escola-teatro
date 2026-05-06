@@ -91,7 +91,16 @@ export const LoginView = ({
                 <Lock size={18} />
               </div>
             </div>
-            <p className="text-[9px] text-slate-400 font-bold ml-1">* Primeiro acesso? Use seu CPF (só números) como senha.</p>
+            <div className="flex justify-between items-center px-1">
+              <p className="text-[9px] text-slate-400 font-bold">* Use sua senha cadastrada para acessar.</p>
+              <button 
+                type="button"
+                onClick={() => setView("first_password_setup")}
+                className="text-[9px] text-pro-teal font-black uppercase tracking-widest hover:underline"
+              >
+                Não possuo senha
+              </button>
+            </div>
           </div>
 
           {error && (

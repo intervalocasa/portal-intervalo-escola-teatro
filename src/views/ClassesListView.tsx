@@ -5,7 +5,7 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, ChevronDown, Presentation } from "lucide-react";
+import { Search, ChevronDown, Presentation, Edit } from "lucide-react";
 import { Class, User } from "../types";
 import { Logo } from "../components/CommonComponents";
 
@@ -84,16 +84,52 @@ export const ClassesListView = ({
                           {c.isActive ? "Ativa" : "Inativa"}
                         </span>
                         <h4 className="font-black text-slate-800 uppercase tracking-tight text-lg leading-none">{c.code}</h4>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{c.type}</p>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-1">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{c.type}</p>
+                          {(c.weekday || c.time) && (
+                            <div className="flex items-center gap-1 text-pro-teal/60">
+                              <span className="w-1 h-1 bg-slate-200 rounded-full hidden sm:block"></span>
+                              <p className="text-[9px] font-black uppercase tracking-widest">
+                                {c.weekday}{c.weekday && c.time ? " • " : ""}{c.time}
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2 sm:gap-6">
                       <div className="text-right hidden sm:block">
                         <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Professor</p>
                         <p className="text-[11px] font-bold text-slate-500 uppercase">{users.find(u => u.id === c.teacherId)?.name || "..."}</p>
                       </div>
-                      <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-pro-teal/10 group-hover:text-pro-teal transition-all">
-                        <ChevronDown size={20} className="-rotate-90" />
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedClassId(c.id);
+                            setClassData({
+                              id: c.id,
+                              code: c.code,
+                              type: c.type,
+                              teacherId: c.teacherId,
+                              studentIds: c.studentIds || [],
+                              isActive: c.isActive,
+                              inactivationReason: c.inactivationReason || "",
+                              year: c.year,
+                              weekday: c.weekday || "",
+                              time: c.time || "",
+                              startDate: c.startDate || ""
+                            });
+                            setView("edit_class");
+                          }}
+                          className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-pro-teal hover:text-white transition-all shadow-sm"
+                          title="Editar Turma"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-pro-teal/10 group-hover:text-pro-teal transition-all">
+                          <ChevronDown size={20} className="-rotate-90" />
+                        </div>
                       </div>
                     </div>
                   </motion.button>

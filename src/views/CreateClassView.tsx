@@ -4,10 +4,10 @@
  */
 
 import { motion } from "motion/react";
-import { Plus, X, UserCircle, Calendar, GraduationCap } from "lucide-react";
+import { Plus, X, UserCircle, Calendar, GraduationCap, ChevronDown, Check } from "lucide-react";
 import { User, ClassData } from "../types";
 import { Logo } from "../components/CommonComponents";
-import { FormEvent } from "react";
+import { FormEvent, useState, useRef, useEffect } from "react";
 
 interface CreateClassViewProps {
   classData: ClassData;
@@ -31,6 +31,41 @@ export const CreateClassView = ({
   handleDeleteClass
 }: CreateClassViewProps) => {
   const teachers = users.filter(u => u.role === "Professor");
+  const [isDayDropdownOpen, setIsDayDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const WEEKDAYS = [
+    "Segunda-feira",
+    "Terça-feira",
+    "Quarta-feira",
+    "Quinta-feira",
+    "Sexta-feira",
+    "Sábado",
+    "Domingo"
+  ];
+
+  const selectedDays = classData.weekday ? classData.weekday.split(", ") : [];
+
+  const toggleDay = (day: string) => {
+    let newDays;
+    if (selectedDays.includes(day)) {
+      newDays = selectedDays.filter(d => d !== day);
+    } else {
+      // Keep sort order
+      newDays = [...selectedDays, day].sort((a, b) => WEEKDAYS.indexOf(a) - WEEKDAYS.indexOf(b));
+    }
+    setClassData((prev: any) => ({ ...prev, weekday: newDays.join(", ") }));
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDayDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <motion.div
@@ -78,6 +113,52 @@ export const CreateClassView = ({
               <option value="Curso Livre 60+">Curso Livre 60+</option>
               <option value="Prática Profissional de Montagem">Prática Profissional de Montagem</option>
             </select>
+          </div>
+
+          <div className="space-y-1 relative" ref={dropdownRef}>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Dias da Semana</label>
+            <div 
+              onClick={() => setIsDayDropdownOpen(!isDayDropdownOpen)}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all cursor-pointer flex items-center justify-between hover:border-pro-teal"
+            >
+              <span className={`truncate ${selectedDays.length === 0 ? "text-slate-400" : "text-slate-800 font-medium"}`}>
+                {selectedDays.length === 0 ? "Selecione os dias" : selectedDays.join(", ")}
+              </span>
+              <ChevronDown size={18} className={`text-slate-400 transition-transform ${isDayDropdownOpen ? "rotate-180" : ""}`} />
+            </div>
+
+            {isDayDropdownOpen && (
+              <div className="absolute z-50 w-full mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="p-2 space-y-1">
+                  {WEEKDAYS.map(day => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => toggleDay(day)}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all ${
+                        selectedDays.includes(day) 
+                        ? "bg-pro-teal/10 text-pro-teal font-bold" 
+                        : "text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {day}
+                      {selectedDays.includes(day) && <Check size={16} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Horário</label>
+            <input
+              type="text"
+              value={classData.time || ""}
+              onChange={(e) => setClassData(prev => ({ ...prev, time: e.target.value }))}
+              placeholder="Ex: 19:00 às 21:30"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+            />
           </div>
 
           <div className="space-y-1">

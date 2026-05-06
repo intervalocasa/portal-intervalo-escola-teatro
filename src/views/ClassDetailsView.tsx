@@ -19,6 +19,7 @@ interface ClassDetailsViewProps {
   role: UserRole | null;
   setSelectedUserId: (id: string | null) => void;
   setView: (view: string) => void;
+  setClassData: (data: any) => void;
 }
 
 export const ClassDetailsView = ({
@@ -28,6 +29,7 @@ export const ClassDetailsView = ({
   role,
   setSelectedUserId,
   setView,
+  setClassData
 }: ClassDetailsViewProps) => {
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -130,7 +132,24 @@ export const ClassDetailsView = ({
                     <UserPlus size={16} /> Matricular Aluno
                   </button>
                   <button 
-                    onClick={() => setView("edit_class")}
+                    onClick={() => {
+                      if (targetClass) {
+                        setClassData({
+                          id: targetClass.id,
+                          code: targetClass.code,
+                          type: targetClass.type,
+                          teacherId: targetClass.teacherId,
+                          studentIds: targetClass.studentIds || [],
+                          isActive: targetClass.isActive,
+                          inactivationReason: targetClass.inactivationReason || "",
+                          year: targetClass.year,
+                          weekday: targetClass.weekday || "",
+                          time: targetClass.time || "",
+                          startDate: targetClass.startDate || ""
+                        });
+                        setView("edit_class");
+                      }
+                    }}
                     className="p-4 bg-white border border-slate-200 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
                   >
                     <Edit size={16} /> Editar Turma
@@ -218,6 +237,18 @@ export const ClassDetailsView = ({
                       {targetClass.startDate ? new Date(targetClass.startDate + 'T00:00:00').toLocaleDateString('pt-BR') : targetClass.year}
                     </span>
                  </div>
+                 {targetClass.weekday && (
+                   <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                      <div className="flex items-center gap-3 text-slate-400"><Calendar size={16} /><span className="text-[10px] font-black uppercase tracking-widest">Dias</span></div>
+                      <span className="text-sm font-black text-slate-700">{targetClass.weekday}</span>
+                   </div>
+                 )}
+                 {targetClass.time && (
+                   <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                      <div className="flex items-center gap-3 text-slate-400"><Calendar size={16} /><span className="text-[10px] font-black uppercase tracking-widest">Horário</span></div>
+                      <span className="text-sm font-black text-slate-700">{targetClass.time}</span>
+                   </div>
+                 )}
                </div>
             </div>
           </div>

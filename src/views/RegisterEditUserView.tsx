@@ -117,7 +117,7 @@ export const RegisterEditUserView = ({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Artístico / Como gosta de ser chamado</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Artístico</label>
             <input
               type="text"
               name="artisticName"
@@ -137,7 +137,7 @@ export const RegisterEditUserView = ({
               disabled={view !== "register" && role !== "Gestor"}
               value={formData.cpf}
               onChange={handleInputChange}
-              placeholder="Seu login no sistema"
+              placeholder="000.000.000-00"
               className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white disabled:opacity-50"
             />
           </div>
