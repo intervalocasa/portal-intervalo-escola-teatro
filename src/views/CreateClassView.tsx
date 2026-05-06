@@ -1,0 +1,162 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { motion } from "motion/react";
+import { Plus, X, UserCircle, Calendar, GraduationCap } from "lucide-react";
+import { User, ClassData } from "../types";
+import { Logo } from "../components/CommonComponents";
+import { FormEvent } from "react";
+
+interface CreateClassViewProps {
+  classData: ClassData;
+  setClassData: (data: any) => void;
+  users: User[];
+  handleClassSubmit: (e: FormEvent) => void;
+  setView: (view: string) => void;
+  setShowInactivationPopup: (show: boolean) => void;
+  isEditing?: boolean;
+  handleDeleteClass?: () => Promise<void>;
+}
+
+export const CreateClassView = ({
+  classData,
+  setClassData,
+  users,
+  handleClassSubmit,
+  setView,
+  setShowInactivationPopup,
+  isEditing,
+  handleDeleteClass
+}: CreateClassViewProps) => {
+  const teachers = users.filter(u => u.role === "Professor");
+
+  return (
+    <motion.div
+      key="create-class-screen"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-2xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col"
+    >
+      <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
+         <Logo className="h-10 md:h-16 w-auto mb-1 brightness-0 invert" />
+         <h1 className="text-white text-xl md:text-3xl font-black uppercase tracking-tight">
+           {isEditing ? "Editar Turma" : "Nova Turma"}
+         </h1>
+         <p className="text-teal-50/70 text-xs md:text-sm mt-1 uppercase tracking-widest leading-none font-bold">Planejamento e Organização Escolar</p>
+      </div>
+
+      <form onSubmit={handleClassSubmit} className="p-8 md:p-16 space-y-8 flex-1 overflow-y-auto max-w-7xl mx-auto w-full">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4 col-span-full">
+            <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Informações da Turma</h4>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Código da Turma</label>
+            <input
+              type="text"
+              required
+              value={classData.code}
+              onChange={(e) => setClassData(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+              placeholder="Ex: TEATRO-A-2024"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Tipo de Turma</label>
+            <select
+              value={classData.type}
+              onChange={(e) => setClassData(prev => ({ ...prev, type: e.target.value }))}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+            >
+              <option value="Curso Livre Adultos">Curso Livre Adultos</option>
+              <option value="Curso Livre 60+">Curso Livre 60+</option>
+              <option value="Prática Profissional de Montagem">Prática Profissional de Montagem</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Professor Responsável</label>
+            <select
+              value={classData.teacherId || ""}
+              onChange={(e) => setClassData(prev => ({ ...prev, teacherId: e.target.value }))}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+            >
+              <option value="">Selecione um professor</option>
+              {teachers.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Data de Início da Turma</label>
+            <input
+              type="date"
+              value={classData.startDate || ""}
+              onChange={(e) => setClassData(prev => {
+                const date = e.target.value;
+                const year = date ? date.split("-")[0] : "";
+                return { ...prev, startDate: date, year: year };
+              })}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Status da Turma</label>
+            <div 
+              onClick={() => {
+                if (classData.isActive) {
+                   setShowInactivationPopup(true);
+                } else {
+                   setClassData((prev: any) => ({ ...prev, isActive: true, inactivationReason: "" }));
+                }
+              }}
+              className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                classData.isActive 
+                ? "bg-green-50 border-green-200 text-green-700" 
+                : "bg-red-50 border-red-200 text-red-700"
+              }`}
+            >
+              <span className="text-[10px] font-black uppercase tracking-widest">{classData.isActive ? "Ativa" : "Inativa"}</span>
+              <div className={`w-8 h-4 rounded-full p-1 transition-colors ${classData.isActive ? 'bg-green-600' : 'bg-red-600'}`}>
+                <div className={`w-2 h-2 bg-white rounded-full transition-transform ${classData.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-4 pt-6 border-t border-slate-100 flex-col md:flex-row">
+          <button
+            type="button"
+            onClick={() => setView(isEditing ? "class_details" : "dashboard")}
+            className="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all active:scale-95 uppercase tracking-widest text-[10px]"
+          >
+            Cancelar
+          </button>
+          {isEditing && handleDeleteClass && (
+            <button
+               type="button"
+               onClick={handleDeleteClass}
+               className="flex-1 py-4 bg-white text-red-500 border border-red-100 font-bold rounded-xl hover:bg-red-50 transition-all active:scale-95 uppercase tracking-widest text-[10px]"
+            >
+               Excluir Turma
+            </button>
+          )}
+          <button
+            type="submit"
+            className="flex-[2] py-4 bg-pro-teal text-white font-bold rounded-xl shadow-lg shadow-teal-900/20 hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest text-[10px]"
+          >
+            {isEditing ? "Salvar Alterações" : "Criar Turma"}
+          </button>
+        </div>
+      </form>
+    </motion.div>
+  );
+};

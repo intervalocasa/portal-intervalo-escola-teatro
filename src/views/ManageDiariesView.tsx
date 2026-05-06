@@ -1,0 +1,199 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { motion, AnimatePresence } from "motion/react";
+import { Download, Search, LayoutGrid, Calendar, ChevronRight, BookOpen, CheckCircle2, Pencil, Trash2, Eye } from "lucide-react";
+import { User, Class, Diary, Evaluation } from "../types";
+import { Logo, Avatar } from "../components/CommonComponents";
+
+interface ManageDiariesViewProps {
+  diaries: Diary[];
+  users: User[];
+  setSelectedClassId: (id: string | null) => void;
+  setSelectedDiaryStudentId: (id: string | null) => void;
+  setDiaryFilterMonth: (m: number) => void;
+  setDiaryFilterYear: (y: number) => void;
+  setDiaryFormData: (data: any) => void;
+  setView: (view: string) => void;
+  handleDeleteDiary: (id: string) => void;
+}
+
+export const ManageDiariesView = ({
+  diaries,
+  users,
+  setSelectedClassId,
+  setSelectedDiaryStudentId,
+  setDiaryFilterMonth,
+  setDiaryFilterYear,
+  setDiaryFormData,
+  setView,
+  handleDeleteDiary
+}: ManageDiariesViewProps) => {
+  return (
+    <motion.div
+      key="manage-diaries-screen"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-6xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col"
+    >
+      <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
+         <Logo className="h-10 md:h-16 w-auto mb-1 brightness-0 invert" />
+         <h1 className="text-white text-xl md:text-3xl font-black uppercase tracking-tight">Gestão de Diários</h1>
+         <p className="text-teal-50/70 text-xs md:text-sm mt-1 uppercase tracking-widest leading-none font-bold">Acompanhamento e Auditoria Pedagógica</p>
+      </div>
+
+      <div className="flex-1 p-6 md:p-12 overflow-y-auto bg-slate-50">
+         <div className="max-w-7xl mx-auto w-full space-y-8">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+               <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 bg-pro-teal/5 rounded-2xl flex items-center justify-center text-pro-teal"><BookOpen size={24} /></div>
+                  <div>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Diários</p>
+                     <p className="text-2xl font-black text-slate-800">{diaries.length}</p>
+                  </div>
+               </div>
+               <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-green-500"><CheckCircle2 size={24} /></div>
+                  <div>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Concluídos</p>
+                     <p className="text-2xl font-black text-green-600">{diaries.filter(d => d.status === "concluido").length}</p>
+                  </div>
+               </div>
+               <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 bg-pro-yellow/5 rounded-2xl flex items-center justify-center text-pro-orange"><Pencil size={24} /></div>
+                  <div>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rascunhos</p>
+                     <p className="text-2xl font-black text-pro-orange">{diaries.filter(d => d.status === "rascunho").length}</p>
+                  </div>
+               </div>
+               <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 bg-pro-orange/5 rounded-2xl flex items-center justify-center text-pro-orange"><LayoutGrid size={24} /></div>
+                  <div>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Média Geral</p>
+                     <p className="text-2xl font-black text-slate-800">
+                       {(diaries.filter(d => d.averageGrade).reduce((a, b) => a + (b.averageGrade || 0), 0) / (diaries.filter(d => d.averageGrade).length || 1)).toFixed(2)}
+                     </p>
+                  </div>
+               </div>
+            </div>
+
+            <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50/50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Aluno</th>
+                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Turma / Tipo</th>
+                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Referência</th>
+                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Freq.</th>
+                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Notas</th>
+                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Professor</th>
+                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
+                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right whitespace-nowrap px-8">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {diaries.length > 0 ? (
+                    diaries
+                    .sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))
+                    .map(d => (
+                      <tr key={d.id} className="hover:bg-slate-50/50 transition-colors group">
+                         <td className="px-6 py-5">
+                            <div className="flex items-center gap-3">
+                               <Avatar 
+                                 src={users.find(u => u.id === d.studentId)?.photo} 
+                                 className="w-8 h-8"
+                               />
+                               <span className="text-xs font-black text-slate-800 uppercase tracking-tight">{d.studentName}</span>
+                            </div>
+                         </td>
+                         <td className="px-6 py-5">
+                            <div className="space-y-0.5">
+                               <p className="text-xs font-black text-slate-700 uppercase tracking-tight">{d.className}</p>
+                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">{d.classType?.split(" - ")[1] || d.classType}</p>
+                            </div>
+                         </td>
+                         <td className="px-6 py-5 text-center">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{String(d.month).padStart(2, '0')}/{d.year}</span>
+                          </td>
+                         <td className="px-6 py-5 text-center">
+                            <div className="flex flex-col items-center">
+                               <span className="text-[10px] font-black text-green-500">{d.presences}P</span>
+                               <span className="text-[10px] font-black text-red-400">{d.absences}F</span>
+                            </div>
+                         </td>
+                         <td className="px-6 py-5 text-center">
+                            <span className={`text-sm font-black ${d.status === 'concluido' ? 'text-pro-teal' : 'text-slate-300'}`}>
+                              {d.averageGrade ? d.averageGrade.toFixed(1) : "—"}
+                            </span>
+                         </td>
+                         <td className="px-6 py-5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{d.teacherName}</span>
+                         </td>
+                         <td className="px-6 py-5 text-center">
+                            {d.status === "concluido" ? (
+                              <span className="px-3 py-1 bg-green-50 text-green-600 text-[9px] font-black uppercase tracking-widest rounded-full border border-green-100">C</span>
+                            ) : (
+                              <span className="px-3 py-1 bg-pro-yellow/10 text-pro-orange text-[9px] font-black uppercase tracking-widest rounded-full border border-pro-yellow/20">R</span>
+                            )}
+                         </td>
+                         <td className="px-6 py-5 text-right px-8">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedClassId(d.classId);
+                                  setSelectedDiaryStudentId(d.studentId);
+                                  setDiaryFilterMonth(d.month);
+                                  setDiaryFilterYear(d.year);
+                                  setDiaryFormData({
+                                    presences: d.presences || 0,
+                                    absences: d.absences || 0,
+                                    frequencyObs: d.frequencyObs || "",
+                                    grades: d.grades || {},
+                                    criteriaObs: d.criteriaObs || {},
+                                    generalPedagogicalObs: d.generalPedagogicalObs || ""
+                                  });
+                                  setView("student_diary_form");
+                                }}
+                                className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-pro-teal hover:text-white transition-all shadow-sm"
+                                title="Visualizar/Editar"
+                              >
+                                <Eye size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDiary(d.id)}
+                                className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                                title="Excluir"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                         </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs italic">Nenhum diário registrado ainda</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+         </div>
+      </div>
+
+      <div className="p-6 border-t border-slate-100 bg-white flex justify-center">
+        <button 
+          onClick={() => setView("dashboard")} 
+          className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] hover:text-slate-600 transition-colors"
+        >
+          Voltar ao Menu Principal
+        </button>
+      </div>
+    </motion.div>
+  );
+};
