@@ -137,6 +137,63 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [_view, _setView] = useState<"login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup">("login");
   
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedDiaryStudentId, setSelectedDiaryStudentId] = useState<string | null>(null);
+
+  const isPopStateNavigation = useRef(false);
+
+  // Sync state with browser history
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state) {
+        isPopStateNavigation.current = true;
+        _setView(event.state.view || "login");
+        setSelectedUserId(event.state.selectedUserId || null);
+        setSelectedClassId(event.state.selectedClassId || null);
+        setSelectedDiaryStudentId(event.state.selectedDiaryStudentId || null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    // Initial state
+    if (!window.history.state) {
+      window.history.replaceState({ 
+        view: _view, 
+        selectedUserId, 
+        selectedClassId, 
+        selectedDiaryStudentId 
+      }, "");
+    }
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (isPopStateNavigation.current) {
+      isPopStateNavigation.current = false;
+      return;
+    }
+
+    // Don't push if already at this state
+    const currentState = window.history.state;
+    if (currentState && 
+        currentState.view === _view && 
+        currentState.selectedUserId === selectedUserId &&
+        currentState.selectedClassId === selectedClassId &&
+        currentState.selectedDiaryStudentId === selectedDiaryStudentId) {
+      return;
+    }
+
+    window.history.pushState({ 
+      view: _view, 
+      selectedUserId, 
+      selectedClassId, 
+      selectedDiaryStudentId 
+    }, "");
+  }, [_view, selectedUserId, selectedClassId, selectedDiaryStudentId]);
+
   // Custom setView with loading transition
   const setView = useCallback((newView: any) => {
     setIsAppLoading(true);
@@ -149,9 +206,6 @@ export default function App() {
   }, []);
 
   const view = _view;
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const [selectedDiaryStudentId, setSelectedDiaryStudentId] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   
   // Data States
