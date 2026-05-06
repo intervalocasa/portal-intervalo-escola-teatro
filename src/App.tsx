@@ -64,11 +64,9 @@ import {
   where,
   getDoc,
   getDocs,
-  getDocFromServer,
-  enableIndexedDbPersistence
+  getDocFromServer
 } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "./lib/firestoreErrorHandler";
-
 import { THEME } from "./theme";
 import { UserRole, User, Class, Diary, Evaluation } from "./types";
 import { Logo, LoadingScreen, DetailItem } from "./components/CommonComponents";
@@ -95,21 +93,39 @@ export default function App() {
 
   // Connection validation
   useEffect(() => {
+    let retryCount = 0;
+    const maxRetries = 2;
+
     async function testConnection() {
       try {
-        // Try a specific doc that most likely doesn't exist but triggers a server-bound read
+        // Use a simpler getDoc with a shorter timeout if possible, 
+        // but getDocFromServer is more definitive for real connection
         await getDocFromServer(doc(db, 'system', 'connection_test'));
         setConnectionError(null);
       } catch (error: any) {
         console.error("Firebase Connection Test Failed:", error);
+        
+        const isRetryable = error.message?.includes('internal') || 
+                          error.message?.includes('offline') || 
+                          error.code === 'unavailable' ||
+                          error.code === 'deadline-exceeded';
+
+        if (isRetryable && retryCount < maxRetries) {
+          retryCount++;
+          // Increase delay between retries
+          setTimeout(testConnection, 3000 * retryCount);
+          return;
+        }
+
         const code = error.code || (error.message?.includes('permission') ? 'permission-denied' : '');
         
         if (error.message?.includes('offline') || error.code === 'unavailable' || error.code === 'failed-precondition') {
-          setConnectionError("Offline: Não foi possível conectar ao Firebase.");
+          setConnectionError("Aguardando conexão com o Firebase... (Verifique se o Firestore está ativo no Console do Firebase)");
         } else if (code === 'permission-denied') {
-          // Permissions are fine for connection, but maybe strict rules are blocking.
-          // This is actually a sign of connection!
+          // Permissions are fine for connection verification
           setConnectionError(null);
+        } else if (error.message?.includes('internal')) {
+          setConnectionError("O Firebase está inicializando. Tente recarregar a página em alguns instantes.");
         } else {
           setConnectionError(`Erro de Conexão: ${error.message || error.code}`);
         }
@@ -138,9 +154,16 @@ export default function App() {
   const [selectedDiaryStudentId, setSelectedDiaryStudentId] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   
-  // Diary States
+  // Data States
+  const [users, setUsers] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [evaluations, setEvaluations] = useState<any[]>([]);
   const [diaries, setDiaries] = useState<any[]>([]);
   const [evolutionRecords, setEvolutionRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [gestorError, setGestorError] = useState<string | null>(null);
+
+  // Diary States
   const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(new Set());
   const [analyticsClassId, setAnalyticsClassId] = useState<string>("");
   const [diaryFilterMonth, setDiaryFilterMonth] = useState(new Date().getMonth() + 1);
@@ -200,6 +223,106 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      try {
+        if (user) {
+          setGestorError(null);
+          
+          let userDocData: any = null;
+          let userRole: any = null;
+
+          try {
+            const userRef = doc(db, "usuarios", user.uid);
+            const userDoc = await getDoc(userRef);
+            if (userDoc.exists()) {
+              userDocData = userDoc.data();
+              userRole = userDocData?.role;
+            } else if (user.email) {
+              const q = query(collection(db, "usuarios"), where("email", "==", user.email.toLowerCase()));
+              const querySnapshot = await getDocs(q);
+              if (!querySnapshot.empty) {
+                userDocData = querySnapshot.docs[0].data();
+                userRole = userDocData?.role;
+              }
+            }
+          } catch (docErr: any) {
+            console.error("Firestore getDoc Error:", docErr);
+          }
+          
+          // Initial gestor check (hardcoded email from previous context or generic admin)
+          if (!userRole && (user.email === 'intervalocasa@gmail.com')) {
+            userRole = "Gestor";
+          }
+
+          if (userRole) {
+            setCurrentUser(user);
+            setRole(userRole as UserRole);
+            if (view === "login") {
+              setView("dashboard");
+            }
+          } else {
+            setCurrentUser(null);
+            setRole(null);
+            setView("login");
+          }
+      } else {
+        setCurrentUser(null);
+        setRole(null);
+        setView("login");
+      }
+      setLoading(false);
+      } catch (authErr: any) {
+        console.error("Auth Observer Error:", authErr);
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribeAuth();
+  }, [view]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const unsubscribeUsers = onSnapshot(collection(db, "usuarios"), (snapshot) => {
+      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, "usuarios");
+    });
+
+    const unsubscribeClasses = onSnapshot(collection(db, "classes"), (snapshot) => {
+      setClasses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, "classes");
+    });
+
+    const unsubscribeEvals = onSnapshot(collection(db, "autoavaliacoes"), (snapshot) => {
+      setEvaluations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, "autoavaliacoes");
+    });
+
+    const unsubscribeDiaries = onSnapshot(collection(db, "diarios_classe"), (snapshot) => {
+      setDiaries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, "diarios_classe");
+    });
+
+    const unsubscribeEvolutions = onSnapshot(collection(db, "evolucao"), (snapshot) => {
+      setEvolutionRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, "evolucao");
+    });
+
+    return () => {
+      unsubscribeUsers();
+      unsubscribeClasses();
+      unsubscribeEvals();
+      unsubscribeDiaries();
+      unsubscribeEvolutions();
+    };
+  }, [currentUser]);
+
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -222,11 +345,6 @@ export default function App() {
   const [viewingEvaluation, setViewingEvaluation] = useState<any>(null);
   const [helpLevelModal, setHelpLevelModal] = useState<{title: string, detail: string, motivation: string} | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-
-  // Classes State
-  const [classes, setClasses] = useState<any[]>([]);
-  const [evaluations, setEvaluations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -261,13 +379,13 @@ export default function App() {
     // Validation for "concluido"
     if (status === "concluido") {
       const isProfessional = selectedClass.type.includes("Profissional") || selectedClass.type.includes("Montagem");
-      const criteria = isProfessional 
+      const criteriaList = isProfessional 
         ? PROFESSIONAL_COURSE_CRITERIA 
         : ADULT_COURSE_CRITERIA;
       
-      const missingGrades = criteria.filter(c => diaryFormData.grades[c.id] === undefined);
+      const missingGrades = criteriaList.filter(c => diaryFormData.grades[c.id] === undefined);
       if (missingGrades.length > 0) {
-        alert(`Por favor, preencha as notas de todos os critérios antes de concluir. Faltando criteria IDs: ${missingGrades.map(m => m.id).join(", ")}`);
+        alert("Por favor, preencha as notas de todos os critérios antes de concluir.");
         return;
       }
 
@@ -279,7 +397,6 @@ export default function App() {
 
     setIsAppLoading(true);
     try {
-      // Check if record already exists for this month/year/student/class
       const existingDiary = diaries.find(d => 
         d.studentId === selectedDiaryStudentId && 
         d.classId === selectedClassId && 
@@ -329,254 +446,9 @@ export default function App() {
       handleFirestoreError(err, OperationType.WRITE, "diarios_classe");
     } finally {
       setIsAppLoading(false);
-      setLoading(false);
     }
   };
 
-  // Users State (Firestore)
-  const [users, setUsers] = useState<any[]>([]);
-  const [gestorError, setGestorError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      try {
-        if (user) {
-          setGestorError(null);
-          
-          // Determine if it's bootstrap mode
-          const isBrandNewApp = (users.length === 0) || (user.email === 'intervalocasa@intervalocasa.com') || (user.email === 'intervalocasa@gmail.com');
-          
-          let userDocData: any = null;
-          let userDocExists = false;
-          let isRegisteredGestor = false;
-          let userRole: any = null;
-
-          try {
-            const userRef = doc(db, "usuarios", user.uid);
-            const userDoc = await getDoc(userRef);
-            userDocExists = userDoc.exists();
-            if (userDocExists) {
-              userDocData = userDoc.data();
-              isRegisteredGestor = userDocData?.role === 'Gestor';
-              userRole = userDocData?.role;
-            } else if (user.email) {
-              // Fallback: search by email if UID doc doesn't exist
-              const q = query(collection(db, "usuarios"), where("email", "==", user.email.toLowerCase()));
-              const querySnapshot = await getDocs(q);
-              if (!querySnapshot.empty) {
-                userDocExists = true;
-                userDocData = querySnapshot.docs[0].data();
-                
-                // If found by email, try to migrate the document ID to the UID for next time
-                try {
-                  const oldId = querySnapshot.docs[0].id;
-                  const newId = user.uid;
-                  
-                  const newUserRef = doc(db, "usuarios", newId);
-                  await setDoc(newUserRef, {
-                    ...userDocData,
-                    updatedAt: serverTimestamp()
-                  });
-
-                  if (oldId !== newId) {
-                    // Migrate Classes
-                    const allClassDocs = await getDocs(collection(db, "classes"));
-                    for (const classDoc of allClassDocs.docs) {
-                      const cData = classDoc.data();
-                      let needsUpdate = false;
-                      const updatePayload: any = {};
-
-                      if (cData.studentIds?.includes(oldId)) {
-                        updatePayload.studentIds = cData.studentIds.map((id: string) => id === oldId ? newId : id);
-                        needsUpdate = true;
-                      }
-                      if (cData.teacherId === oldId) {
-                        updatePayload.teacherId = newId;
-                        needsUpdate = true;
-                      }
-
-                      if (needsUpdate) {
-                        await updateDoc(doc(db, "classes", classDoc.id), updatePayload);
-                      }
-                    }
-
-                    // Migrate Evaluations
-                    const allEvalDocs = await getDocs(query(collection(db, "autoavaliacoes"), where("studentId", "==", oldId)));
-                    for (const evalDoc of allEvalDocs.docs) {
-                      await updateDoc(doc(db, "autoavaliacoes", evalDoc.id), { studentId: newId });
-                    }
-
-                    // Migrate Diaries (Teacher and Student refs)
-                    const studentDiaryDocs = await getDocs(query(collection(db, "diarios_classe"), where("studentId", "==", oldId)));
-                    for (const dDoc of studentDiaryDocs.docs) {
-                      await updateDoc(doc(db, "diarios_classe", dDoc.id), { studentId: newId });
-                    }
-                    const teacherDiaryDocs = await getDocs(query(collection(db, "diarios_classe"), where("teacherId", "==", oldId)));
-                    for (const dDoc of teacherDiaryDocs.docs) {
-                      await updateDoc(doc(db, "diarios_classe", dDoc.id), { teacherId: newId });
-                    }
-
-                    // Migrate Evolucao if exists
-                    const evolDocs = await getDocs(query(collection(db, "evolucao"), where("studentId", "==", oldId)));
-                    for (const eDoc of evolDocs.docs) {
-                      await updateDoc(doc(db, "evolucao", eDoc.id), { studentId: newId });
-                    }
-
-                    await deleteDoc(doc(db, "usuarios", oldId));
-                  }
-                } catch (migrationErr) {
-                  console.warn("Migration to UID failed (ignoring):", migrationErr);
-                }
-              }
-            }
-          } catch (docErr: any) {
-            console.error("Firestore getDoc Error:", docErr);
-            
-            let detailedError = `Erro de conexão (Firestore).`;
-            
-            if (docErr.message?.includes("not found")) {
-              detailedError = `Banco de dados não encontrado. \n\n1. Vá ao Console do Firebase.\n2. Clique em 'Firestore Database'.\n3. Clique em 'Criar Banco de Dados'.\n4. Use o modo Produção e selecione a região mais próxima.`;
-            } else if (docErr.message?.includes("offline")) {
-              const domains = [
-                window.location.hostname,
-                "ais-dev-t6635xi3aonswqw5a7m23d-106509490447.us-east1.run.app",
-                "ais-pre-t6635xi3aonswqw5a7m23d-106509490447.us-east1.run.app"
-              ];
-              detailedError = `Erro de conexão (Offline). \n\n1. Verifique se o Cloud Firestore está ativo no Console.\n2. Verifique os domínios autorizados em 'Authentication > Settings':\n• ${domains.join('\n• ')}`;
-            } else {
-              detailedError = `Erro ao carregar perfil: ${docErr.message || docErr.code}`;
-            }
-
-            // If it's NOT a gestor and there's an error, we must show it
-            // We use the brand new app flag as a proxy for initial admin
-            if (!isRegisteredGestor && !isBrandNewApp) {
-              setError(detailedError);
-              setLoading(false);
-              return;
-            }
-          }
-          
-          if (!userRole) {
-            userRole = isBrandNewApp ? "Gestor" : null;
-          }
-
-          if (userRole) {
-            setCurrentUser(user);
-            if (isBrandNewApp && !userDocExists) {
-               // Auto-setup first gestor
-               try {
-                 const userRef = doc(db, "usuarios", user.uid);
-                 const initialAdmin = {
-                   name: user.email === 'intervalocasa@intervalocasa.com' ? "Gestor Intervalo" : (user.displayName || "Gestor Admin"),
-                   artisticName: "Gestor",
-                   role: "Gestor",
-                   cpf: "admin", 
-                   email: user.email,
-                   createdAt: serverTimestamp(),
-                   updatedAt: serverTimestamp()
-                 };
-                 await setDoc(userRef, initialAdmin);
-               } catch (e) {
-                 console.error("Failed to auto-setup gestor:", e);
-               }
-            }
-            
-            setRole(userRole as UserRole);
-            if (view === "login") {
-              setIsAppLoading(true);
-              setTimeout(() => {
-                setView("dashboard");
-                setTimeout(() => {
-                  setIsAppLoading(false);
-                }, 500); // Small buffer for view transition
-              }, 2500);
-            }
-          } else {
-            setCurrentUser(null);
-            setRole(null);
-            setView("login");
-          }
-      } else {
-        setCurrentUser(null);
-        setRole(null);
-        if (!gestorError) setView("login");
-      }
-      setLoading(false);
-      } catch (authErr: any) {
-        console.error("Auth Observer Error:", authErr);
-        setLoading(false);
-      }
-    });
-
-    return () => unsubscribeAuth();
-  }, [view, gestorError]);
-
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-        console.log("Firebase connection verified");
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration: Client is offline.");
-          setError("Erro de conexão: O cliente está offline ou a configuração do Firebase está incorreta.");
-        }
-      }
-    }
-    testConnection();
-  }, []);
-
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const qUsers = collection(db, "usuarios");
-    const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
-      const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setUsers(usersData);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, "usuarios");
-    });
-
-    const qClasses = collection(db, "classes");
-    const unsubscribeClasses = onSnapshot(qClasses, (snapshot) => {
-      const classesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setClasses(classesData);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, "classes");
-    });
-
-    const qEvals = collection(db, "autoavaliacoes");
-    const unsubscribeEvals = onSnapshot(qEvals, (snapshot) => {
-      const evalsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setEvaluations(evalsData);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, "autoavaliacoes");
-    });
-
-    const qDiaries = collection(db, "diarios_classe");
-    const unsubscribeDiaries = onSnapshot(qDiaries, (snapshot) => {
-      const diariesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setDiaries(diariesData);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, "diarios_classe");
-    });
-
-    const qEvolutions = collection(db, "evolucao");
-    const unsubscribeEvolutions = onSnapshot(qEvolutions, (snapshot) => {
-      const evolData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setEvolutionRecords(evolData);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, "evolucao");
-    });
-
-    return () => {
-      unsubscribeUsers();
-      unsubscribeClasses();
-      unsubscribeEvals();
-      unsubscribeDiaries();
-      unsubscribeEvolutions();
-    };
-  }, [currentUser]);
   const resetDatabase = async () => {
     if (!currentUser || role !== 'Gestor') return;
     setIsResetModalOpen(true);
@@ -594,7 +466,6 @@ export default function App() {
       });
       
       users.forEach(u => {
-        // Don't delete self during reset
         if (u.id !== currentUser?.uid) {
           deletePromises.push(deleteDoc(doc(db, "usuarios", u.id)));
         }
@@ -604,7 +475,7 @@ export default function App() {
       alert("Banco de dados resetado com sucesso!");
     } catch (err) {
       console.error("Reset Error:", err);
-      alert("Erro ao resetar banco de dados. Verifique a conexão.");
+      alert("Erro ao resetar banco de dados.");
     } finally {
       setIsAppLoading(false);
       setLoading(false);
@@ -625,15 +496,11 @@ export default function App() {
 
   const [showInactivationPopup, setShowInactivationPopup] = useState(false);
 
-
   // Registration Form State
   const [regType, setRegType] = useState<UserRole>("Aluno");
-  
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
-
   const [filter, setFilter] = useState<UserRole | "Todos">("Todos");
-
   const filteredUsers = filter === "Todos" ? users : users.filter(u => u.role === filter);
 
   // Form State for Registration
@@ -704,48 +571,27 @@ export default function App() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       
-      // Check if user exists in Firestore
       const userRef = doc(db, "usuarios", user.uid);
       const userSnap = await getDoc(userRef);
       
-      if (!userSnap.exists()) {
-        // If not, check if there's a user with this email to link
-        const q = query(collection(db, "usuarios"), where("email", "==", user.email?.toLowerCase()));
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-          // Link existing Firestore user with this Auth UID
-          const fsDoc = querySnapshot.docs[0];
-          const fsUser = fsDoc.data();
-          
+      if (!userSnap.exists() && user.email === 'intervalocasa@gmail.com') {
           await setDoc(userRef, {
-            ...fsUser,
-            updatedAt: serverTimestamp()
-          });
-          
-          // Delete old doc if different ID
-          if (fsDoc.id !== user.uid) {
-            await deleteDoc(doc(db, "usuarios", fsDoc.id));
-          }
-        } else {
-          // Create new user record as default (if wanted) or restrict
-          // The user requested "apenas para gestor", but usually we allow login
-          // and let the rules/check handle the rest.
-          // However, if the user isn't found, we can create a minimalist record.
-          await setDoc(userRef, {
-            name: user.displayName || "Usuário Google",
-            artisticName: user.displayName || "Usuário Google",
-            email: user.email?.toLowerCase() || "",
-            role: "Aluno", 
-            cpf: "google", // Required by rules
+            name: user.displayName || "Gestor Admin",
+            artisticName: "Gestor",
+            email: user.email.toLowerCase(),
+            role: "Gestor", 
+            cpf: "admin", 
             updatedAt: serverTimestamp(),
             createdAt: serverTimestamp()
           });
-        }
       }
     } catch (err: any) {
       console.error("Google login failed:", err);
-      setError("Falha na autenticação com Google.");
+      if (err.code === "auth/unauthorized-domain") {
+        setError("Domínio não autorizado. Adicione os domínios do app no Console do Firebase (Authentication > Settings > Authorized domains).");
+      } else {
+        setError("Falha na autenticação com Google.");
+      }
     } finally {
       setIsAppLoading(false);
     }
@@ -755,176 +601,20 @@ export default function App() {
     e.preventDefault();
     setIsAppLoading(true);
     setError("");
-    const loginEmail = login.trim().toLowerCase();
-    
-    if (!loginEmail.includes("@")) {
-      setError("Por favor, insira um e-mail válido.");
-      setLoading(false);
-      return;
-    }
-    
     try {
-      await signInWithEmailAndPassword(auth, loginEmail, password.trim());
+      await signInWithEmailAndPassword(auth, login.trim().toLowerCase(), password.trim());
     } catch (err: any) {
-      console.warn("Login attempt failed:", err.code);
-
-      // Auto-setup requested gestor if doesn't exist in Auth
-      if (loginEmail === "intervalocasa@intervalocasa.com" && password.trim() === "123456") {
-        if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
-          try {
-            await createUserWithEmailAndPassword(auth, loginEmail, "123456");
-            return; // onAuthStateChanged will handle the rest
-          } catch (createErr: any) {
-            console.error("Failed to create auto-gestor in Auth:", createErr);
-          }
-        }
-      }
-      
-      // First login logic: check if user exists in Firestore and password matches CPF
-      try {
-        const cleanPassword = password.trim().replace(/\D/g, "").padStart(11, "0");
-
-        // Try exact match first
-        let q = query(collection(db, "usuarios"), where("email", "==", loginEmail));
-        let querySnapshot = await getDocs(q);
-        
-        let fsDoc = null;
-        let fsUser = null;
-
-        if (!querySnapshot.empty) {
-          // If we have multiple records, try to find the one where CPF matches
-          const match = querySnapshot.docs.find(d => {
-            const u = d.data();
-            const uCpf = String(u.cpf || "").replace(/\D/g, "").padStart(11, "0");
-            return uCpf === cleanPassword;
-          });
-          
-          if (match) {
-            fsDoc = match;
-            fsUser = match.data();
-          } else {
-            // Pick first one as fallback
-            fsDoc = querySnapshot.docs[0];
-            fsUser = fsDoc.data();
-          }
-        } else {
-          // Try case-insensitive search
-          const allUsers = await getDocs(collection(db, "usuarios"));
-          const match = allUsers.docs.find(d => {
-            const u = d.data();
-            if (typeof u.email !== "string" || u.email.trim().toLowerCase() !== loginEmail) return false;
-            
-            const uCpf = String(u.cpf || "").replace(/\D/g, "").padStart(11, "0");
-            return uCpf === cleanPassword;
-          });
-
-          if (match) {
-            fsDoc = match;
-            fsUser = match.data();
-          }
-        }
-
-        if (fsDoc && fsUser) {
-          const cleanCPF = String(fsUser.cpf || "").replace(/\D/g, "").padStart(11, "0");
-          const matchesCPF = (cleanCPF === cleanPassword && cleanCPF !== "00000000000");
-          
-          if (matchesCPF) {
-            try {
-              const userCredential = await createUserWithEmailAndPassword(auth, loginEmail, password.trim());
-              const newUser = userCredential.user;
-              const userRef = doc(db, "usuarios", newUser.uid);
-              await setDoc(userRef, { ...fsUser, updatedAt: serverTimestamp() });
-              
-              // Trigger Password Change for first time
-              setShowPasswordModal(true);
-              
-              if (fsDoc.id !== newUser.uid) {
-                const oldId = fsDoc.id;
-                const newId = newUser.uid;
-                // Migrate Classes
-                const allClassDocs = await getDocs(collection(db, "classes"));
-                for (const classDoc of allClassDocs.docs) {
-                  const cData = classDoc.data();
-                  let needsUpdate = false;
-                  const updatePayload: any = {};
-
-                  if (cData.studentIds?.includes(oldId)) {
-                    updatePayload.studentIds = cData.studentIds.map((id: string) => id === oldId ? newId : id);
-                    needsUpdate = true;
-                  }
-                  if (cData.teacherId === oldId) {
-                    updatePayload.teacherId = newId;
-                    needsUpdate = true;
-                  }
-
-                  if (needsUpdate) {
-                    await updateDoc(doc(db, "classes", classDoc.id), updatePayload);
-                  }
-                }
-
-                // Migrate Evaluations
-                const allEvalDocs = await getDocs(query(collection(db, "autoavaliacoes"), where("studentId", "==", oldId)));
-                for (const evalDoc of allEvalDocs.docs) {
-                  await updateDoc(doc(db, "autoavaliacoes", evalDoc.id), { studentId: newId });
-                }
-
-                // Migrate Diaries (Teacher and Student refs)
-                const studentDiaryDocs = await getDocs(query(collection(db, "diarios_classe"), where("studentId", "==", oldId)));
-                for (const dDoc of studentDiaryDocs.docs) {
-                  await updateDoc(doc(db, "diarios_classe", dDoc.id), { studentId: newId });
-                }
-                const teacherDiaryDocs = await getDocs(query(collection(db, "diarios_classe"), where("teacherId", "==", oldId)));
-                for (const dDoc of teacherDiaryDocs.docs) {
-                  await updateDoc(doc(db, "diarios_classe", dDoc.id), { teacherId: newId });
-                }
-
-                // Migrate Evolucao if exists
-                const evolDocs = await getDocs(query(collection(db, "evolucao"), where("studentId", "==", oldId)));
-                for (const eDoc of evolDocs.docs) {
-                  await updateDoc(doc(db, "evolucao", eDoc.id), { studentId: newId });
-                }
-
-                await deleteDoc(doc(db, "usuarios", oldId));
-              }
-              return;
-            } catch (createErr: any) {
-              if (createErr.code === "auth/email-already-in-use") {
-                setError("Sua conta já existe, mas a senha está incorreta ou há um conflito de cadastro.");
-              } else {
-                setError(`Erro ao ativar conta: ${createErr.message}`);
-              }
-            }
-          } else {
-            setError("Email ou senha (CPF) incorretos. No primeiro acesso, use seu CPF cadastrado como senha.");
-          }
-        } else {
-          setError("Cadastro não encontrado com este e-mail.");
-        }
-      } catch (fsErr) {
-        console.error("Firestore lookup failed:", fsErr);
-        setError("Erro de conexão ao verificar cadastro.");
-      }
+      setError("Email ou senha incorretos.");
     } finally {
       setIsAppLoading(false);
-      setLoading(false);
     }
   };
 
   const handleLogout = async () => {
     setIsAppLoading(true);
     await signOut(auth);
-    setTimeout(() => {
-      setRole(null);
-      setRegType("Aluno");
-      _setView("login");
-      setPhotoPreview(null);
-      setLogin("");
-      setPassword("");
-      setNewUsername("");
-      setNewPassword("");
-      setSelectedUserClasses([]);
-      setIsAppLoading(false);
-    }, 1500);
+    _setView("login");
+    setIsAppLoading(false);
   };
 
   const handleRegisterSubmit = async (e: FormEvent) => {
@@ -961,31 +651,24 @@ export default function App() {
         }
       }
 
-      // Synchronize Classes (Only if Gestor is making changes or during registration)
+      // Synchronize Classes
       if (role === "Gestor" && studentId) {
-        const userType = view === "register" ? regType : users.find(u => u.id === studentId)?.role;
-        
         for (const c of classes) {
+          const userType = view === "register" ? regType : users.find(u => u.id === studentId)?.role;
           if (userType === "Professor") {
-            const isCurrentTeacher = c.teacherId === studentId;
-            const shouldBeTeacher = selectedUserClasses.includes(c.id);
-
-            if (shouldBeTeacher && !isCurrentTeacher) {
+            if (selectedUserClasses.includes(c.id) && c.teacherId !== studentId) {
               await updateDoc(doc(db, "classes", c.id), { teacherId: studentId });
-            } else if (!shouldBeTeacher && isCurrentTeacher) {
+            } else if (!selectedUserClasses.includes(c.id) && c.teacherId === studentId) {
               await updateDoc(doc(db, "classes", c.id), { teacherId: null });
             }
           } else {
             const isCurrentlyLinked = c.studentIds?.includes(studentId);
             const shouldBeLinked = selectedUserClasses.includes(c.id);
-
             if (shouldBeLinked && !isCurrentlyLinked) {
-              // Add to class
               await updateDoc(doc(db, "classes", c.id), {
                 studentIds: [...(c.studentIds || []), studentId]
               });
             } else if (!shouldBeLinked && isCurrentlyLinked) {
-              // Remove from class
               await updateDoc(doc(db, "classes", c.id), {
                 studentIds: c.studentIds.filter((id: string) => id !== studentId)
               });
@@ -994,22 +677,6 @@ export default function App() {
         }
       }
       
-      // Reset Form
-      setFormData({
-        name: "",
-        artisticName: "",
-        email: "",
-        phone: "",
-        address: "",
-        cpf: "",
-        bank: "",
-        bankAgency: "",
-        bankAccount: "",
-        pixKey: "",
-        cnpj: ""
-      });
-      setPhotoPreview(null);
-      setSelectedUserClasses([]);
       setView("dashboard");
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "usuarios");
@@ -1023,9 +690,8 @@ export default function App() {
     setIsAppLoading(true);
     try {
       if (currentUser) {
-        // In this implementation, we just update the profile
         await updateDoc(doc(db, "usuarios", currentUser.uid), {
-          username: newUsername, // just a field for now
+          username: newUsername,
           passwordChanged: true,
           updatedAt: serverTimestamp()
         });
@@ -1050,17 +716,6 @@ export default function App() {
       });
       alert("Turma criada com sucesso!");
       setView("dashboard");
-      setClassData({
-        type: "Curso Livre Adultos",
-        code: "",
-        weekday: "Segunda-feira",
-        time: "19:00",
-        startDate: "",
-        year: "",
-        isActive: true,
-        inactivationReason: "",
-        teacherId: ""
-      });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "classes");
     } finally {
@@ -1078,27 +733,13 @@ export default function App() {
     
     if (!selectedClass) return;
 
-    const month = assessmentMonth;
-    const year = assessmentYear;
-
-    // Final Validation: all notes must be filled
-    const criteria = selectedClass.type === "Curso Livre - Montagem Profissional" 
-      ? [...PROFESSIONAL_CRITERIA_BASE, ...PROFESSIONAL_CRITERIA_MONTAGEM]
-      : ADULT_CRITERIA;
-    
-    const missing = criteria.filter(c => assessmentForm.notes[c.id] === undefined);
-    if (missing.length > 0) {
-      alert(`Por favor, preencha todos os critérios obrigatórios. Faltando: ${missing.map(m => (m as any).label).join(", ")}`);
-      return;
-    }
-
     setLoading(true);
     try {
       const existingEval = evaluations.find(e => 
         e.studentId === studentId && 
         e.classId === assessmentForm.classId && 
-        e.month === month && 
-        e.year === year
+        e.month === assessmentMonth && 
+        e.year === assessmentYear
       );
 
       const evaluationData = {
@@ -1107,8 +748,8 @@ export default function App() {
         studentEmail: studentData?.email || "",
         classId: assessmentForm.classId,
         classType: selectedClass.type,
-        month,
-        year,
+        month: assessmentMonth,
+        year: assessmentYear,
         notes: assessmentForm.notes,
         openAnswers: assessmentForm.openAnswers,
         updatedAt: serverTimestamp()
@@ -1124,7 +765,6 @@ export default function App() {
         });
         alert("Autoavaliação enviada com sucesso!");
       }
-      setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
       setView("dashboard");
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "autoavaliacoes");
@@ -1144,17 +784,6 @@ export default function App() {
       });
       alert("Turma atualizada com sucesso!");
       setView("classes_list");
-      setClassData({
-        type: "Curso Livre Adultos",
-        code: "",
-        weekday: "Segunda-feira",
-        time: "19:00",
-        startDate: "",
-        year: "",
-        isActive: true,
-        inactivationReason: "",
-        teacherId: ""
-      });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "classes");
     } finally {
@@ -1164,85 +793,42 @@ export default function App() {
 
   const handleDeleteClass = async () => {
     if (!selectedClassId) return;
-    
-    const className = classes.find(c => c.id === selectedClassId)?.code || "esta turma";
-    
-    setConfirmModal({
-      isOpen: true,
-      title: "Excluir Turma",
-      message: `Tem certeza que deseja excluir permanentemente ${className}? Esta ação não pode ser desfeita.`,
-      onConfirm: async () => {
-        closeConfirmModal();
-        setIsAppLoading(true);
-        try {
-          setLoading(true);
-          await deleteDoc(doc(db, "classes", selectedClassId));
-          alert("Turma excluída com sucesso!");
-          setView("classes_list");
-        } catch (err) {
-          handleFirestoreError(err, OperationType.DELETE, `classes/${selectedClassId}`);
-        } finally {
-          setIsAppLoading(false);
-          setLoading(false);
-        }
-      }
-    });
+    setIsAppLoading(true);
+    try {
+      await deleteDoc(doc(db, "classes", selectedClassId));
+      alert("Turma excluída com sucesso!");
+      setView("classes_list");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `classes/${selectedClassId}`);
+    } finally {
+      setIsAppLoading(false);
+    }
   };
 
   const handleDeleteUser = async () => {
     if (!selectedUserId) return;
-    
-    const user = users.find(u => u.id === selectedUserId);
-    if (!user) return;
-
-    if (user.id === currentUser?.uid) {
-      alert("Você não pode excluir seu próprio perfil.");
-      return;
+    setIsAppLoading(true);
+    try {
+      await deleteDoc(doc(db, "usuarios", selectedUserId));
+      alert("Usuário excluído com sucesso!");
+      setView("users_list");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `usuarios/${selectedUserId}`);
+    } finally {
+      setIsAppLoading(false);
     }
-    
-    setConfirmModal({
-      isOpen: true,
-      title: "Excluir Usuário",
-      message: `Tem certeza que deseja excluir permanentemente ${user.name}? Esta ação não pode ser desfeita.`,
-      onConfirm: async () => {
-        closeConfirmModal();
-        setIsAppLoading(true);
-        try {
-          setLoading(true);
-          await deleteDoc(doc(db, "usuarios", selectedUserId));
-          alert("Usuário excluído com sucesso!");
-          setSelectedUserId(null);
-          setView("users_list");
-        } catch (err) {
-          handleFirestoreError(err, OperationType.DELETE, `usuarios/${selectedUserId}`);
-        } finally {
-          setIsAppLoading(false);
-          setLoading(false);
-        }
-      }
-    });
   };
 
   const handleDeleteDiary = async (id: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: "Excluir Diário",
-      message: `Tem certeza que deseja excluir permanentemente este registro de diário? Esta ação não pode ser desfeita.`,
-      onConfirm: async () => {
-        closeConfirmModal();
-        setIsAppLoading(true);
-        try {
-          setLoading(true);
-          await deleteDoc(doc(db, "diarios_classe", id));
-          alert("Diário excluído com sucesso!");
-        } catch (err) {
-          handleFirestoreError(err, OperationType.DELETE, `diarios_classe/${id}`);
-        } finally {
-          setIsAppLoading(false);
-          setLoading(false);
-        }
-      }
-    });
+    setIsAppLoading(true);
+    try {
+      await deleteDoc(doc(db, "diarios_classe", id));
+      alert("Diário excluído com sucesso!");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `diarios_classe/${id}`);
+    } finally {
+      setIsAppLoading(false);
+    }
   };
 
   if (connectionError) {
@@ -1460,7 +1046,6 @@ export default function App() {
             role={role}
             setSelectedUserId={setSelectedUserId}
             setView={setView}
-            db={db}
           />
         ) : view === "register" || view === "edit_self" || view === "edit_user" ? (
           <RegisterEditUserView 

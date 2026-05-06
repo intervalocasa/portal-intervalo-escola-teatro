@@ -8,7 +8,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { ArrowLeft, UserCircle, Edit, Users, Calendar, Info, UserPlus, X, Search, Plus } from "lucide-react";
 import { Class, User, UserRole } from "../types";
 import { Logo, Avatar } from "../components/CommonComponents";
-import { Firestore, doc, updateDoc, arrayUnion } from "firebase/firestore";
+import { db } from "../lib/firebase";
+import { doc, updateDoc, arrayUnion } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
 
 interface ClassDetailsViewProps {
@@ -18,7 +19,6 @@ interface ClassDetailsViewProps {
   role: UserRole | null;
   setSelectedUserId: (id: string | null) => void;
   setView: (view: string) => void;
-  db: Firestore;
 }
 
 export const ClassDetailsView = ({
@@ -28,7 +28,6 @@ export const ClassDetailsView = ({
   role,
   setSelectedUserId,
   setView,
-  db
 }: ClassDetailsViewProps) => {
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,7 +68,6 @@ export const ClassDetailsView = ({
       });
       setSearchQuery("");
       setEnrollmentProcess(null);
-      // Enrollment successful
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `classes/${selectedClassId}`);
     } finally {
