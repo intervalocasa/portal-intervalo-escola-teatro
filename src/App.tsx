@@ -960,7 +960,7 @@ export default function App() {
       setSelectedUserClasses([]);
       setView("dashboard");
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, "users");
+      handleFirestoreError(err, OperationType.WRITE, "usuarios");
     } finally {
       setIsAppLoading(false);
     }
@@ -981,7 +981,7 @@ export default function App() {
       alert("Credenciais atualizadas com sucesso!");
       setView("dashboard");
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, "users");
+      handleFirestoreError(err, OperationType.WRITE, "usuarios");
     } finally {
       setIsAppLoading(false);
     }
