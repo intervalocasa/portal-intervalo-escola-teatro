@@ -4,7 +4,7 @@
  */
 
 import { motion } from "motion/react";
-import { LogIn, UserPlus, Lock, AlertCircle, AlertTriangle } from "lucide-react";
+import { LogIn, Lock, AlertCircle, AlertTriangle } from "lucide-react";
 import { FormEvent } from "react";
 import { Logo } from "../components/CommonComponents";
 
@@ -160,16 +160,7 @@ export const LoginView = ({
           </button>
         </div>
 
-        <div className="pt-4 border-t border-slate-50">
-          <p className="text-center text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Novo por aqui?</p>
-          <button 
-            onClick={() => setView("register")}
-            className="w-full py-4 bg-slate-50 text-slate-500 rounded-2x border border-slate-100 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center gap-3 active:scale-95"
-          >
-            <UserPlus size={16} />
-            Solicitar Acesso
-          </button>
-        </div>
+
       </div>
     </motion.div>
   );
