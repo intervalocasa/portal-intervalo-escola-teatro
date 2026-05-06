@@ -106,7 +106,7 @@ export const ProfessorDiaryView = ({
                 onChange={(e) => setDiaryFilterYear(Number(e.target.value))}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
               >
-                {[2024, 2025, 2026].map(y => (
+                {[2023, 2024, 2025, 2026, 2027, 2028].map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>

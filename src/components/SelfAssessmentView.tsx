@@ -91,7 +91,6 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                 <select
                   value={assessmentMonth}
                   onChange={(e) => setAssessmentMonth(Number(e.target.value))}
-                  disabled={!!assessmentForm.classId}
                   className="flex-1 md:w-40 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:border-pro-teal disabled:opacity-50"
                 >
                   {Array.from({ length: 12 }, (_, i) => (
@@ -103,10 +102,9 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                 <select
                   value={assessmentYear}
                   onChange={(e) => setAssessmentYear(Number(e.target.value))}
-                  disabled={!!assessmentForm.classId}
                   className="w-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:border-pro-teal disabled:opacity-50"
                 >
-                  {[2024, 2025, 2026].map(y => (
+                  {[2023, 2024, 2025, 2026, 2027, 2028].map(y => (
                     <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
