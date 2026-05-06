@@ -67,7 +67,7 @@ export const StudentDiaryFormView = ({
            </div>
          </div>
          <div className="w-24 h-24 md:w-32 md:h-32 rounded-3xl border-4 border-white/10 overflow-hidden shadow-2xl bg-white/10 flex items-center justify-center">
-            <Avatar src={student?.photo} fallbackSize={48} />
+            <Avatar src={student?.photo} fallbackSize={48} className="w-full h-full rounded-none" />
          </div>
       </div>
 

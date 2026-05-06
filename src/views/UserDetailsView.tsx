@@ -52,7 +52,7 @@ export const UserDetailsView = ({
       <div className="bg-gradient-to-br from-[#016a86] to-[#004e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-4 md:py-20">
          <div className="relative">
            <div className="w-32 h-32 md:w-48 md:h-48 rounded-full border-8 border-white/20 overflow-hidden bg-white/10 flex items-center justify-center shadow-2xl">
-              <Avatar src={user.photo} alt="Profile" fallbackSize={80} />
+              <Avatar src={user.photo} alt="Profile" fallbackSize={80} className="w-full h-full rounded-none" />
            </div>
          </div>
          <div>
@@ -116,15 +116,19 @@ export const UserDetailsView = ({
           <DetailItem label="Endereço" value={user.address} fullWidth />
 
           {/* Financial Info */}
-          <div className="col-span-full mb-2 mt-4">
-            <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Dados Financeiros</h4>
-          </div>
+          {user.role === "Professor" && (
+            <>
+              <div className="col-span-full mb-2 mt-4">
+                <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Dados Financeiros</h4>
+              </div>
 
-          <DetailItem label="CNPJ" value={user.cnpj} />
-          <DetailItem label="Chave PIX" value={user.pixKey} />
-          <DetailItem label="Banco" value={user.bank} />
-          <DetailItem label="Agência" value={user.bankAgency} />
-          <DetailItem label="Conta" value={user.bankAccount} />
+              <DetailItem label="CNPJ" value={user.cnpj} />
+              <DetailItem label="Chave PIX" value={user.pixKey} />
+              <DetailItem label="Banco" value={user.bank} />
+              <DetailItem label="Agência" value={user.bankAgency} />
+              <DetailItem label="Conta" value={user.bankAccount} />
+            </>
+          )}
 
           {(user.role === "Aluno" || user.role === "Professor") && (
             <div className="col-span-full mt-4">

@@ -93,7 +93,7 @@ export const DetailItem = ({ label, value, fullWidth = false }: { label: string,
 export const Avatar = ({ 
   src, 
   alt = "User Avatar", 
-  className = "w-12 h-12",
+  className = "w-full h-full rounded-full",
   fallbackSize
 }: { 
   src?: string, 
@@ -104,7 +104,7 @@ export const Avatar = ({
   const [error, setError] = useState(false);
 
   return (
-    <div className={`relative overflow-hidden rounded-full bg-slate-100 flex items-center justify-center shrink-0 ${className}`}>
+    <div className={`relative overflow-hidden bg-slate-100 flex items-center justify-center shrink-0 ${className}`}>
       {!src || error ? (
         <UserCircle 
           size={fallbackSize || "60%"} 

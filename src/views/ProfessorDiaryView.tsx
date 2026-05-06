@@ -158,7 +158,7 @@ export const ProfessorDiaryView = ({
                     >
                       <div className="flex items-center gap-4 flex-1">
                         <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 border border-slate-100 overflow-hidden">
-                          <Avatar src={student?.photo} fallbackSize={24} />
+                          <Avatar src={student?.photo} fallbackSize={24} className="w-full h-full rounded-none" />
                         </div>
                         <div>
                           <h4 className="font-black text-slate-800 uppercase tracking-tight leading-none mb-1">{student?.name || "Aluno Desconhecido"}</h4>

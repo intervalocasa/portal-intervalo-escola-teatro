@@ -79,7 +79,7 @@ export const UsersListView = ({
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-pro-teal group-hover:text-white transition-colors overflow-hidden">
-                        <Avatar src={u.photo} fallbackSize={20} />
+                        <Avatar src={u.photo} fallbackSize={20} className="w-full h-full rounded-none" />
                       </div>
                       <div className="flex flex-col">
                         <span className="font-black text-slate-700 uppercase tracking-tight leading-none mb-1">{u.name}</span>

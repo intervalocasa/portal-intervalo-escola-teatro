@@ -169,7 +169,7 @@ export const ClassDetailsView = ({
                       className="p-4 bg-slate-50 rounded-3xl border border-slate-100 flex items-center gap-4 group hover:bg-white hover:border-pro-teal transition-all text-left w-full relative"
                     >
                       <div className="w-12 h-12 rounded-2xl bg-white overflow-hidden flex items-center justify-center text-slate-300 shadow-sm">
-                        <Avatar src={s.photo} fallbackSize={24} />
+                        <Avatar src={s.photo} fallbackSize={24} className="w-full h-full rounded-none" />
                       </div>
                       <div className="flex-1">
                         <p className="text-sm font-black text-slate-700 uppercase tracking-tight leading-none mb-1">{s.name}</p>
@@ -211,7 +211,7 @@ export const ClassDetailsView = ({
               {teacher ? (
                 <div className="flex flex-col items-center text-center gap-4 p-4 rounded-3xl bg-slate-50/50 border border-slate-100">
                   <div className="w-24 h-24 rounded-[32px] bg-white overflow-hidden flex items-center justify-center text-slate-200 border-4 border-white shadow-xl">
-                    <Avatar src={teacher.photo} fallbackSize={48} />
+                    <Avatar src={teacher.photo} fallbackSize={48} className="w-full h-full rounded-none" />
                   </div>
                   <div>
                     <h5 className="font-black text-slate-800 uppercase tracking-tight text-lg">{teacher.name}</h5>
@@ -314,7 +314,7 @@ export const ClassDetailsView = ({
                           >
                             <div className="flex items-center gap-4">
                               <div className="w-10 h-10 rounded-xl bg-white overflow-hidden shadow-sm">
-                                <Avatar src={student.photo} fallbackSize={20} />
+                                <Avatar src={student.photo} fallbackSize={20} className="w-full h-full rounded-none" />
                               </div>
                               <div>
                                 <p className="text-sm font-black text-slate-700 uppercase tracking-tight">{student.name}</p>
@@ -345,7 +345,7 @@ export const ClassDetailsView = ({
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
                     <div className="flex items-center gap-4 p-6 bg-slate-50 rounded-[32px] border border-slate-100">
                       <div className="w-16 h-16 rounded-2xl bg-white overflow-hidden shadow-md">
-                        <Avatar src={users.find(u => u.id === enrollmentProcess.studentId)?.photo} fallbackSize={32} />
+                        <Avatar src={users.find(u => u.id === enrollmentProcess.studentId)?.photo} fallbackSize={32} className="w-full h-full rounded-none" />
                       </div>
                       <div>
                         <p className="text-[10px] font-black text-pro-teal uppercase tracking-widest mb-1">Matriculando aluno:</p>

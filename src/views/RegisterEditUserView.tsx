@@ -77,7 +77,7 @@ export const RegisterEditUserView = ({
         <div className="flex flex-col items-center gap-6 pb-6 border-b border-slate-50">
            <div className="relative group">
               <div className="w-32 h-32 md:w-44 md:h-44 bg-slate-50 rounded-[40px] border-4 border-white shadow-2xl flex items-center justify-center text-slate-200 overflow-hidden relative transition-all group-hover:scale-105 group-hover:rotate-2">
-                 <Avatar src={photoPreview || ""} fallbackSize={64} />
+                 <Avatar src={photoPreview || ""} fallbackSize={80} className="w-full h-full rounded-none" />
                  <label className="absolute inset-0 bg-pro-teal/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer backdrop-blur-sm">
                    <div className="flex flex-col items-center gap-2 text-white">
                       <Camera size={32} />
@@ -207,69 +207,73 @@ export const RegisterEditUserView = ({
           </div>
 
           {/* Financial Info */}
-          <div className="space-y-4 col-span-full pt-4">
-            <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Informações Financeiras</h4>
-          </div>
+          {regType === "Professor" && (
+            <>
+              <div className="space-y-4 col-span-full pt-4">
+                <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Informações Financeiras</h4>
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CNPJ (Opcional)</label>
-            <input
-              type="text"
-              name="cnpj"
-              value={formData.cnpj || ""}
-              onChange={handleInputChange}
-              placeholder="00.000.000/0000-00"
-              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
-            />
-          </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CNPJ (Opcional)</label>
+                <input
+                  type="text"
+                  name="cnpj"
+                  value={formData.cnpj || ""}
+                  onChange={handleInputChange}
+                  placeholder="00.000.000/0000-00"
+                  className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chave PIX</label>
-            <input
-              type="text"
-              name="pixKey"
-              value={formData.pixKey || ""}
-              onChange={handleInputChange}
-              placeholder="E-mail, CPF, Celular ou Aleatória"
-              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
-            />
-          </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chave PIX</label>
+                <input
+                  type="text"
+                  name="pixKey"
+                  value={formData.pixKey || ""}
+                  onChange={handleInputChange}
+                  placeholder="E-mail, CPF, Celular ou Aleatória"
+                  className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Banco</label>
-            <input
-              type="text"
-              name="bank"
-              value={formData.bank || ""}
-              onChange={handleInputChange}
-              placeholder="Ex: Banco do Brasil"
-              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
-            />
-          </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Banco</label>
+                <input
+                  type="text"
+                  name="bank"
+                  value={formData.bank || ""}
+                  onChange={handleInputChange}
+                  placeholder="Ex: Banco do Brasil"
+                  className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Agência</label>
-            <input
-              type="text"
-              name="bankAgency"
-              value={formData.bankAgency || ""}
-              onChange={handleInputChange}
-              placeholder="0000-0"
-              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
-            />
-          </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Agência</label>
+                <input
+                  type="text"
+                  name="bankAgency"
+                  value={formData.bankAgency || ""}
+                  onChange={handleInputChange}
+                  placeholder="0000-0"
+                  className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Conta Corrente / POUPANÇA</label>
-            <input
-              type="text"
-              name="bankAccount"
-              value={formData.bankAccount || ""}
-              onChange={handleInputChange}
-              placeholder="000000-0"
-              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
-            />
-          </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Conta Corrente / POUPANÇA</label>
+                <input
+                  type="text"
+                  name="bankAccount"
+                  value={formData.bankAccount || ""}
+                  onChange={handleInputChange}
+                  placeholder="000000-0"
+                  className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
+                />
+              </div>
+            </>
+          )}
 
           {view !== "register" && setShowPasswordModal && (
             <div className="col-span-full pt-4">
