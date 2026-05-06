@@ -143,6 +143,24 @@ export default function App() {
 
   const isPopStateNavigation = useRef(false);
 
+  const handleResetUserForm = useCallback(() => {
+    setFormData({
+      name: "",
+      artisticName: "",
+      email: "",
+      phone: "",
+      address: "",
+      cpf: "",
+      bank: "",
+      bankAgency: "",
+      bankAccount: "",
+      pixKey: "",
+      cnpj: ""
+    });
+    setPhotoPreview(null);
+    setSelectedUserClasses([]);
+  }, []);
+
   // Sync state with browser history
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -1302,7 +1320,7 @@ export default function App() {
               <h1 className="text-white text-2xl md:text-4xl font-bold tracking-tight">Primeiro Acesso</h1>
               <p className="text-teal-50/80 text-sm md:text-base mt-1 uppercase tracking-widest leading-none">Atualize suas credenciais</p>
             </div>
-
+ 
             <form onSubmit={handleFirstLoginSubmit} className="p-10 md:p-20 space-y-6 flex flex-col justify-center md:w-1/2">
               <div className="max-w-md mx-auto w-full space-y-6">
                 <div className="bg-pro-teal/5 p-6 rounded-2xl border border-pro-teal/10 mb-4">
@@ -1310,7 +1328,7 @@ export default function App() {
                     Por segurança, você deve escolher um novo nome de usuário e uma senha pessoal antes de continuar.
                   </p>
                 </div>
-
+ 
               <div className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Novo Usuário</label>
@@ -1323,7 +1341,7 @@ export default function App() {
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
                   />
                 </div>
-
+ 
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Nova Senha</label>
                   <input
@@ -1336,7 +1354,7 @@ export default function App() {
                   />
                 </div>
               </div>
-
+ 
               <button
                 type="submit"
                 className="w-full py-4 bg-[#016a86] text-white font-bold rounded-xl shadow-lg shadow-teal-900/20 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group"
@@ -1354,6 +1372,7 @@ export default function App() {
               resetDatabase={resetDatabase}
               handleLogout={handleLogout}
               setView={setView}
+              handleResetUserForm={handleResetUserForm}
             />
           ) : role === "Professor" ? (
             <ProfessorDashboard 

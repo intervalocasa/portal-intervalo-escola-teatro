@@ -23,6 +23,7 @@ interface GestorDashboardProps {
   resetDatabase: () => void;
   handleLogout: () => void;
   setView: (view: any) => void;
+  handleResetUserForm: () => void;
 }
 
 export const GestorDashboard = ({
@@ -30,7 +31,8 @@ export const GestorDashboard = ({
   users,
   resetDatabase,
   handleLogout,
-  setView
+  setView,
+  handleResetUserForm
 }: GestorDashboardProps) => {
   return (
     <motion.div
@@ -94,7 +96,10 @@ export const GestorDashboard = ({
             </motion.button>
 
             <motion.button
-              onClick={() => setView("register")}
+              onClick={() => {
+                handleResetUserForm();
+                setView("register");
+              }}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className={`w-full p-6 bg-pro-yellow rounded-2xl flex items-center gap-5 text-pro-teal shadow-xl shadow-yellow-900/10 transition-all text-left group`}

@@ -114,7 +114,11 @@ export const Avatar = ({
   className?: string,
   fallbackSize?: number
 }) => {
-  const [error, setError] = useState(false);
+  const [error, setError] = React.useState(false);
+
+  React.useEffect(() => {
+    setError(false);
+  }, [src]);
 
   return (
     <div className={`relative overflow-hidden bg-slate-100 flex items-center justify-center shrink-0 ${className}`}>
