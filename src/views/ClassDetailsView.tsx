@@ -7,7 +7,7 @@ import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowLeft, UserCircle, Edit, Users, Calendar, Info, UserPlus, X, Search, Plus } from "lucide-react";
 import { Class, User, UserRole } from "../types";
-import { Logo, Avatar } from "../components/CommonComponents";
+import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { db } from "../lib/firebase";
 import { doc, updateDoc, arrayUnion } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
@@ -90,16 +90,14 @@ export const ClassDetailsView = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-6xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col"
+      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-6xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
     >
       <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-20">
-         <div className="absolute top-6 left-6 md:top-10 md:left-10">
-           <button 
+         <div className="absolute top-6 left-6 md:top-10 md:left-10 z-20">
+           <BackButton 
             onClick={() => setView("classes_list")}
-            className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all text-white flex items-center gap-2 text-[10px] font-black uppercase tracking-widest backdrop-blur-md"
-           >
-             <ArrowLeft size={16} /> Voltar
-           </button>
+            className="!text-white pointer-events-auto"
+           />
          </div>
          <Logo className="h-10 md:h-16 w-auto mb-1 brightness-0 invert" />
          <h1 className="text-white text-xl md:text-5xl font-black uppercase tracking-tight">{targetClass.code}</h1>

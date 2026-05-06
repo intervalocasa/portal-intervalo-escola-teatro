@@ -69,7 +69,7 @@ import {
 import { handleFirestoreError, OperationType } from "./lib/firestoreErrorHandler";
 import { THEME } from "./theme";
 import { UserRole, User, Class, Diary, Evaluation } from "./types";
-import { Logo, LoadingScreen, DetailItem } from "./components/CommonComponents";
+import { Logo, LoadingScreen, DetailItem, BackButton } from "./components/CommonComponents";
 import { LoginView } from "./views/LoginView";
 import { GestorDashboard } from "./views/GestorDashboard";
 import { ProfessorDashboard } from "./views/ProfessorDashboard";
@@ -1017,8 +1017,14 @@ export default function App() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full max-w-[480px] bg-white rounded-[40px] shadow-theater overflow-hidden border-4 border-white flex flex-col"
+            className="w-full max-w-[480px] bg-white rounded-[40px] shadow-theater overflow-hidden border-4 border-white flex flex-col relative"
           >
+            <div className="absolute top-4 left-4 z-20">
+              <BackButton 
+                onClick={() => setView("login")} 
+                className="!text-white pointer-events-auto" 
+              />
+            </div>
             <div className="bg-gradient-to-br from-[#016a86] to-[#004e63] p-12 text-center relative">
               <Logo className="h-20 w-auto mb-4 mx-auto" />
               <h1 className="text-white text-2xl font-black uppercase tracking-tight">Primeiro Acesso</h1>
@@ -1070,13 +1076,6 @@ export default function App() {
                 >
                   Cadastrar e Entrar
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setView("login")}
-                  className="w-full py-4 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 rounded-2xl transition-all"
-                >
-                  Voltar ao Login
-                </button>
               </form>
             </div>
           </motion.div>
@@ -1087,8 +1086,14 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-[480px] bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col md:flex-row"
+            className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-[480px] bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col md:flex-row relative"
           >
+            <div className="absolute top-4 left-4 z-20">
+              <BackButton 
+                onClick={handleLogout} 
+                className="!text-white pointer-events-auto" 
+              />
+            </div>
             <div className="bg-gradient-to-br from-[#016a86] to-[#004e63] p-10 text-center relative overflow-hidden flex flex-col items-center justify-center md:w-1/2">
               <Logo className="h-16 md:h-32 w-auto mb-2 brightness-0 invert" />
               <h1 className="text-white text-2xl md:text-4xl font-bold tracking-tight">Primeiro Acesso</h1>

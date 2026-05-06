@@ -7,9 +7,10 @@ import {
   Eye, 
   CheckCircle2, 
   LogOut, 
-  Drama 
+  Drama,
+  ArrowLeft 
 } from 'lucide-react';
-import { Logo } from './CommonComponents';
+import { Logo, BackButton } from './CommonComponents';
 import { 
   ADULT_CRITERIA, 
   ADULT_OPEN_QUESTIONS, 
@@ -59,8 +60,12 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-2xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col"
+      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-2xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
     >
+       {/* Back Button Overlay */}
+       <div className="absolute top-4 left-4 z-20">
+         <BackButton onClick={() => setView("dashboard")} className="!text-white pointer-events-auto" />
+       </div>
        <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-8 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
          <Logo className="h-10 md:h-16 w-auto mb-1" />
          <h1 className="text-white text-xl md:text-3xl font-bold uppercase tracking-tight">Autoavaliação Mensal</h1>

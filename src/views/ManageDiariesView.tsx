@@ -4,9 +4,9 @@
  */
 
 import { motion, AnimatePresence } from "motion/react";
-import { Download, Search, LayoutGrid, Calendar, ChevronRight, BookOpen, CheckCircle2, Pencil, Trash2, Eye } from "lucide-react";
+import { Download, Search, LayoutGrid, Calendar, ChevronRight, BookOpen, CheckCircle2, Pencil, Trash2, Eye, ArrowLeft } from "lucide-react";
 import { User, Class, Diary, Evaluation } from "../types";
-import { Logo, Avatar } from "../components/CommonComponents";
+import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 
 interface ManageDiariesViewProps {
   diaries: Diary[];
@@ -38,8 +38,13 @@ export const ManageDiariesView = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-6xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col"
+      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-6xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
     >
+      {/* Back Button Overlay */}
+      <div className="absolute top-4 left-4 z-20">
+        <BackButton onClick={() => setView("dashboard")} className="!text-white pointer-events-auto" />
+      </div>
+
       <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
          <Logo className="h-10 md:h-16 w-auto mb-1 brightness-0 invert" />
          <h1 className="text-white text-xl md:text-3xl font-black uppercase tracking-tight">Gestão de Diários</h1>

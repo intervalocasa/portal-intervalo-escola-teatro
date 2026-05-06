@@ -6,7 +6,7 @@
 import { motion } from "motion/react";
 import { ArrowLeft, Save, HelpCircle, CheckCircle2 } from "lucide-react";
 import { User, Class } from "../types";
-import { Avatar } from "../components/CommonComponents";
+import { Avatar, BackButton } from "../components/CommonComponents";
 import { 
   PROFESSIONAL_COURSE_CRITERIA, 
   ADULT_COURSE_CRITERIA, 
@@ -49,16 +49,16 @@ export const StudentDiaryFormView = ({
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-4xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col"
+      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-4xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
     >
       <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8 md:py-16">
          <div className="space-y-4 text-center md:text-left">
-           <button 
-             onClick={() => setView("professor_diary")}
-             className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-teal-100/50 hover:text-white transition-colors"
-           >
-             <ArrowLeft size={16} /> Voltar à Lista
-           </button>
+           <div className="absolute top-4 left-4 z-20">
+             <BackButton 
+               onClick={() => setView("professor_diary")} 
+               className="!text-white pointer-events-auto" 
+             />
+           </div>
            <div>
              <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tight">{student?.name}</h1>
              <p className="text-pro-yellow text-[10px] md:text-xs font-black uppercase tracking-[0.3em] mt-2 italic bg-white/10 px-4 py-2 rounded-lg border border-white/10 inline-block backdrop-blur-md">

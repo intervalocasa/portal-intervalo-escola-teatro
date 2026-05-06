@@ -4,9 +4,22 @@
  */
 
 import { motion } from "motion/react";
-import { UserCircle } from "lucide-react";
+import { UserCircle, ArrowLeft } from "lucide-react";
 import React, { useState } from "react";
 import { THEME } from "../theme";
+
+export const BackButton = ({ onClick, className = "" }: { onClick: () => void, className?: string }) => (
+  <button 
+    onClick={onClick}
+    className={`flex items-center gap-2 text-slate-400 hover:text-pro-teal transition-all group font-black text-[10px] uppercase tracking-widest ${className}`}
+    id="global-back-button"
+  >
+    <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center group-hover:bg-pro-teal group-hover:text-white transition-all">
+      <ArrowLeft size={16} />
+    </div>
+    <span className="hidden sm:inline">Voltar</span>
+  </button>
+);
 
 export const Logo = ({ className = "h-24 w-auto" }: { className?: string }) => (
   <svg 

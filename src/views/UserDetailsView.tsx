@@ -4,9 +4,9 @@
  */
 
 import { motion } from "motion/react";
-import { UserCircle, Eye } from "lucide-react";
+import { UserCircle, Eye, ArrowLeft } from "lucide-react";
 import { User, Class, Evaluation } from "../types";
-import { DetailItem, Avatar } from "../components/CommonComponents";
+import { DetailItem, Avatar, BackButton } from "../components/CommonComponents";
 
 interface UserDetailsViewProps {
   selectedUserId: string | null;
@@ -46,8 +46,13 @@ export const UserDetailsView = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-2xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col"
+      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-2xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
     >
+      {/* Back Button Overlay */}
+      <div className="absolute top-4 left-4 z-20">
+        <BackButton onClick={() => setView("users_list")} className="!text-white pointer-events-auto" />
+      </div>
+
       {/* Header Details */}
       <div className="bg-gradient-to-br from-[#016a86] to-[#004e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-4 md:py-20">
          <div className="relative">

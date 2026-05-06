@@ -8,6 +8,7 @@ import {
   Users,
   Drama
 } from 'lucide-react';
+import { Logo, BackButton } from './CommonComponents';
 import { 
   LineChart, 
   Line, 
@@ -21,7 +22,6 @@ import {
   BarChart,
   Bar
 } from 'recharts';
-import { Logo } from './CommonComponents';
 import { 
   ADULT_COURSE_CRITERIA, 
   PROFESSIONAL_COURSE_CRITERIA, 
@@ -157,13 +157,11 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
       className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-4xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col"
     >
       <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-12">
-        <div className="absolute top-6 left-6 md:top-10 md:left-10">
-          <button 
-            onClick={() => setView("evolution")}
-            className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all text-white flex items-center gap-2 text-[10px] font-black uppercase tracking-widest backdrop-blur-md"
-          >
-            <ArrowLeft size={16} /> Voltar
-          </button>
+        <div className="absolute top-4 left-4 z-20">
+          <BackButton 
+            onClick={() => setView("evolution")} 
+            className="!text-white pointer-events-auto" 
+          />
         </div>
         <Logo className="h-10 md:h-16 w-auto mb-1 brightness-0 invert" />
         <h1 className="text-white text-xl md:text-3xl font-black uppercase tracking-tight">Análise de Performance</h1>
@@ -351,15 +349,6 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
                 ))}
               </div>
            </div>
-        </div>
-
-        <div className="py-10 text-center max-w-5xl mx-auto w-full px-6 md:px-12">
-          <button 
-            onClick={() => setView("evolution")}
-            className="px-10 py-4 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition-colors text-[10px] font-black uppercase tracking-widest shadow-xl shadow-black/10"
-          >
-            Voltar à Lista
-          </button>
         </div>
       </div>
     </motion.div>
