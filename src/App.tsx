@@ -926,6 +926,20 @@ export default function App() {
   const handleLogout = async () => {
     setIsAppLoading(true);
     await signOut(auth);
+    setPhotoPreview(null);
+    setFormData({
+      name: "",
+      artisticName: "",
+      email: "",
+      phone: "",
+      address: "",
+      cpf: "",
+      bank: "",
+      bankAgency: "",
+      bankAccount: "",
+      pixKey: "",
+      cnpj: ""
+    });
     _setView("login");
     setIsAppLoading(false);
   };
@@ -935,14 +949,10 @@ export default function App() {
     setIsAppLoading(true);
     try {
       const dataToSave = {
-        name: formData.name,
-        artisticName: formData.artisticName,
-        role: view === "register" ? regType : (view === "edit_user" ? users.find(u => u.id === selectedUserId)?.role : role),
-        cpf: formData.cpf,
-        email: formData.email.toLowerCase(),
-        phone: formData.phone,
-        photo: photoPreview,
         ...formData,
+        role: view === "register" ? regType : (view === "edit_user" ? users.find(u => u.id === selectedUserId)?.role : role),
+        email: formData.email.toLowerCase(),
+        photo: photoPreview,
         updatedAt: serverTimestamp()
       };
 

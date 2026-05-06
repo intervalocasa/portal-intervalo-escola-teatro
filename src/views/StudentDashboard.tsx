@@ -131,8 +131,8 @@ export const StudentDashboard = ({
                   <Drama size={24} />
                 </div>
                 <div>
-                  <div className="font-bold text-lg leading-none uppercase tracking-tight">Consultar Evolução</div>
-                  <div className="text-xs opacity-70 mt-1 font-bold">Veja seu progresso técnico</div>
+                  <div className="font-bold text-lg leading-none uppercase tracking-tight">Minha jornada</div>
+                  <div className="text-xs opacity-70 mt-1 font-bold">veja sua jornada</div>
                 </div>
               </motion.button>
 

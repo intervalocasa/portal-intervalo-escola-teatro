@@ -24,8 +24,18 @@ export default async function getCroppedImg(
     return null;
   }
 
-  canvas.width = pixelCrop.width;
-  canvas.height = pixelCrop.height;
+  const maxSize = 400;
+  let targetWidth = pixelCrop.width;
+  let targetHeight = pixelCrop.height;
+
+  if (targetWidth > maxSize || targetHeight > maxSize) {
+    const ratio = Math.min(maxSize / targetWidth, maxSize / targetHeight);
+    targetWidth = targetWidth * ratio;
+    targetHeight = targetHeight * ratio;
+  }
+
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
 
   ctx.drawImage(
     image,
@@ -35,18 +45,9 @@ export default async function getCroppedImg(
     pixelCrop.height,
     0,
     0,
-    pixelCrop.width,
-    pixelCrop.height
+    targetWidth,
+    targetHeight
   );
 
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        resolve(null);
-        return;
-      }
-      const fileUrl = URL.createObjectURL(blob);
-      resolve(fileUrl);
-    }, 'image/jpeg');
-  });
+  return canvas.toDataURL('image/jpeg', 0.8);
 }

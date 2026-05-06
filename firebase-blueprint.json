@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "User": {
+      "title": "Usuário",
+      "description": "Perfil de usuário no sistema (Aluno, Professor ou Gestor)",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "artisticName": { "type": "string" },
+        "role": { "type": "string", "enum": ["Aluno", "Professor", "Gestor"] },
+        "cpf": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "photo": { "type": "string" },
+        "passwordChanged": { "type": "boolean" },
+        "username": { "type": "string" },
+        "bank": { "type": "string" },
+        "bankAgency": { "type": "string" },
+        "bankAccount": { "type": "string" },
+        "pixKey": { "type": "string" },
+        "cnpj": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["name", "email", "role"]
+    },
+    "Class": {
+      "title": "Turma",
+      "description": "Informações sobre uma turma de aula",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "code": { "type": "string" },
+        "weekday": { "type": "string" },
+        "time": { "type": "string" },
+        "startDate": { "type": "string" },
+        "year": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "inactivationReason": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "studentIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["code", "type", "isActive"]
+    },
+    "Evaluation": {
+      "title": "Autoavaliação",
+      "description": "Autoavaliação mensal enviada pelo aluno",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "classId": { "type": "string" },
+        "classType": { "type": "string" },
+        "month": { "type": "number" },
+        "year": { "type": "number" },
+        "notes": { "type": "object" },
+        "openAnswers": { "type": "object" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["studentId", "classId", "month", "year"]
+    },
+    "Diary": {
+      "title": "Diário de Classe",
+      "description": "Registro pedagógico mensal de um aluno em uma turma",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "classType": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "month": { "type": "number" },
+        "year": { "type": "number" },
+        "presences": { "type": "number" },
+        "absences": { "type": "number" },
+        "frequencyObs": { "type": "string" },
+        "grades": { "type": "object" },
+        "criteriaObs": { "type": "object" },
+        "generalPedagogicalObs": { "type": "string" },
+        "averageGrade": { "type": "number" },
+        "status": { "type": "string", "enum": ["rascunho", "concluido"] },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["studentId", "classId", "teacherId", "month", "year", "status"]
+    },
+    "Evolution": {
+      "title": "Evolução",
+      "description": "Registro extra de evolução do aluno",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "object" }
+      },
+      "required": ["studentId", "classId", "teacherId"]
+    }
+  },
+  "firestore": {
+    "usuarios/{userId}": {
+      "schema": "User",
+      "description": "Coleção de usuários"
+    },
+    "classes/{classId}": {
+      "schema": "Class",
+      "description": "Coleção de turmas"
+    },
+    "autoavaliacoes/{evalId}": {
+      "schema": "Evaluation",
+      "description": "Coleção de autoavaliações"
+    },
+    "diarios_classe/{diaryId}": {
+      "schema": "Diary",
+      "description": "Coleção de diários de classe"
+    },
+    "evolucao/{evId}": {
+      "schema": "Evolution",
+      "description": "Coleção de registros de evolução"
+    }
+  }
+}
