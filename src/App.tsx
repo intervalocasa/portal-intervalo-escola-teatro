@@ -380,12 +380,16 @@ export default function App() {
           } else {
             setCurrentUser(null);
             setRole(null);
-            setView("login");
+            if (view !== "login" && view !== "register" && view !== "first_password_setup") {
+              setView("login");
+            }
           }
       } else {
         setCurrentUser(null);
         setRole(null);
-        setView("login");
+        if (view !== "login" && view !== "register" && view !== "first_password_setup") {
+          setView("login");
+        }
       }
       setLoading(false);
       } catch (authErr: any) {
