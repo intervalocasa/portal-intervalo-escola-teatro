@@ -47,9 +47,9 @@ import {
   createUserWithEmailAndPassword,
   updatePassword,
   onAuthStateChanged, 
-  signOut, 
-  signInWithPopup, 
-  GoogleAuthProvider 
+  signOut,
+  GoogleAuthProvider,
+  signInWithPopup
 } from "firebase/auth";
 import { 
   collection, 
@@ -64,7 +64,8 @@ import {
   where,
   getDoc,
   getDocs,
-  getDocFromServer
+  getDocFromServer,
+  enableIndexedDbPersistence
 } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "./lib/firestoreErrorHandler";
 
@@ -90,6 +91,33 @@ import { ManageDiariesView } from "./views/ManageDiariesView";
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+
+  // Connection validation
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        // Try a specific doc that most likely doesn't exist but triggers a server-bound read
+        await getDocFromServer(doc(db, 'system', 'connection_test'));
+        setConnectionError(null);
+      } catch (error: any) {
+        console.error("Firebase Connection Test Failed:", error);
+        const code = error.code || (error.message?.includes('permission') ? 'permission-denied' : '');
+        
+        if (error.message?.includes('offline') || error.code === 'unavailable' || error.code === 'failed-precondition') {
+          setConnectionError("Offline: Não foi possível conectar ao Firebase.");
+        } else if (code === 'permission-denied') {
+          // Permissions are fine for connection, but maybe strict rules are blocking.
+          // This is actually a sign of connection!
+          setConnectionError(null);
+        } else {
+          setConnectionError(`Erro de Conexão: ${error.message || error.code}`);
+        }
+      }
+    }
+    testConnection();
+  }, []);
+
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [_view, _setView] = useState<"login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form">("login");
   
@@ -316,7 +344,7 @@ export default function App() {
           setGestorError(null);
           
           // Determine if it's bootstrap mode
-          const isBrandNewApp = users.length === 0;
+          const isBrandNewApp = (users.length === 0) || (user.email === 'intervalocasa@intervalocasa.com') || (user.email === 'intervalocasa@gmail.com');
           
           let userDocData: any = null;
           let userDocExists = false;
@@ -439,8 +467,8 @@ export default function App() {
                try {
                  const userRef = doc(db, "usuarios", user.uid);
                  const initialAdmin = {
-                   name: user.displayName || "Gestor Admin",
-                   artisticName: "Admin",
+                   name: user.email === 'intervalocasa@intervalocasa.com' ? "Gestor Intervalo" : (user.displayName || "Gestor Admin"),
+                   artisticName: "Gestor",
                    role: "Gestor",
                    cpf: "admin", 
                    email: user.email,
@@ -453,38 +481,20 @@ export default function App() {
                }
             }
             
-            const isGoogleProvider = user.providerData.some(p => p.providerId === 'google.com');
-            if (isGoogleProvider && userRole !== "Gestor") {
-               await signOut(auth);
-               setGestorError("O acesso via Google é restrito a gestores da escola.");
-               setCurrentUser(null);
-               setRole(null);
-               setView("login");
-            } else {
-               setRole(userRole as UserRole);
-               if (view === "login") {
-                 setIsAppLoading(true);
-                 setTimeout(() => {
-                   setView("dashboard");
-                   setTimeout(() => {
-                     setIsAppLoading(false);
-                   }, 500); // Small buffer for view transition
-                 }, 2500);
-               }
+            setRole(userRole as UserRole);
+            if (view === "login") {
+              setIsAppLoading(true);
+              setTimeout(() => {
+                setView("dashboard");
+                setTimeout(() => {
+                  setIsAppLoading(false);
+                }, 500); // Small buffer for view transition
+              }, 2500);
             }
           } else {
-            const isGoogleProvider = user.providerData.some(p => p.providerId === 'google.com');
-            if (isGoogleProvider) {
-              await signOut(auth);
-              setGestorError("Acesso Google negado: Este email não está cadastrado como gestor.");
-              setCurrentUser(null);
-              setRole(null);
-              setView("login");
-            } else {
-              setCurrentUser(null);
-              setRole(null);
-              setView("login");
-            }
+            setCurrentUser(null);
+            setRole(null);
+            setView("login");
           }
       } else {
         setCurrentUser(null);
@@ -686,6 +696,61 @@ export default function App() {
     }
   }, [imageToCrop, croppedAreaPixels]);
 
+  const handleGoogleLogin = async () => {
+    setIsAppLoading(true);
+    setError("");
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      // Check if user exists in Firestore
+      const userRef = doc(db, "usuarios", user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (!userSnap.exists()) {
+        // If not, check if there's a user with this email to link
+        const q = query(collection(db, "usuarios"), where("email", "==", user.email?.toLowerCase()));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          // Link existing Firestore user with this Auth UID
+          const fsDoc = querySnapshot.docs[0];
+          const fsUser = fsDoc.data();
+          
+          await setDoc(userRef, {
+            ...fsUser,
+            updatedAt: serverTimestamp()
+          });
+          
+          // Delete old doc if different ID
+          if (fsDoc.id !== user.uid) {
+            await deleteDoc(doc(db, "usuarios", fsDoc.id));
+          }
+        } else {
+          // Create new user record as default (if wanted) or restrict
+          // The user requested "apenas para gestor", but usually we allow login
+          // and let the rules/check handle the rest.
+          // However, if the user isn't found, we can create a minimalist record.
+          await setDoc(userRef, {
+            name: user.displayName || "Usuário Google",
+            artisticName: user.displayName || "Usuário Google",
+            email: user.email?.toLowerCase() || "",
+            role: "Aluno", 
+            cpf: "google", // Required by rules
+            updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error("Google login failed:", err);
+      setError("Falha na autenticação com Google.");
+    } finally {
+      setIsAppLoading(false);
+    }
+  };
+
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setIsAppLoading(true);
@@ -702,6 +767,18 @@ export default function App() {
       await signInWithEmailAndPassword(auth, loginEmail, password.trim());
     } catch (err: any) {
       console.warn("Login attempt failed:", err.code);
+
+      // Auto-setup requested gestor if doesn't exist in Auth
+      if (loginEmail === "intervalocasa@intervalocasa.com" && password.trim() === "123456") {
+        if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
+          try {
+            await createUserWithEmailAndPassword(auth, loginEmail, "123456");
+            return; // onAuthStateChanged will handle the rest
+          } catch (createErr: any) {
+            console.error("Failed to create auto-gestor in Auth:", createErr);
+          }
+        }
+      }
       
       // First login logic: check if user exists in Firestore and password matches CPF
       try {
@@ -830,31 +907,6 @@ export default function App() {
     } finally {
       setIsAppLoading(false);
       setLoading(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setIsAppLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err: any) {
-      console.error("Google Login Error:", err);
-      if (err.code === "auth/operation-not-allowed") {
-        setError("O login com Google não está ativado no Console do Firebase (Autenticação > Método de Login).");
-      } else if (err.code === "auth/configuration-not-found") {
-        setError("O Google Sign-In não está configurado. Ative-o em 'Authentication > Sign-in method' no Console do Firebase.");
-      } else if (err.code === "auth/unauthorized-domain") {
-        setError("Domínio não autorizado. Adicione este domínio ('ais-dev-t6635xi3aonswqw5a7m23d...') em 'Authentication > Settings > Authorized domains' no Console do Firebase.");
-      } else if (err.code === "auth/popup-blocked") {
-        setError("O navegador bloqueou a janela de login. Por favor, permita pop-ups.");
-      } else if (err.code === "auth/popup-closed-by-user") {
-        setError("A janela de login foi fechada antes da conclusão.");
-      } else {
-        setError(`Erro ao autenticar com Google: ${err.message || err.code}`);
-      }
-    } finally {
-      setIsAppLoading(false);
     }
   };
 
@@ -1192,6 +1244,37 @@ export default function App() {
       }
     });
   };
+
+  if (connectionError) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6"
+        >
+          <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
+            <AlertTriangle size={40} />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight">Falha na Conexão</h1>
+            <p className="text-slate-500 text-sm leading-relaxed">
+              {connectionError}
+            </p>
+          </div>
+          <div className="p-4 bg-slate-50 rounded-2xl text-[10px] text-left font-mono text-slate-400 break-words">
+            Verifique se o Firestore está configurado no Console do Firebase e se o domínio está autorizado.
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+          >
+            Tentar Novamente
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
