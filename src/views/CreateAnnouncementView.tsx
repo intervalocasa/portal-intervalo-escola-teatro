@@ -24,14 +24,17 @@ export const CreateAnnouncementView = ({
   handleDeleteAnnouncement,
   users
 }: CreateAnnouncementViewProps) => {
-  const [formData, setFormData] = useState({
+  const INITIAL_STATE = {
     title: "",
     content: "",
     target: "Todos" as "Todos" | "Alunos" | "Professores",
     scheduledFor: "",
     targetSpecificUsers: false,
     targetUserIds: [] as string[],
-  });
+  };
+
+  const [formData, setFormData] = useState(INITIAL_STATE);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -56,6 +59,24 @@ export const CreateAnnouncementView = ({
     });
   };
 
+  const handleEditClick = (aviso: any) => {
+    const formattedDate = aviso.scheduledFor 
+      ? new Date(aviso.scheduledFor.seconds * 1000).toISOString().slice(0, 16)
+      : "";
+      
+    setFormData({
+      title: aviso.title,
+      content: aviso.content,
+      target: aviso.target,
+      scheduledFor: formattedDate,
+      targetSpecificUsers: aviso.targetSpecificUsers || false,
+      targetUserIds: aviso.targetUserIds || [],
+    });
+    setEditingId(aviso.id);
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (formData.targetSpecificUsers && formData.targetUserIds.length === 0) {
@@ -64,18 +85,17 @@ export const CreateAnnouncementView = ({
     }
     setIsLoading(true);
     try {
-      await handleAnnouncementSubmit(formData);
-      setFormData({ 
-        title: "", 
-        content: "", 
-        target: "Todos", 
-        scheduledFor: "",
-        targetSpecificUsers: false,
-        targetUserIds: [],
-      });
+      await handleAnnouncementSubmit({ ...formData, id: editingId });
+      setFormData(INITIAL_STATE);
+      setEditingId(null);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const cancelEdit = () => {
+    setFormData(INITIAL_STATE);
+    setEditingId(null);
   };
 
   return (
@@ -105,8 +125,18 @@ export const CreateAnnouncementView = ({
       <div className="p-8 md:p-16 space-y-12 flex-1 overflow-y-auto max-w-7xl mx-auto w-full">
         {/* Form Section */}
         <section className="space-y-6">
-          <div className="space-y-4">
-            <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Criar Novo Aviso</h4>
+          <div className="flex items-center justify-between gap-4">
+            <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">
+              {editingId ? "Editar Aviso" : "Criar Novo Aviso"}
+            </h4>
+            {editingId && (
+              <button 
+                onClick={cancelEdit}
+                className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:brightness-90 transition-all"
+              >
+                Cancelar Edição
+              </button>
+            )}
           </div>
 
           <form onSubmit={onSubmit} className="bg-slate-50/50 p-6 md:p-10 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
@@ -249,10 +279,12 @@ export const CreateAnnouncementView = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-5 bg-pro-teal text-white font-black rounded-2xl shadow-xl shadow-teal-900/20 hover:brightness-110 active:scale-[0.98] transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-3"
+              className={`w-full py-5 text-white font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-3 active:scale-[0.98] ${
+                editingId ? "bg-amber-500 shadow-amber-900/20" : "bg-pro-teal shadow-teal-900/20"
+              } hover:brightness-110`}
             >
-              <Send size={20} />
-              {isLoading ? "Enviando..." : formData.scheduledFor ? "Agendar Aviso" : "Publicar Agora"}
+              {editingId ? <Edit2 size={20} /> : <Send size={20} />}
+              {isLoading ? "Enviando..." : editingId ? "Salvar Alterações" : (formData.scheduledFor ? "Agendar Aviso" : "Publicar Agora")}
             </button>
           </form>
         </section>
@@ -299,12 +331,22 @@ export const CreateAnnouncementView = ({
                       <p className="text-sm text-slate-500 leading-relaxed font-medium line-clamp-3">{aviso.content}</p>
                     </div>
                     
-                    <button 
-                      onClick={() => handleDeleteAnnouncement(aviso.id)}
-                      className="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition-all active:scale-90"
-                    >
-                      <Trash2 size={20} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => handleEditClick(aviso)}
+                        className="p-3 bg-amber-50 text-amber-500 rounded-2xl hover:bg-amber-500 hover:text-white transition-all active:scale-90"
+                        title="Editar Aviso"
+                      >
+                        <Edit2 size={20} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteAnnouncement(aviso.id)}
+                        className="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition-all active:scale-90"
+                        title="Excluir Aviso"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))

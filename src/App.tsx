@@ -1191,15 +1191,25 @@ export default function App() {
     if (!currentUser) return;
     setIsAppLoading(true);
     try {
-      await addDoc(collection(db, "avisos"), {
-        ...announcementData,
-        createdBy: currentUser.uid,
-        createdAt: serverTimestamp(),
+      const { id, ...rest } = announcementData;
+      const data = {
+        ...rest,
         updatedAt: serverTimestamp(),
         // Convert local datetime to timestamp if it exists
         scheduledFor: announcementData.scheduledFor ? new Date(announcementData.scheduledFor) : null
-      });
-      showNotification("Aviso publicado com sucesso!", "Sucesso");
+      };
+
+      if (id) {
+        await updateDoc(doc(db, "avisos", id), data);
+        showNotification("Aviso atualizado com sucesso!", "Sucesso");
+      } else {
+        await addDoc(collection(db, "avisos"), {
+          ...data,
+          createdBy: currentUser.uid,
+          createdAt: serverTimestamp()
+        });
+        showNotification("Aviso publicado com sucesso!", "Sucesso");
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "avisos");
     } finally {

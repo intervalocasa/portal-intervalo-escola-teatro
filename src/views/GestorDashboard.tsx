@@ -128,8 +128,8 @@ export const GestorDashboard = ({
                 <Calendar size={24} />
               </div>
               <div>
-                <div className="font-bold text-lg leading-none">Novo Aviso</div>
-                <div className="text-xs opacity-70 mt-1">Comunicar aos usuários</div>
+                <div className="font-bold text-lg leading-none">Painel de Avisos</div>
+                <div className="text-xs opacity-70 mt-1">Gerenciar comunicações</div>
               </div>
             </motion.button>
 
