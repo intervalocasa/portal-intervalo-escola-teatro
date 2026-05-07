@@ -1,0 +1,317 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { motion, AnimatePresence } from "motion/react";
+import { Megaphone, Calendar, Users, ArrowLeft, Send, Clock, Trash2, Edit2, Search, Check, Filter } from "lucide-react";
+import { Logo, BackButton, Avatar } from "../components/CommonComponents";
+import { FormEvent, useState, useMemo } from "react";
+import { THEME } from "../theme";
+
+interface CreateAnnouncementViewProps {
+  handleAnnouncementSubmit: (announcement: any) => Promise<void>;
+  setView: (view: string) => void;
+  announcements: any[];
+  handleDeleteAnnouncement: (id: string) => Promise<void>;
+  users: any[];
+}
+
+export const CreateAnnouncementView = ({
+  handleAnnouncementSubmit,
+  setView,
+  announcements,
+  handleDeleteAnnouncement,
+  users
+}: CreateAnnouncementViewProps) => {
+  const [formData, setFormData] = useState({
+    title: "",
+    content: "",
+    target: "Todos" as "Todos" | "Alunos" | "Professores",
+    scheduledFor: "",
+    targetSpecificUsers: false,
+    targetUserIds: [] as string[],
+  });
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           (u.artisticName?.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesRole = formData.target === "Todos" || u.role === (formData.target === "Alunos" ? "Aluno" : "Professor");
+      return matchesSearch && matchesRole;
+    });
+  }, [users, searchTerm, formData.target]);
+
+  const toggleUserSelection = (userId: string) => {
+    setFormData(prev => {
+      const isSelected = prev.targetUserIds.includes(userId);
+      if (isSelected) {
+        return { ...prev, targetUserIds: prev.targetUserIds.filter(id => id !== userId) };
+      } else {
+        return { ...prev, targetUserIds: [...prev.targetUserIds, userId] };
+      }
+    });
+  };
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (formData.targetSpecificUsers && formData.targetUserIds.length === 0) {
+      alert("Selecione pelo menos um usuário.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await handleAnnouncementSubmit(formData);
+      setFormData({ 
+        title: "", 
+        content: "", 
+        target: "Todos", 
+        scheduledFor: "",
+        targetSpecificUsers: false,
+        targetUserIds: [],
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      key="create-announcement-screen"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-2xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
+    >
+      <div className="absolute top-4 left-4 z-20">
+        <BackButton 
+          onClick={() => setView("dashboard")} 
+          className="!text-white pointer-events-auto" 
+        />
+      </div>
+      
+      <div className="bg-gradient-to-br from-pro-teal to-teal-900 p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
+         <Logo className="h-10 md:h-16 w-auto mb-1 brightness-0 invert" />
+         <h1 className="text-white text-xl md:text-3xl font-black uppercase tracking-tight">
+           Painel de Avisos
+         </h1>
+         <p className="text-teal-50/70 text-xs md:text-sm mt-1 uppercase tracking-widest leading-none font-bold">Comunicação e Engajamento</p>
+      </div>
+
+      <div className="p-8 md:p-16 space-y-12 flex-1 overflow-y-auto max-w-7xl mx-auto w-full">
+        {/* Form Section */}
+        <section className="space-y-6">
+          <div className="space-y-4">
+            <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Criar Novo Aviso</h4>
+          </div>
+
+          <form onSubmit={onSubmit} className="bg-slate-50/50 p-6 md:p-10 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Título do Aviso</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Ex: Reunião Geral de Professores"
+                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Conteúdo</label>
+                <textarea
+                  required
+                  rows={4}
+                  value={formData.content}
+                  onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+                  placeholder="Escreva aqui a mensagem que os usuários verão..."
+                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Destinatários</label>
+                  <select
+                    value={formData.target}
+                    onChange={(e) => setFormData(prev => ({ ...prev, target: e.target.value as any }))}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+                  >
+                    <option value="Todos">Todos os Usuários</option>
+                    <option value="Alunos">Apenas Alunos</option>
+                    <option value="Professores">Apenas Professores</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Agendar para (Opcional)</label>
+                  <input
+                    type="datetime-local"
+                    value={formData.scheduledFor}
+                    onChange={(e) => setFormData(prev => ({ ...prev, scheduledFor: e.target.value }))}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+                  />
+                </div>
+              </div>
+
+              {/* Target Specific Users Toggle */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, targetSpecificUsers: !prev.targetSpecificUsers }))}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all w-full md:w-auto ${
+                    formData.targetSpecificUsers 
+                    ? "bg-pro-teal/10 border-pro-teal text-pro-teal" 
+                    : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                    formData.targetSpecificUsers ? "bg-pro-teal border-pro-teal text-white" : "bg-white border-slate-300"
+                  }`}>
+                    {formData.targetSpecificUsers && <Check size={14} />}
+                  </div>
+                  <span className="text-xs font-black uppercase tracking-widest">Enviar para usuários específicos</span>
+                </button>
+              </div>
+
+              {/* User Selection Area */}
+              <AnimatePresence>
+                {formData.targetSpecificUsers && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden space-y-4 pt-2"
+                  >
+                    <div className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-xl">
+                      <Search size={18} className="text-slate-400" />
+                      <input 
+                        type="text"
+                        placeholder="Pesquisar usuários..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="flex-1 bg-transparent border-none text-sm focus:ring-0 text-slate-700"
+                      />
+                    </div>
+
+                    <div className="max-h-60 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-2 pr-2 scrollbar-thin scrollbar-thumb-slate-200">
+                      {filteredUsers.length === 0 ? (
+                        <div className="col-span-full py-8 text-center bg-white rounded-2xl border border-dashed border-slate-200">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Nenhum usuário encontrado</p>
+                        </div>
+                      ) : (
+                        filteredUsers.map(user => (
+                          <div 
+                            key={user.id}
+                            onClick={() => toggleUserSelection(user.id)}
+                            className={`p-3 rounded-2xl flex items-center gap-3 border cursor-pointer transition-all ${
+                              formData.targetUserIds.includes(user.id)
+                              ? "bg-pro-teal border-pro-teal text-white shadow-lg shadow-teal-900/10"
+                              : "bg-white border-slate-100 text-slate-600 hover:border-slate-200"
+                            }`}
+                          >
+                            <Avatar src={user.photo} alt={user.name} className="w-8 h-8 rounded-lg !text-[10px]" />
+                            <div className="flex-1 min-w-0">
+                               <p className="text-[10px] font-black uppercase truncate">{user.artisticName || user.name}</p>
+                               <p className={`text-[8px] font-bold uppercase opacity-60`}>{user.role}</p>
+                            </div>
+                            {formData.targetUserIds.includes(user.id) && <Check size={16} />}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    
+                    {formData.targetUserIds.length > 0 && (
+                      <div className="flex items-center justify-between px-2">
+                        <p className="text-[9px] font-black text-pro-teal uppercase tracking-widest">
+                          {formData.targetUserIds.length} selecionado(s)
+                        </p>
+                        <button 
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, targetUserIds: [] }))}
+                          className="text-[9px] font-black text-red-400 uppercase tracking-widest hover:text-red-500"
+                        >
+                          Limpar tudo
+                        </button>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-5 bg-pro-teal text-white font-black rounded-2xl shadow-xl shadow-teal-900/20 hover:brightness-110 active:scale-[0.98] transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-3"
+            >
+              <Send size={20} />
+              {isLoading ? "Enviando..." : formData.scheduledFor ? "Agendar Aviso" : "Publicar Agora"}
+            </button>
+          </form>
+        </section>
+
+        {/* List Section */}
+        <section className="space-y-6">
+          <div className="space-y-4">
+            <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Avisos Recentes</h4>
+          </div>
+
+          <div className="space-y-4">
+            {announcements.length === 0 ? (
+              <div className="p-12 text-center bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200">
+                <Megaphone size={40} className="mx-auto text-slate-300 mb-4 opacity-50" />
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Nenhum aviso cadastrado ainda</p>
+              </div>
+            ) : (
+              announcements.map((aviso) => (
+                <div key={aviso.id} className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
+                          aviso.target === "Todos" ? "bg-blue-50 text-blue-500" :
+                          aviso.target === "Alunos" ? "bg-pro-teal/10 text-pro-teal" :
+                          "bg-purple-50 text-purple-500"
+                        }`}>
+                          {aviso.target}
+                        </span>
+                        {aviso.scheduledFor && (
+                          <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
+                            <Clock size={10} />
+                            Agendado
+                          </span>
+                        )}
+                        {aviso.targetSpecificUsers && (
+                          <span className="px-2 py-0.5 bg-slate-50 text-slate-500 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
+                            <Users size={10} />
+                            {aviso.targetUserIds?.length || 0} Específicos
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-base font-black text-slate-800 uppercase leading-tight">{aviso.title}</h3>
+                      <p className="text-sm text-slate-500 leading-relaxed font-medium line-clamp-3">{aviso.content}</p>
+                    </div>
+                    
+                    <button 
+                      onClick={() => handleDeleteAnnouncement(aviso.id)}
+                      className="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition-all active:scale-90"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+    </motion.div>
+  );
+};

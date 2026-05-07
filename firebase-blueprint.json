@@ -104,6 +104,23 @@
         "createdAt": { "type": "object" }
       },
       "required": ["studentId", "classId", "teacherId"]
+    },
+    "Announcement": {
+      "title": "Aviso",
+      "description": "Avisos enviados pelo gestor para os usuários",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "target": { "type": "string", "enum": ["Todos", "Alunos", "Professores"] },
+        "targetSpecificUsers": { "type": "boolean" },
+        "targetUserIds": { "type": "array", "items": { "type": "string" } },
+        "scheduledFor": { "type": "object" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["title", "content", "target"]
     }
   },
   "firestore": {
@@ -126,6 +143,10 @@
     "evolucao/{evId}": {
       "schema": "Evolution",
       "description": "Coleção de registros de evolução"
+    },
+    "avisos/{avisoId}": {
+      "schema": "Announcement",
+      "description": "Coleção de avisos"
     }
   }
 }

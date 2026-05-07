@@ -20,6 +20,7 @@ interface ClassDetailsViewProps {
   setSelectedUserId: (id: string | null) => void;
   setView: (view: string) => void;
   setClassData: (data: any) => void;
+  showNotification: (message: string, title?: string, type?: "success" | "warning" | "error") => void;
 }
 
 export const ClassDetailsView = ({
@@ -29,7 +30,8 @@ export const ClassDetailsView = ({
   role,
   setSelectedUserId,
   setView,
-  setClassData
+  setClassData,
+  showNotification
 }: ClassDetailsViewProps) => {
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -57,7 +59,7 @@ export const ClassDetailsView = ({
     const { studentId, date } = enrollmentProcess;
     
     if (!date) {
-      alert("Por favor, selecione a data de matrícula.");
+      showNotification("Por favor, selecione a data de matrícula.", "Aviso", "warning");
       return;
     }
 

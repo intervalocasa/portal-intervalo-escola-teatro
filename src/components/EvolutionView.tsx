@@ -316,27 +316,49 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                       </div>
                                     ) : (
                                       <>
-                                        <div className="flex gap-4">
-                                          <div className="text-center">
-                                            <p className="text-[7px] font-black text-slate-300 uppercase">Self</p>
-                                            <p className="text-[10px] font-black text-slate-400">{selfNote.toFixed(1)}</p>
-                                          </div>
-                                          <div className="text-center">
-                                            <p className="text-[7px] font-black text-slate-300 uppercase">Prof</p>
-                                            <p className="text-[10px] font-black text-slate-400">{profNote.toFixed(1)}</p>
-                                          </div>
-                                        </div>
-                                        <div className="text-right">
+                                        <div className="text-right w-full">
                                           <p className="text-[8px] font-black text-pro-teal uppercase">Média</p>
                                           <p className="text-xl font-black text-pro-teal leading-none">{compAvg.toFixed(1)}</p>
                                         </div>
                                       </>
                                     )}
                                   </div>
+                                  
+                                  {/* Teacher Comment for this competency */}
+                                  {period.professorDiary?.criteriaObs?.[c.id] && (
+                                    <div className="mt-2 p-3 bg-teal-50/50 rounded-xl border border-teal-100/50">
+                                      <p className="text-[7px] font-black text-pro-teal uppercase mb-1 flex items-center gap-1">
+                                        <CheckCircle2 size={8} /> Feedback do Professor
+                                      </p>
+                                      <p className="text-[9px] font-medium text-slate-600 leading-relaxed italic">
+                                        "{period.professorDiary.criteriaObs[c.id]}"
+                                      </p>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
                           </div>
+
+                          {/* Final Pedagogical Report */}
+                          {period.professorDiary?.generalPedagogicalObs && (
+                            <div className="mt-6 p-6 bg-white rounded-3xl border border-slate-100 shadow-sm space-y-3" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-[#016a86]/10 flex items-center justify-center text-[#016a86]">
+                                  <Drama size={20} />
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-black text-[#016a86] uppercase tracking-widest">Parecer Pedagógico Final</p>
+                                  <h4 className="text-xs font-black text-slate-800 uppercase">Considerações do Professor</h4>
+                                </div>
+                              </div>
+                              <div className="p-4 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                                <p className="text-sm font-medium text-slate-700 leading-relaxed italic whitespace-pre-wrap">
+                                  {period.professorDiary.generalPedagogicalObs}
+                                </p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 

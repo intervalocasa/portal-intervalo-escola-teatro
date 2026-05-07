@@ -64,7 +64,8 @@ import {
   where,
   getDoc,
   getDocs,
-  getDocFromServer
+  getDocFromServer,
+  orderBy
 } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "./lib/firestoreErrorHandler";
 import { THEME } from "./theme";
@@ -79,6 +80,7 @@ import { UserDetailsView } from "./views/UserDetailsView";
 import { CreateClassView } from "./views/CreateClassView";
 import { ClassesListView } from "./views/ClassesListView";
 import { ClassDetailsView } from "./views/ClassDetailsView";
+import { CreateAnnouncementView } from "./views/CreateAnnouncementView";
 import { RegisterEditUserView } from "./views/RegisterEditUserView";
 import { SelfAssessmentView } from "./components/SelfAssessmentView";
 import { EvolutionView } from "./components/EvolutionView";
@@ -377,7 +379,7 @@ export default function App() {
           });
         }
 
-        alert("Senha cadastrada com sucesso! Bem-vindo ao sistema.");
+        showNotification("Senha cadastrada com sucesso! Bem-vindo ao sistema.", "Sucesso");
         // onAuthStateChanged will handle the view change
       } catch (authErr: any) {
         console.error("Auth creation error:", authErr);
@@ -423,7 +425,7 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Failed to update password");
 
-      alert("Senha alterada com sucesso pelo Gestor.");
+      showNotification("Senha alterada com sucesso pelo Gestor.", "Sucesso");
       setGestorResettingUid(null);
       setGestorNewPwd("");
     } catch (err: any) {
@@ -459,7 +461,7 @@ export default function App() {
       setShowPasswordModal(false);
       setPwdNew("");
       setPwdConfirm("");
-      alert("Senha alterada com sucesso!");
+      showNotification("Senha alterada com sucesso!", "Sucesso");
     } catch (err: any) {
       console.error("Error updating password:", err);
       if (err.code === "auth/requires-recent-login") {
@@ -535,6 +537,41 @@ export default function App() {
     return () => unsubscribeAuth();
   }, [view]);
 
+  const [viewingEvaluation, setViewingEvaluation] = useState<any>(null);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const lastAvisoIdRef = useRef<string | null>(null);
+
+  // Request Notification Permission
+  useEffect(() => {
+    if (currentUser && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, [currentUser]);
+
+  const triggerNotification = useCallback((aviso: any) => {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+    // Filter logic repeated here for the notification trigger
+    const userRole = users.find(u => u.id === currentUser?.uid)?.role;
+    let shouldNotify = false;
+
+    if (userRole === "Gestor") shouldNotify = true;
+    else if (aviso.targetSpecificUsers) {
+      shouldNotify = aviso.targetUserIds?.includes(currentUser?.uid);
+    } else {
+      if (aviso.target === "Todos") shouldNotify = true;
+      if (aviso.target === "Alunos" && userRole === "Aluno") shouldNotify = true;
+      if (aviso.target === "Professores" && userRole === "Professor") shouldNotify = true;
+    }
+
+    if (shouldNotify) {
+      new Notification("Novo Aviso: " + aviso.title, {
+        body: aviso.content,
+        icon: "/logo.png"
+      });
+    }
+  }, [currentUser, users]);
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -568,14 +605,32 @@ export default function App() {
       handleFirestoreError(err, OperationType.LIST, "evolucao");
     });
 
+    const unsubscribeAnnouncements = onSnapshot(query(collection(db, "avisos"), orderBy("createdAt", "desc")), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAnnouncements(data);
+
+      // Check for new announcement to notify
+      if (data.length > 0) {
+        const newest = data[0];
+        // Only notify if we already had a "last seen" ID and it changed (new post)
+        if (lastAvisoIdRef.current && lastAvisoIdRef.current !== newest.id) {
+          triggerNotification(newest);
+        }
+        lastAvisoIdRef.current = newest.id;
+      }
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, "avisos");
+    });
+
     return () => {
       unsubscribeUsers();
       unsubscribeClasses();
       unsubscribeEvals();
       unsubscribeDiaries();
       unsubscribeEvolutions();
+      unsubscribeAnnouncements();
     };
-  }, [currentUser]);
+  }, [currentUser, triggerNotification]);
 
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
@@ -596,7 +651,29 @@ export default function App() {
     openAnswers: {}
   });
 
-  const [viewingEvaluation, setViewingEvaluation] = useState<any>(null);
+  const filteredAnnouncements = announcements.filter(aviso => {
+    // 1. Check schedule
+    if (aviso.scheduledFor) {
+      const scheduleDate = aviso.scheduledFor.toDate ? aviso.scheduledFor.toDate() : new Date(aviso.scheduledFor);
+      if (scheduleDate > new Date()) return false;
+    }
+
+    // 2. Check target for current user role
+    const userRole = users.find(u => u.id === currentUser?.uid)?.role;
+    if (userRole === "Gestor") return true; // Gestor sees everything
+    
+    // 3. Check if it's targeted for specific users
+    if (aviso.targetSpecificUsers) {
+      return aviso.targetUserIds?.includes(currentUser?.uid);
+    }
+    
+    if (aviso.target === "Todos") return true;
+    if (aviso.target === "Alunos" && userRole === "Aluno") return true;
+    if (aviso.target === "Professores" && userRole === "Professor") return true;
+
+    return false;
+  });
+
   const [helpLevelModal, setHelpLevelModal] = useState<{title: string, detail: string, motivation: string} | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
@@ -614,6 +691,23 @@ export default function App() {
   });
 
   const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+  // Custom Notification Modal State
+  const [notification, setNotification] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: "success" | "warning" | "error";
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    type: "success",
+  });
+
+  const showNotification = (message: string, title: string = "Aviso", type: "success" | "warning" | "error" = "success") => {
+    setNotification({ isOpen: true, title, message, type });
+  };
 
   const handleDiarySubmit = async (status: "rascunho" | "concluido") => {
     if (!currentUser || !selectedClassId || !selectedDiaryStudentId) {
@@ -639,12 +733,12 @@ export default function App() {
       
       const missingGrades = criteriaList.filter(c => diaryFormData.grades[c.id] === undefined);
       if (missingGrades.length > 0) {
-        alert("Por favor, preencha as notas de todos os critérios antes de concluir.");
+        showNotification("Por favor, preencha as notas de todos os critérios antes de concluir.", "Aviso", "warning");
         return;
       }
 
       if (diaryFormData.presences === undefined || diaryFormData.absences === undefined) {
-        alert("Por favor, informe a quantidade de presenças e faltas.");
+        showNotification("Por favor, informe a quantidade de presenças e faltas.", "Aviso", "warning");
         return;
       }
     }
@@ -694,7 +788,7 @@ export default function App() {
         });
       }
 
-      alert(status === "concluido" ? "Diário de Classe concluído com sucesso." : "Diário de Classe salvo com sucesso.");
+      showNotification(status === "concluido" ? "Diário de Classe concluído com sucesso." : "Diário de Classe salvo com sucesso.", "Sucesso");
       setView("professor_diary");
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "diarios_classe");
@@ -726,10 +820,10 @@ export default function App() {
       });
 
       await Promise.all(deletePromises);
-      alert("Banco de dados resetado com sucesso!");
+      showNotification("Banco de dados resetado com sucesso!", "Sucesso");
     } catch (err) {
       console.error("Reset Error:", err);
-      alert("Erro ao resetar banco de dados.");
+      showNotification("Erro ao resetar banco de dados.", "Erro", "error");
     } finally {
       setIsAppLoading(false);
       setLoading(false);
@@ -982,13 +1076,13 @@ export default function App() {
           createdAt: serverTimestamp()
         });
         studentId = docRef.id;
-        alert("Usuário cadastrado com sucesso!");
+        showNotification("Usuário cadastrado com sucesso!", "Sucesso");
       } else {
         const targetId = view === "edit_user" ? selectedUserId : currentUser?.uid;
         if (targetId) {
           studentId = targetId;
           await updateDoc(doc(db, "usuarios", targetId), dataToSave);
-          alert("Cadastro atualizado com sucesso!");
+          showNotification("Cadastro atualizado com sucesso!", "Sucesso");
         }
       }
 
@@ -1026,6 +1120,38 @@ export default function App() {
     }
   };
 
+  const handleAnnouncementSubmit = async (announcementData: any) => {
+    if (!currentUser) return;
+    setIsAppLoading(true);
+    try {
+      await addDoc(collection(db, "avisos"), {
+        ...announcementData,
+        createdBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        // Convert local datetime to timestamp if it exists
+        scheduledFor: announcementData.scheduledFor ? new Date(announcementData.scheduledFor) : null
+      });
+      showNotification("Aviso publicado com sucesso!", "Sucesso");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, "avisos");
+    } finally {
+      setIsAppLoading(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    setIsAppLoading(true);
+    try {
+      await deleteDoc(doc(db, "avisos", id));
+      showNotification("Aviso excluído com sucesso!", "Sucesso");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `avisos/${id}`);
+    } finally {
+      setIsAppLoading(false);
+    }
+  };
+
   const handleFirstLoginSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsAppLoading(true);
@@ -1037,7 +1163,7 @@ export default function App() {
           updatedAt: serverTimestamp()
         });
       }
-      alert("Credenciais atualizadas com sucesso!");
+      showNotification("Credenciais atualizadas com sucesso!", "Sucesso");
       setView("dashboard");
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "usuarios");
@@ -1055,7 +1181,7 @@ export default function App() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      alert("Turma criada com sucesso!");
+      showNotification("Turma criada com sucesso!", "Sucesso");
       setView("dashboard");
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "classes");
@@ -1098,13 +1224,13 @@ export default function App() {
 
       if (existingEval) {
         await updateDoc(doc(db, "autoavaliacoes", existingEval.id), evaluationData);
-        alert("Autoavaliação atualizada com sucesso!");
+        showNotification("Autoavaliação atualizada com sucesso!", "Sucesso");
       } else {
         await addDoc(collection(db, "autoavaliacoes"), {
           ...evaluationData,
           createdAt: serverTimestamp()
         });
-        alert("Autoavaliação enviada com sucesso!");
+        showNotification("Autoavaliação enviada com sucesso!", "Sucesso");
       }
       setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
       setView("dashboard");
@@ -1124,7 +1250,7 @@ export default function App() {
         ...classData,
         updatedAt: serverTimestamp()
       });
-      alert("Turma atualizada com sucesso!");
+      showNotification("Turma atualizada com sucesso!", "Sucesso");
       setView("classes_list");
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "classes");
@@ -1138,7 +1264,7 @@ export default function App() {
     setIsAppLoading(true);
     try {
       await deleteDoc(doc(db, "classes", selectedClassId));
-      alert("Turma excluída com sucesso!");
+      showNotification("Turma excluída com sucesso!", "Sucesso");
       setView("classes_list");
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `classes/${selectedClassId}`);
@@ -1152,7 +1278,7 @@ export default function App() {
     setIsAppLoading(true);
     try {
       await deleteDoc(doc(db, "usuarios", selectedUserId));
-      alert("Usuário excluído com sucesso!");
+      showNotification("Usuário excluído com sucesso!", "Sucesso");
       setView("users_list");
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `usuarios/${selectedUserId}`);
@@ -1165,7 +1291,7 @@ export default function App() {
     setIsAppLoading(true);
     try {
       await deleteDoc(doc(db, "diarios_classe", id));
-      alert("Diário excluído com sucesso!");
+      showNotification("Diário excluído com sucesso!", "Sucesso");
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `diarios_classe/${id}`);
     } finally {
@@ -1374,6 +1500,7 @@ export default function App() {
               handleLogout={handleLogout}
               setView={setView}
               handleResetUserForm={handleResetUserForm}
+              filteredAnnouncements={filteredAnnouncements}
             />
           ) : role === "Professor" ? (
             <ProfessorDashboard 
@@ -1385,6 +1512,7 @@ export default function App() {
               setPhotoPreview={setPhotoPreview}
               setSelectedUserClasses={setSelectedUserClasses}
               classes={classes}
+              filteredAnnouncements={filteredAnnouncements}
             />
           ) : (
             <StudentDashboard 
@@ -1397,6 +1525,7 @@ export default function App() {
               setSelectedUserClasses={setSelectedUserClasses}
               setAssessmentForm={setAssessmentForm}
               classes={classes}
+              filteredAnnouncements={filteredAnnouncements}
             />
           )
         ) : view === "users_list" ? (
@@ -1459,6 +1588,7 @@ export default function App() {
             setSelectedUserId={setSelectedUserId}
             setView={setView}
             setClassData={setClassData}
+            showNotification={showNotification}
           />
         ) : view === "register" || view === "edit_self" || view === "edit_user" ? (
           <RegisterEditUserView 
@@ -1568,6 +1698,14 @@ export default function App() {
             setDiaryFormData={setDiaryFormData}
             setView={setView}
             handleDeleteDiary={handleDeleteDiary}
+          />
+        ) : view === "create_announcement" ? (
+          <CreateAnnouncementView 
+            handleAnnouncementSubmit={handleAnnouncementSubmit}
+            setView={setView}
+            announcements={announcements}
+            handleDeleteAnnouncement={handleDeleteAnnouncement}
+            users={users}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-20 bg-white rounded-3xl border border-white/50">
@@ -1797,7 +1935,7 @@ export default function App() {
                     if (classData.inactivationReason.trim()) {
                       setShowInactivationPopup(false);
                     } else {
-                      alert("Por favor, insira o motivo.");
+                      showNotification("Por favor, insira o motivo.", "Aviso", "warning");
                     }
                   }}
                   className="flex-[2] py-4 bg-pro-teal text-white font-bold rounded-xl shadow-lg shadow-teal-900/20 hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest text-[10px]"
@@ -2054,6 +2192,52 @@ export default function App() {
                  >
                    Entendido
                  </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {notification.isOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden border border-white"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`p-8 text-center space-y-6`}>
+                <div className={`w-20 h-20 mx-auto rounded-3xl flex items-center justify-center
+                  ${notification.type === "success" ? "bg-teal-50 text-pro-teal" : 
+                    notification.type === "error" ? "bg-red-50 text-red-500" : "bg-amber-50 text-amber-500"}`}
+                >
+                  {notification.type === "success" ? <CheckCircle2 size={40} /> : 
+                   notification.type === "error" ? <AlertCircle size={40} /> : <AlertTriangle size={40} />}
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">{notification.title}</h3>
+                  <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                    {notification.message}
+                  </p>
+                </div>
+
+                <button 
+                  onClick={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+                  className={`w-full py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg active:scale-95
+                    ${notification.type === "success" ? "bg-pro-teal text-white shadow-teal-900/20 hover:brightness-110" : 
+                      notification.type === "error" ? "bg-red-500 text-white shadow-red-900/20 hover:bg-red-600" : "bg-amber-500 text-white shadow-amber-900/20 hover:bg-amber-600"}`}
+                >
+                  Entendido
+                </button>
               </div>
             </motion.div>
           </motion.div>

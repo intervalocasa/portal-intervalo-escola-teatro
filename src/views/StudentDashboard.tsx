@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { THEME } from "../theme";
 import { Logo, Avatar } from "../components/CommonComponents";
+import { AnnouncementPanel } from "../components/AnnouncementPanel";
 
 interface StudentDashboardProps {
   currentUser: any;
@@ -24,6 +25,7 @@ interface StudentDashboardProps {
   setSelectedUserClasses: (classes: string[]) => void;
   setAssessmentForm: (form: any) => void;
   classes: any[];
+  filteredAnnouncements: any[];
 }
 
 export const StudentDashboard = ({
@@ -35,7 +37,8 @@ export const StudentDashboard = ({
   setPhotoPreview,
   setSelectedUserClasses,
   setAssessmentForm,
-  classes
+  classes,
+  filteredAnnouncements
 }: StudentDashboardProps) => {
   const user = users.find(u => u.id === currentUser?.uid);
   
@@ -67,6 +70,8 @@ export const StudentDashboard = ({
             <h2 className="text-4xl font-black text-slate-800 tracking-tight">Bem-vindo(a)</h2>
             <p className="text-slate-400 font-bold mt-2">O que deseja realizar hoje?</p>
           </div>
+
+          <AnnouncementPanel announcements={filteredAnnouncements} />
           
           <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
             {/* Atualizar Cadastro */}
