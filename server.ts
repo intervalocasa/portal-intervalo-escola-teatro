@@ -54,6 +54,29 @@ async function startServer() {
     }
   });
 
+  // API Route to create user in Auth (Gestor feature)
+  app.post("/api/admin/create-user", async (req, res) => {
+    const { email, password, adminUid } = req.body;
+
+    try {
+      // Security check: verify the requester is actually a Gestor
+      const adminUser = await admin.firestore().collection("usuarios").doc(adminUid).get();
+      if (!adminUser.exists || adminUser.data()?.role !== "Gestor") {
+        return res.status(403).json({ error: "Unauthorized: Only Gestors can create users with credentials." });
+      }
+
+      const userRecord = await admin.auth().createUser({
+        email: email,
+        password: password,
+      });
+
+      res.status(200).json({ uid: userRecord.uid });
+    } catch (error: any) {
+      console.error("Error creating user in Auth:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

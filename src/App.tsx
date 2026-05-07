@@ -158,7 +158,8 @@ export default function App() {
       bankAgency: "",
       bankAccount: "",
       pixKey: "",
-      cnpj: ""
+      cnpj: "",
+      initialPassword: ""
     });
     setPhotoPreview(null);
     setSelectedUserClasses([]);
@@ -912,7 +913,8 @@ export default function App() {
     bankAgency: "",
     bankAccount: "",
     pixKey: "",
-    cnpj: ""
+    cnpj: "",
+    initialPassword: ""
   });
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -1103,7 +1105,8 @@ export default function App() {
       bankAgency: "",
       bankAccount: "",
       pixKey: "",
-      cnpj: ""
+      cnpj: "",
+      initialPassword: ""
     });
     _setView("login");
     setIsAppLoading(false);
@@ -1145,8 +1148,9 @@ export default function App() {
     e.preventDefault();
     setIsAppLoading(true);
     try {
+      const { initialPassword, ...userDataRest } = formData;
       const dataToSave = {
-        ...formData,
+        ...userDataRest,
         role: view === "register" ? regType : (view === "edit_user" ? users.find(u => u.id === selectedUserId)?.role : role),
         email: formData.email.toLowerCase(),
         photo: photoPreview,
@@ -1156,11 +1160,43 @@ export default function App() {
       let studentId = "";
 
       if (view === "register") {
-        const docRef = await addDoc(collection(db, "usuarios"), {
-          ...dataToSave,
-          createdAt: serverTimestamp()
-        });
-        studentId = docRef.id;
+        let newUserUid = "";
+        
+        if (initialPassword && initialPassword.length >= 6) {
+          try {
+            const resp = await fetch("/api/admin/create-user", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                email: formData.email.toLowerCase(),
+                password: initialPassword,
+                adminUid: currentUser?.uid
+              })
+            });
+            const resData = await resp.json();
+            if (!resp.ok) throw new Error(resData.error || "Erro ao criar usuário no Auth");
+            newUserUid = resData.uid;
+          } catch (createAuthErr: any) {
+            showNotification(`Erro ao criar conta: ${createAuthErr.message}`, "Erro");
+            setIsAppLoading(false);
+            return;
+          }
+        }
+
+        if (newUserUid) {
+          await setDoc(doc(db, "usuarios", newUserUid), {
+            ...dataToSave,
+            passwordChanged: true,
+            createdAt: serverTimestamp()
+          });
+          studentId = newUserUid;
+        } else {
+          const docRef = await addDoc(collection(db, "usuarios"), {
+            ...dataToSave,
+            createdAt: serverTimestamp()
+          });
+          studentId = docRef.id;
+        }
         showNotification("Usuário cadastrado com sucesso!", "Sucesso");
       } else {
         const targetId = view === "edit_user" ? selectedUserId : currentUser?.uid;
