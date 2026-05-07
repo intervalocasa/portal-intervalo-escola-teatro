@@ -574,7 +574,7 @@ export default function App() {
     });
 
     return () => unsubscribeAuth();
-  }, [view, setView]);
+  }, [setView]); // Only run on mount
 
   const [viewingEvaluation, setViewingEvaluation] = useState<any>(null);
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -587,16 +587,16 @@ export default function App() {
     }
   }, [currentUser]);
 
-  const triggerNotification = useCallback((aviso: any) => {
+  const triggerNotification = useCallback((aviso: any, currentUsers: any[], currentUserId: string | undefined) => {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
 
     // Filter logic repeated here for the notification trigger
-    const userRole = users.find(u => u.id === currentUser?.uid)?.role;
+    const userRole = currentUsers.find(u => u.id === currentUserId)?.role;
     let shouldNotify = false;
 
     if (userRole === "Gestor") shouldNotify = true;
     else if (aviso.targetSpecificUsers) {
-      shouldNotify = aviso.targetUserIds?.includes(currentUser?.uid);
+      shouldNotify = aviso.targetUserIds?.includes(currentUserId);
     } else {
       if (aviso.target === "Todos") shouldNotify = true;
       if (aviso.target === "Alunos" && userRole === "Aluno") shouldNotify = true;
@@ -609,7 +609,7 @@ export default function App() {
         icon: "/logo.png"
       });
     }
-  }, [currentUser, users]);
+  }, []);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -653,7 +653,9 @@ export default function App() {
         const newest = data[0];
         // Only notify if we already had a "last seen" ID and it changed (new post)
         if (lastAvisoIdRef.current && lastAvisoIdRef.current !== newest.id) {
-          triggerNotification(newest);
+          // Use latest state via refs or pass current data if needed
+          // For safety and to avoid deps, we can skip notification on the very first load
+          triggerNotification(newest, users, currentUser?.uid);
         }
         lastAvisoIdRef.current = newest.id;
       }
@@ -669,7 +671,7 @@ export default function App() {
       unsubscribeEvolutions();
       unsubscribeAnnouncements();
     };
-  }, [currentUser, triggerNotification]);
+  }, [currentUser?.uid]); // Only re-run if the user ID changes
 
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
