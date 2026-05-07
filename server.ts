@@ -13,14 +13,24 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
   // Initialize Firebase Admin
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-
-  admin.initializeApp({
-    projectId: firebaseConfig.projectId,
-  });
+  // Prioriza variáveis de ambiente para segurança (GitHub)
+  const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+  
+  if (projectId) {
+    admin.initializeApp({ projectId });
+  } else {
+    // Fallback apenas para desenvolvimento local se o arquivo existir
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(configPath)) {
+      const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      admin.initializeApp({ projectId: firebaseConfig.projectId });
+    } else {
+      console.warn("Firebase Admin: projectId não encontrado nas variáveis de ambiente nem no config.json");
+    }
+  }
 
   // API ROute to update user password (Gestor feature)
   app.post("/api/admin/update-password", async (req, res) => {

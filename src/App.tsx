@@ -505,6 +505,7 @@ export default function App() {
                 
                 await setDoc(doc(db, "usuarios", user.uid), {
                   ...userDocData,
+                  migratedFrom: oldDocId,
                   updatedAt: serverTimestamp()
                 });
 
@@ -515,7 +516,7 @@ export default function App() {
                   for (const classDoc of classesSnap.docs) {
                     const cData = classDoc.data();
                     let updated = false;
-                    let studentIds = cData.studentIds || [];
+                    let studentIds = [...(cData.studentIds || [])];
                     let teacherId = cData.teacherId;
 
                     if (studentIds.includes(oldDocId)) {
@@ -547,7 +548,7 @@ export default function App() {
                   const evoSnapT = await getDocs(query(collection(db, "evolucao"), where("teacherId", "==", oldDocId)));
                   for (const d of evoSnapT.docs) await updateDoc(doc(db, "evolucao", d.id), { teacherId: user.uid });
 
-                  // 5. Announcements (targetUserIds array)
+                  // 5. Announcements
                   const avisosSnap = await getDocs(collection(db, "avisos"));
                   for (const avisoDoc of avisosSnap.docs) {
                     const aData = avisoDoc.data();
@@ -557,12 +558,17 @@ export default function App() {
                     }
                   }
 
+                  // Mark old document as migrated
+                  await updateDoc(doc(db, "usuarios", oldDocId), { 
+                    migratedTo: user.uid, 
+                    inactive: true,
+                    updatedAt: serverTimestamp() 
+                  });
+                  
+                  console.log("Migration completed successfully for", user.email);
                 } catch (migrateErr) {
                   console.error("Migration references error:", migrateErr);
                 }
-
-                // Delete old doc
-                await deleteDoc(doc(db, "usuarios", oldDocId));
                 // MIGRATION END
               }
             }
@@ -570,7 +576,6 @@ export default function App() {
             console.error("Firestore getDoc Error:", docErr);
           }
           
-          // Initial gestor check (hardcoded email from previous context or generic admin)
           if (!userRole && (user.email === 'intervalocasa@gmail.com')) {
             userRole = "Gestor";
           }
@@ -866,36 +871,12 @@ export default function App() {
   };
 
   const resetDatabase = async () => {
-    if (!currentUser || role !== 'Gestor') return;
-    setIsResetModalOpen(true);
+    // Disabled to prevent data loss - only manual cleaning allowed via Firebase Console
+    showNotification("O reset automático foi desabilitado por segurança.", "Aviso", "warning");
   };
 
   const handleExecuteReset = async () => {
     setIsResetModalOpen(false);
-    setIsAppLoading(true);
-    try {
-      setLoading(true);
-      const deletePromises: any[] = [];
-      
-      classes.forEach(c => {
-        deletePromises.push(deleteDoc(doc(db, "classes", c.id)));
-      });
-      
-      users.forEach(u => {
-        if (u.id !== currentUser?.uid) {
-          deletePromises.push(deleteDoc(doc(db, "usuarios", u.id)));
-        }
-      });
-
-      await Promise.all(deletePromises);
-      showNotification("Banco de dados resetado com sucesso!", "Sucesso");
-    } catch (err) {
-      console.error("Reset Error:", err);
-      showNotification("Erro ao resetar banco de dados.", "Erro", "error");
-    } finally {
-      setIsAppLoading(false);
-      setLoading(false);
-    }
   };
 
   const [classData, setClassData] = useState({
@@ -1063,8 +1044,12 @@ export default function App() {
             console.error("Error migrating references in Google Login:", refErr);
           }
 
-          // Delete old doc
-          await deleteDoc(doc(db, "usuarios", oldDocId));
+          // Mark old doc as migrated
+          await updateDoc(doc(db, "usuarios", oldDocId), { 
+            migratedTo: user.uid, 
+            inactive: true,
+            updatedAt: serverTimestamp() 
+          });
         } else if (user.email === 'intervalocasa@gmail.com') {
           // New gestor account
           await setDoc(userRef, {
@@ -1607,7 +1592,6 @@ export default function App() {
             <GestorDashboard 
               currentUser={currentUser}
               users={users}
-              resetDatabase={resetDatabase}
               handleLogout={handleLogout}
               setView={setView}
               handleResetUserForm={handleResetUserForm}

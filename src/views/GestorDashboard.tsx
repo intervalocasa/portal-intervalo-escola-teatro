@@ -21,7 +21,6 @@ import { THEME } from "../theme";
 interface GestorDashboardProps {
   currentUser: any;
   users: any[];
-  resetDatabase: () => void;
   handleLogout: () => void;
   setView: (view: any) => void;
   handleResetUserForm: () => void;
@@ -31,7 +30,6 @@ interface GestorDashboardProps {
 export const GestorDashboard = ({
   currentUser,
   users,
-  resetDatabase,
   handleLogout,
   setView,
   handleResetUserForm,
@@ -186,15 +184,6 @@ export const GestorDashboard = ({
                 SISTEMA ONLINE
               </span>
               <div className="flex items-center gap-4">
-                <motion.button 
-                  onClick={resetDatabase}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all font-black uppercase tracking-widest text-[10px] border border-red-100"
-                >
-                  <Trash2 size={14} />
-                  Resetar Dados
-                </motion.button>
                 <motion.button 
                   onClick={handleLogout} 
                   whileHover={{ scale: 1.05 }}
