@@ -1175,6 +1175,7 @@ export default function App() {
         
         if (initialPassword && initialPassword.length >= 6) {
           try {
+            console.log(`[DEBUG] Fetching: /api/admin/create-user`);
             const resp = await fetch("/api/admin/create-user", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
