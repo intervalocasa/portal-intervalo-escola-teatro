@@ -90,7 +90,12 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
               <div className="flex gap-3 w-full md:w-auto">
                 <select
                   value={assessmentMonth}
-                  onChange={(e) => setAssessmentMonth(Number(e.target.value))}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setAssessmentMonth(val);
+                    setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
+                    setViewingEvaluation(null);
+                  }}
                   className="flex-1 md:w-40 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:border-pro-teal disabled:opacity-50"
                 >
                   {Array.from({ length: 12 }, (_, i) => (
@@ -101,7 +106,12 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                 </select>
                 <select
                   value={assessmentYear}
-                  onChange={(e) => setAssessmentYear(Number(e.target.value))}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setAssessmentYear(val);
+                    setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
+                    setViewingEvaluation(null);
+                  }}
                   className="w-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:border-pro-teal disabled:opacity-50"
                 >
                   {[2023, 2024, 2025, 2026, 2027, 2028].map(y => (

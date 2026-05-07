@@ -585,7 +585,7 @@ export default function App() {
 
   const [assessmentMonth, setAssessmentMonth] = useState(new Date().getMonth() + 1);
   const [assessmentYear, setAssessmentYear] = useState(new Date().getFullYear());
-
+  
   const [assessmentForm, setAssessmentForm] = useState<{
     classId: string;
     notes: { [key: string]: number };
@@ -1106,6 +1106,7 @@ export default function App() {
         });
         alert("Autoavaliação enviada com sucesso!");
       }
+      setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
       setView("dashboard");
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "autoavaliacoes");
@@ -1394,6 +1395,7 @@ export default function App() {
               setFormData={setFormData}
               setPhotoPreview={setPhotoPreview}
               setSelectedUserClasses={setSelectedUserClasses}
+              setAssessmentForm={setAssessmentForm}
               classes={classes}
             />
           )

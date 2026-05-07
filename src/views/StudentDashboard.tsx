@@ -22,6 +22,7 @@ interface StudentDashboardProps {
   setFormData: (data: any) => void;
   setPhotoPreview: (photo: string | null) => void;
   setSelectedUserClasses: (classes: string[]) => void;
+  setAssessmentForm: (form: any) => void;
   classes: any[];
 }
 
@@ -33,6 +34,7 @@ export const StudentDashboard = ({
   setFormData,
   setPhotoPreview,
   setSelectedUserClasses,
+  setAssessmentForm,
   classes
 }: StudentDashboardProps) => {
   const user = users.find(u => u.id === currentUser?.uid);
@@ -106,7 +108,10 @@ export const StudentDashboard = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Fazer Autoavaliação */}
               <motion.button
-                onClick={() => setView("self_assessment")}
+                onClick={() => {
+                  setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
+                  setView("self_assessment");
+                }}
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
                 className="w-full p-6 bg-pro-teal rounded-2xl flex items-center gap-5 text-white shadow-lg shadow-teal-900/10 transition-all text-left border-2 border-white/50"
