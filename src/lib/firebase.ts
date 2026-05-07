@@ -1,6 +1,9 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
+import { 
+  initializeFirestore, 
+  enableMultiTabIndexedDbPersistence,
+} from "firebase/firestore";
 
 // Configurações do Firebase. Usa Variáveis de Ambiente (VITE_...)
 // No AI Studio, preencha em Settings > Secrets. No Vercel, preencha em Environment Variables.
@@ -15,20 +18,22 @@ const firebaseConfig = {
 };
 
 // Inicializa sempre, mas as funções que dependem dele podem falhar se as chaves forem inválidas.
-// O ideal é que o usuário configure as variáveis de ambiente VITE_FIREBASE_* em Settings > Secrets.
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// initializeFirestore permite configurações experimentais como Long Polling, 
+// útil em ambientes de proxy que bloqueiam WebSockets ou streams.
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+});
 
 // Ativa a persistência offline para permitir uso sem rede e cache local
 if (typeof window !== "undefined") {
   enableMultiTabIndexedDbPersistence(db).catch((err) => {
     if (err.code === "failed-precondition") {
-      // Múltiplas abas abertas, a persistência só funciona em uma por vez se não for multi-tab (mas aqui estamos usando multi-tab)
       console.warn("Persistência do Firestore: Falha de pré-condição (múltiplas abas).");
     } else if (err.code === "unimplemented") {
-      // O navegador não suporta persistência
       console.warn("Persistência do Firestore: O navegador não suporta caching offline.");
     }
   });

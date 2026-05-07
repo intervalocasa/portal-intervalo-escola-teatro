@@ -17,13 +17,14 @@ async function startServer() {
 
   // Logger middleware
   app.use((req, res, next) => {
-    // Skip logging for common static assets to reduce noise if needed, 
-    // but here we'll keep it simple and just make it clear it's a request.
+    if (req.url.startsWith('/api')) {
+      console.log(`[API-START] ${req.method} ${req.url}`);
+    }
     const start = Date.now();
     res.on('finish', () => {
       const duration = Date.now() - start;
       if (req.url.startsWith('/api')) {
-        console.log(`[API ${res.statusCode}] ${req.method} ${req.url} - ${duration}ms`);
+        console.log(`[API-END ${res.statusCode}] ${req.method} ${req.url} - ${duration}ms`);
       }
     });
     next();
