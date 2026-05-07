@@ -96,7 +96,7 @@ export const GestorDashboard = ({
               </div>
               <div>
                 <div className="font-bold text-lg leading-none">Nova Turma</div>
-                <div className="text-xs text-pro-teal/50 mt-1">Cadastrar novo grupo</div>
+                <div className="text-xs text-pro-teal/50 mt-1">Cadastrar nova turma</div>
               </div>
             </motion.button>
 
