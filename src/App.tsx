@@ -495,6 +495,7 @@ export default function App() {
 
           try {
             const userRef = doc(db, "usuarios", user.uid);
+            // Explicitly use getDocFromServer to ensure we are getting fresh data and respect auth
             const userDoc = await getDoc(userRef);
             if (userDoc.exists()) {
               userDocData = userDoc.data();
@@ -591,10 +592,12 @@ export default function App() {
           if (userRole) {
             setCurrentUser(user);
             setRole(userRole as UserRole);
+            // If the user is logged in, redirect to dashboard unless they are already in a protected view
             if (view === "login" || view === "first_password_setup") {
               setView("dashboard");
             }
           } else {
+            // User is authenticated in Auth but has no profile in Firestore
             setCurrentUser(null);
             setRole(null);
             if (view !== "login" && view !== "register" && view !== "first_password_setup") {
@@ -602,6 +605,7 @@ export default function App() {
             }
           }
       } else {
+        // User is logged out
         setCurrentUser(null);
         setRole(null);
         if (view !== "login" && view !== "register" && view !== "first_password_setup") {
@@ -616,7 +620,7 @@ export default function App() {
     });
 
     return () => unsubscribeAuth();
-  }, [view]);
+  }, [view, setView]);
 
   const [viewingEvaluation, setViewingEvaluation] = useState<any>(null);
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -1499,6 +1503,7 @@ export default function App() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center md:items-stretch md:p-0 p-4 bg-[#f0f2f5] font-sans">
       <AnimatePresence mode="wait">
+        {/* Public Views */}
         {view === "login" ? (
           <LoginView 
             login={login} setLogin={setLogin}
@@ -1574,6 +1579,37 @@ export default function App() {
                 </button>
               </form>
             </div>
+          </motion.div>
+        ) : view === "register" && !currentUser ? (
+          <RegisterEditUserView 
+            view={view}
+            formData={formData}
+            setFormData={setFormData}
+            photoPreview={photoPreview}
+            fileInputRef={fileInputRef}
+            handlePhotoChange={handlePhotoChange}
+            classes={classes}
+            selectedUserClasses={selectedUserClasses}
+            setSelectedUserClasses={setSelectedUserClasses}
+            handleRegisterSubmit={handleRegisterSubmit}
+            setView={setView}
+            isGestor={false}
+            regType={regType}
+            setRegType={setRegType}
+            role={null}
+            handleInputChange={handleInputChange}
+            users={users}
+            currentUser={null}
+            selectedUserId={null}
+            setShowPasswordModal={(show) => setShowPasswordModal(show)}
+          />
+        ) : !currentUser ? (
+          // Protected Views Safety Net: if no user, but trying to access protected view
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-6">
+             <Logo className="h-20 w-auto animate-pulse" />
+             <div className="text-center">
+               <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-xs">Redirecionando para Login...</p>
+             </div>
           </motion.div>
         ) : view === "first_login" ? (
           <motion.div
