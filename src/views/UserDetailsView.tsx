@@ -20,6 +20,7 @@ interface UserDetailsViewProps {
   setSelectedUserClasses: any;
   handleDeleteUser: () => Promise<void>;
   setSelectedClassId: (id: string | null) => void;
+  onResetPassword: (email: string) => void;
 }
 
 export const UserDetailsView = ({
@@ -33,7 +34,8 @@ export const UserDetailsView = ({
   setPhotoPreview,
   setSelectedUserClasses,
   handleDeleteUser,
-  setSelectedClassId
+  setSelectedClassId,
+  onResetPassword
 }: UserDetailsViewProps) => {
   const user = users.find(u => u.id === selectedUserId);
 
@@ -99,6 +101,12 @@ export const UserDetailsView = ({
              className="p-3 bg-white text-pro-teal rounded-xl border border-slate-200 hover:border-pro-teal transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-sm"
            >
              Editar Usuário
+           </button>
+           <button 
+             onClick={() => onResetPassword(user.email)}
+             className="p-3 bg-white text-amber-600 rounded-xl border border-slate-200 hover:border-amber-600 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-sm"
+           >
+             Resetar Senha
            </button>
            <button 
              onClick={handleDeleteUser}

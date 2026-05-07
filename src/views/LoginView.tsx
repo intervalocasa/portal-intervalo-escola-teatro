@@ -18,6 +18,7 @@ interface LoginViewProps {
   loading: boolean;
   handleLogin: (e: FormEvent) => void;
   handleGoogleLogin: () => void;
+  handleForgotPassword: () => void;
   setView: (view: any) => void;
 }
 
@@ -27,6 +28,7 @@ export const LoginView = ({
   error, gestorError, loading,
   handleLogin,
   handleGoogleLogin,
+  handleForgotPassword,
   setView
 }: LoginViewProps) => {
   return (
@@ -92,7 +94,13 @@ export const LoginView = ({
               </div>
             </div>
             <div className="flex justify-between items-center px-1">
-              <p className="text-[9px] text-slate-400 font-bold">* Use sua senha cadastrada para acessar.</p>
+              <button 
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-[9px] text-pro-teal font-black uppercase tracking-widest hover:underline"
+              >
+                Esqueci minha senha
+              </button>
               <button 
                 type="button"
                 onClick={() => setView("first_password_setup")}

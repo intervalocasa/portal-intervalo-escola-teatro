@@ -46,6 +46,7 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   updatePassword,
+  sendPasswordResetEmail,
   onAuthStateChanged, 
   signOut,
   GoogleAuthProvider,
@@ -1123,6 +1124,38 @@ export default function App() {
     setIsAppLoading(false);
   };
 
+  const handleForgotPassword = async (email: string) => {
+    if (!email) {
+      showNotification("Por favor, insira seu e-mail no campo acima.", "Alerta");
+      return;
+    }
+    setIsAppLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+      showNotification("Link de recuperação enviado para o seu e-mail!", "Sucesso");
+    } catch (err: any) {
+      console.error(err);
+      let msg = "Erro ao enviar e-mail de recuperação.";
+      if (err.code === "auth/user-not-found") msg = "Usuário não encontrado.";
+      showNotification(msg, "Erro");
+    } finally {
+      setIsAppLoading(false);
+    }
+  };
+
+  const handleAdminResetPassword = async (userEmail: string) => {
+    if (!userEmail) return;
+    setIsAppLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, userEmail.trim().toLowerCase());
+      showNotification(`Link de redefinição enviado para ${userEmail}`, "Sucesso");
+    } catch (err: any) {
+      showNotification("Erro: " + err.message, "Erro");
+    } finally {
+      setIsAppLoading(false);
+    }
+  };
+
   const handleRegisterSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsAppLoading(true);
@@ -1436,6 +1469,7 @@ export default function App() {
             error={error} gestorError={gestorError} loading={loading}
             handleLogin={handleLogin}
             handleGoogleLogin={handleGoogleLogin}
+            handleForgotPassword={() => handleForgotPassword(login)}
             setView={setView}
           />
         ) : view === "first_password_setup" ? (
@@ -1626,6 +1660,7 @@ export default function App() {
             setPhotoPreview={setPhotoPreview}
             setSelectedUserClasses={setSelectedUserClasses}
             handleDeleteUser={handleDeleteUser}
+            onResetPassword={handleAdminResetPassword}
             setSelectedClassId={setSelectedClassId}
           />
         ) : view === "create_class" ? (
