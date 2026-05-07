@@ -40,7 +40,7 @@ export const ProfessorDiaryView = ({
   setDiaryFormData,
   setView
 }: ProfessorDiaryViewProps) => {
-  const teacherClasses = classes.filter(c => c.teacherId === currentUser?.id);
+  const teacherClasses = classes.filter(c => c.teacherId === currentUser?.uid);
   const targetClass = classes.find(c => c.id === selectedClassId);
 
   return (

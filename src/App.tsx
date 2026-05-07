@@ -494,8 +494,75 @@ export default function App() {
               const q = query(collection(db, "usuarios"), where("email", "==", user.email.toLowerCase()));
               const querySnapshot = await getDocs(q);
               if (!querySnapshot.empty) {
-                userDocData = querySnapshot.docs[0].data();
+                const oldDoc = querySnapshot.docs[0];
+                const oldDocId = oldDoc.id;
+                userDocData = oldDoc.data();
                 userRole = userDocData?.role;
+                
+                // MIGRATION START
+                console.log(`Migrating user ${user.email} from ${oldDocId} to ${user.uid}`);
+                
+                await setDoc(doc(db, "usuarios", user.uid), {
+                  ...userDocData,
+                  updatedAt: serverTimestamp()
+                });
+
+                // Migrate References
+                try {
+                  // 1. Classes
+                  const classesSnap = await getDocs(collection(db, "classes"));
+                  for (const classDoc of classesSnap.docs) {
+                    const cData = classDoc.data();
+                    let updated = false;
+                    let studentIds = cData.studentIds || [];
+                    let teacherId = cData.teacherId;
+
+                    if (studentIds.includes(oldDocId)) {
+                      studentIds = studentIds.map((id: string) => id === oldDocId ? user.uid : id);
+                      updated = true;
+                    }
+                    if (teacherId === oldDocId) {
+                      teacherId = user.uid;
+                      updated = true;
+                    }
+                    if (updated) {
+                      await updateDoc(doc(db, "classes", classDoc.id), { studentIds, teacherId });
+                    }
+                  }
+
+                  // 2. Evaluations
+                  const evalSnap = await getDocs(query(collection(db, "autoavaliacoes"), where("studentId", "==", oldDocId)));
+                  for (const d of evalSnap.docs) await updateDoc(doc(db, "autoavaliacoes", d.id), { studentId: user.uid });
+
+                  // 3. Diaries
+                  const diarySnapS = await getDocs(query(collection(db, "diarios_classe"), where("studentId", "==", oldDocId)));
+                  for (const d of diarySnapS.docs) await updateDoc(doc(db, "diarios_classe", d.id), { studentId: user.uid });
+                  const diarySnapT = await getDocs(query(collection(db, "diarios_classe"), where("teacherId", "==", oldDocId)));
+                  for (const d of diarySnapT.docs) await updateDoc(doc(db, "diarios_classe", d.id), { teacherId: user.uid });
+
+                  // 4. Evolution
+                  const evoSnapS = await getDocs(query(collection(db, "evolucao"), where("studentId", "==", oldDocId)));
+                  for (const d of evoSnapS.docs) await updateDoc(doc(db, "evolucao", d.id), { studentId: user.uid });
+                  const evoSnapT = await getDocs(query(collection(db, "evolucao"), where("teacherId", "==", oldDocId)));
+                  for (const d of evoSnapT.docs) await updateDoc(doc(db, "evolucao", d.id), { teacherId: user.uid });
+
+                  // 5. Announcements (targetUserIds array)
+                  const avisosSnap = await getDocs(collection(db, "avisos"));
+                  for (const avisoDoc of avisosSnap.docs) {
+                    const aData = avisoDoc.data();
+                    if (aData.targetUserIds && aData.targetUserIds.includes(oldDocId)) {
+                      const updatedIds = aData.targetUserIds.map((id: string) => id === oldDocId ? user.uid : id);
+                      await updateDoc(doc(db, "avisos", avisoDoc.id), { targetUserIds: updatedIds });
+                    }
+                  }
+
+                } catch (migrateErr) {
+                  console.error("Migration references error:", migrateErr);
+                }
+
+                // Delete old doc
+                await deleteDoc(doc(db, "usuarios", oldDocId));
+                // MIGRATION END
               }
             }
           } catch (docErr: any) {
