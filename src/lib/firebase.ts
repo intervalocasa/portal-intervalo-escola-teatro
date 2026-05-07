@@ -14,12 +14,13 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Inicializa apenas se houver configuração mínima para não quebrar o build/runtime
-const app = firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null;
+// Inicializa sempre, mas as funções que dependem dele podem falhar se as chaves forem inválidas.
+// O ideal é que o usuário configure as variáveis de ambiente VITE_FIREBASE_* em Settings > Secrets.
+const app = initializeApp(firebaseConfig);
 
-export const auth = app ? getAuth(app) : ({} as any);
-export const db = app ? getFirestore(app) : ({} as any);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
-if (!app) {
-  console.warn("Firebase: Configurações não encontradas. Verifique as variáveis de ambiente.");
+if (!firebaseConfig.apiKey) {
+  console.warn("Firebase: VITE_FIREBASE_API_KEY não definida. O banco de dados não funcionará até que você configure as Secrets.");
 }

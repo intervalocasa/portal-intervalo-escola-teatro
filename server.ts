@@ -19,22 +19,41 @@ async function startServer() {
   // Prioriza variáveis de ambiente para segurança (GitHub)
   const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
   
-  if (projectId) {
-    admin.initializeApp({ projectId });
-  } else {
-    // Fallback apenas para desenvolvimento local se o arquivo existir
-    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-    if (fs.existsSync(configPath)) {
-      const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-      admin.initializeApp({ projectId: firebaseConfig.projectId });
+  if (admin.apps.length === 0) {
+    if (projectId) {
+      admin.initializeApp({ projectId });
     } else {
-      console.warn("Firebase Admin: projectId não encontrado nas variáveis de ambiente nem no config.json");
+      // Fallback apenas para desenvolvimento local se o arquivo existir
+      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+      if (fs.existsSync(configPath)) {
+        try {
+          const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+          admin.initializeApp({ projectId: firebaseConfig.projectId });
+        } catch (err) {
+          console.error("Error reading firebase-applet-config.json:", err);
+        }
+      } else {
+        console.warn("Firebase Admin: projectId não encontrado nas variáveis de ambiente nem no config.json.");
+      }
     }
   }
+
+  // Health check route
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      adminInitialized: admin.apps.length > 0,
+      projectId: projectId || "from-config"
+    });
+  });
 
   // API ROute to update user password (Gestor feature)
   app.post("/api/admin/update-password", async (req, res) => {
     const { uid, newPassword, adminUid } = req.body;
+
+    if (admin.apps.length === 0) {
+      return res.status(500).json({ error: "Firebase Admin not initialized. Check your environment variables." });
+    }
 
     try {
       // Security check: verify the requester is actually a Gestor
@@ -58,6 +77,10 @@ async function startServer() {
   app.post("/api/admin/create-user", async (req, res) => {
     const { email, password, adminUid } = req.body;
 
+    if (!admin.apps.length) {
+      return res.status(500).json({ error: "Firebase Admin not initialized. Check your environment variables." });
+    }
+
     try {
       // Security check: verify the requester is actually a Gestor
       const adminUser = await admin.firestore().collection("usuarios").doc(adminUid).get();
@@ -75,6 +98,11 @@ async function startServer() {
       console.error("Error creating user in Auth:", error);
       res.status(500).json({ error: error.message });
     }
+  });
+
+  // Fallback para rotas de API não encontradas (evita retornar HTML em chamadas de API)
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ error: `Rota de API não encontrada: ${req.method} ${req.url}` });
   });
 
   // Vite middleware for development

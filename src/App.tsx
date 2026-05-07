@@ -424,6 +424,13 @@ export default function App() {
         })
       });
 
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Non-JSON response received:", text);
+        throw new Error(`Erro no servidor (${response.status}): O servidor não retornou JSON. Verifique as configurações.`);
+      }
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Failed to update password");
 
@@ -1173,6 +1180,15 @@ export default function App() {
                 adminUid: currentUser?.uid
               })
             });
+
+            // Check if response is JSON
+            const contentType = resp.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+              const text = await resp.text();
+              console.error("Non-JSON response received:", text);
+              throw new Error(`Erro no servidor (${resp.status}): O servidor não retornou JSON. Verifique as configurações.`);
+            }
+
             const resData = await resp.json();
             if (!resp.ok) throw new Error(resData.error || "Erro ao criar usuário no Auth");
             newUserUid = resData.uid;
