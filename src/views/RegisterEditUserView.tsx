@@ -202,21 +202,6 @@ export const RegisterEditUserView = ({
             />
           </div>
 
-          {view === "register" && isGestor && (
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha de Acesso (Opcional)</label>
-              <input
-                type="password"
-                name="initialPassword"
-                value={formData.initialPassword || ""}
-                onChange={handleInputChange}
-                placeholder="Mínimo 6 caracteres"
-                className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
-              />
-              <p className="text-[9px] text-slate-400 font-bold mt-1">* Se deixado em branco, o usuário usará o fluxo de primeiro acesso.</p>
-            </div>
-          )}
-
           <div className="space-y-1 col-span-full">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Endereço Completo</label>
             <input
@@ -298,7 +283,7 @@ export const RegisterEditUserView = ({
             </>
           )}
 
-          {view !== "register" && setShowPasswordModal && (
+          {view === "edit_self" && setShowPasswordModal && (
             <div className="col-span-full pt-4">
                <button 
                 type="button"
