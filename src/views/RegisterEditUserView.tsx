@@ -30,6 +30,9 @@ interface RegisterEditUserViewProps {
   currentUser: any;
   selectedUserId: string | null;
   setShowPasswordModal?: (show: boolean) => void;
+  selectedEnrollmentDates: Record<string, string>;
+  setSelectedEnrollmentDates: (dates: Record<string, string>) => void;
+  setEnrollmentModalClassId: (id: string | null) => void;
 }
 
 export const RegisterEditUserView = ({
@@ -52,7 +55,10 @@ export const RegisterEditUserView = ({
   users,
   currentUser,
   selectedUserId,
-  setShowPasswordModal
+  setShowPasswordModal,
+  selectedEnrollmentDates,
+  setSelectedEnrollmentDates,
+  setEnrollmentModalClassId
 }: RegisterEditUserViewProps) => {
   return (
     <motion.div
@@ -319,8 +325,14 @@ export const RegisterEditUserView = ({
                         onClick={() => {
                           if (isSelected) {
                             setSelectedUserClasses(selectedUserClasses.filter(id => id !== c.id));
+                            const updatedDates = { ...selectedEnrollmentDates };
+                            delete updatedDates[c.id];
+                            setSelectedEnrollmentDates(updatedDates);
                           } else {
                             setSelectedUserClasses([...selectedUserClasses, c.id]);
+                            if (regType === "Aluno") {
+                              setEnrollmentModalClassId(c.id);
+                            }
                           }
                         }}
                         className={`p-4 rounded-xl border transition-all text-left flex justify-between items-center ${
@@ -332,6 +344,11 @@ export const RegisterEditUserView = ({
                          <div className="overflow-hidden">
                             <p className="text-[10px] font-black uppercase tracking-tight truncate">{c.code}</p>
                             <p className="text-[8px] font-bold opacity-60 truncate">{c.type}</p>
+                            {isSelected && regType === "Aluno" && (
+                              <p className="text-[8px] font-black text-pro-teal mt-0.5 whitespace-nowrap">
+                                Entrada: {selectedEnrollmentDates[c.id] ? new Date(selectedEnrollmentDates[c.id] + 'T00:00:00').toLocaleDateString('pt-BR') : "Não informada"}
+                              </p>
+                            )}
                          </div>
                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${isSelected ? 'bg-pro-teal border-pro-teal text-white' : 'border-slate-200'}`}>
                             {isSelected && <CheckCircle2 size={10} />}

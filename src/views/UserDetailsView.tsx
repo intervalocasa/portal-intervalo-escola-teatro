@@ -21,6 +21,9 @@ interface UserDetailsViewProps {
   handleDeleteUser: () => Promise<void>;
   setSelectedClassId: (id: string | null) => void;
   onResetPassword: (email: string) => void;
+  onUpdateEnrollmentDate: (classId: string, studentId: string, newDate: string) => Promise<void>;
+  isGestor: boolean;
+  setSelectedEnrollmentDates: (dates: Record<string, string>) => void;
 }
 
 export const UserDetailsView = ({
@@ -35,7 +38,10 @@ export const UserDetailsView = ({
   setSelectedUserClasses,
   handleDeleteUser,
   setSelectedClassId,
-  onResetPassword
+  onResetPassword,
+  onUpdateEnrollmentDate,
+  isGestor,
+  setSelectedEnrollmentDates
 }: UserDetailsViewProps) => {
   const user = users.find(u => u.id === selectedUserId);
 
@@ -97,6 +103,17 @@ export const UserDetailsView = ({
                  ? classes.filter(c => c.teacherId === user.id)
                  : classes.filter(c => c.studentIds?.includes(user.id));
                setSelectedUserClasses(linkedClasses.map(c => c.id));
+               
+               const dates: Record<string, string> = {};
+               if (user.role === "Aluno") {
+                 linkedClasses.forEach(cl => {
+                   if (cl.enrollmentDates?.[user.id]) {
+                     dates[cl.id] = cl.enrollmentDates[user.id];
+                   }
+                 });
+               }
+               setSelectedEnrollmentDates(dates);
+               
                setView("edit_user");
              }}
              className="p-3 bg-white text-pro-teal rounded-xl border border-slate-200 hover:border-pro-teal transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-sm"
@@ -150,30 +167,69 @@ export const UserDetailsView = ({
               <h4 className="text-[10px] font-black text-[#016a86] uppercase tracking-[0.2em] border-l-4 border-[#016a86] pl-3 mb-4">
                 {user.role === "Professor" ? "Turmas Ministradas" : "Turmas Matriculadas"}
               </h4>
-              <div className="flex flex-wrap gap-2">
                 {(() => {
                   const linkedClasses = user.role === "Professor" 
                     ? classes.filter(c => c.teacherId === user.id)
                     : classes.filter(c => c.studentIds?.includes(user.id));
 
                   return linkedClasses.length > 0 ? (
-                    linkedClasses.map(c => (
-                      <button 
-                        key={c.id} 
-                        onClick={() => {
-                          setSelectedClassId(c.id);
-                          setView("class_details");
-                        }}
-                        className="px-4 py-2 bg-white hover:bg-slate-50 transition-all rounded-lg text-slate-600 text-[10px] font-black uppercase tracking-widest border border-slate-200 hover:border-pro-teal"
-                      >
-                        {c.code}
-                      </button>
-                    ))
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
+                      {linkedClasses.map(c => (
+                        <div 
+                          key={c.id}
+                          className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col gap-3 shadow-sm hover:border-pro-teal transition-all"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-[10px] font-black text-pro-teal uppercase tracking-widest">{c.code}</p>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase">{c.type}</p>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                setSelectedClassId(c.id);
+                                setView("class_details");
+                              }}
+                              className="p-2 text-slate-400 hover:text-pro-teal hover:bg-slate-50 rounded-lg transition-all"
+                            >
+                              <Eye size={16} />
+                            </button>
+                          </div>
+
+                          {user.role === "Aluno" && (
+                            <div className="pt-2 border-t border-slate-50 flex flex-col gap-1">
+                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Data de Matrícula</p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black text-slate-700">
+                                  {c.enrollmentDates?.[user.id] 
+                                    ? new Date(c.enrollmentDates[user.id] + 'T00:00:00').toLocaleDateString('pt-BR')
+                                    : "Não informada"}
+                                </span>
+                                {isGestor && (
+                                  <button
+                                    onClick={() => {
+                                      const newDate = prompt("Nova data de matrícula (AAAA-MM-DD):", c.enrollmentDates?.[user.id] || "");
+                                      if (newDate && /^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+                                        onUpdateEnrollmentDate(c.id, user.id, newDate);
+                                      } else if (newDate) {
+                                        alert("Formato inválido. Use AAAA-MM-DD.");
+                                      }
+                                    }}
+                                    className="p-1.5 text-pro-teal hover:bg-pro-teal/5 rounded-md transition-all"
+                                    title="Editar Data"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <p className="text-xs text-slate-400 font-bold italic">Nenhuma turma vinculada</p>
                   );
                 })()}
-              </div>
             </div>
           )}
 

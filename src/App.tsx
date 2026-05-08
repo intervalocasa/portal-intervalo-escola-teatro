@@ -742,6 +742,30 @@ export default function App() {
   const [error, setError] = useState("");
 
   const [selectedUserClasses, setSelectedUserClasses] = useState<string[]>([]);
+  const [selectedEnrollmentDates, setSelectedEnrollmentDates] = useState<Record<string, string>>({});
+  const [enrollmentModalClassId, setEnrollmentModalClassId] = useState<string | null>(null);
+  const [enrollmentModalDate, setEnrollmentModalDate] = useState("");
+
+  const handleUpdateEnrollmentDate = async (classId: string, studentId: string, newDate: string) => {
+    setIsAppLoading(true);
+    try {
+      const cls = classes.find(c => c.id === classId);
+      if (!cls) return;
+      
+      const updatedEnrollmentDates = { ...(cls.enrollmentDates || {}) };
+      updatedEnrollmentDates[studentId] = newDate;
+      
+      await updateDoc(doc(db, "classes", classId), {
+        enrollmentDates: updatedEnrollmentDates,
+        updatedAt: serverTimestamp()
+      });
+      showNotification("Data de matrícula atualizada!", "Sucesso");
+    } catch (err: any) {
+      showNotification("Erro ao atualizar data: " + err.message, "Erro");
+    } finally {
+      setIsAppLoading(false);
+    }
+  };
 
   const [assessmentMonth, setAssessmentMonth] = useState(new Date().getMonth() + 1);
   const [assessmentYear, setAssessmentYear] = useState(new Date().getFullYear());
@@ -1196,8 +1220,8 @@ export default function App() {
 
       // Synchronize Classes
       if (role === "Gestor" && studentId) {
+        const userType = view === "register" ? regType : users.find(u => u.id === studentId)?.role;
         for (const c of classes) {
-          const userType = view === "register" ? regType : users.find(u => u.id === studentId)?.role;
           if (userType === "Professor") {
             if (selectedUserClasses.includes(c.id) && c.teacherId !== studentId) {
               await updateDoc(doc(db, "classes", c.id), { teacherId: studentId });
@@ -1207,13 +1231,28 @@ export default function App() {
           } else {
             const isCurrentlyLinked = c.studentIds?.includes(studentId);
             const shouldBeLinked = selectedUserClasses.includes(c.id);
-            if (shouldBeLinked && !isCurrentlyLinked) {
+            const enrollmentDate = selectedEnrollmentDates[c.id];
+
+            if (shouldBeLinked) {
+              const updatedStudentIds = isCurrentlyLinked ? c.studentIds : [...(c.studentIds || []), studentId];
+              const updatedEnrollmentDates = { ...(c.enrollmentDates || {}) };
+              if (enrollmentDate) {
+                updatedEnrollmentDates[studentId] = enrollmentDate;
+              }
+              
               await updateDoc(doc(db, "classes", c.id), {
-                studentIds: [...(c.studentIds || []), studentId]
+                studentIds: updatedStudentIds,
+                enrollmentDates: updatedEnrollmentDates,
+                updatedAt: serverTimestamp()
               });
-            } else if (!shouldBeLinked && isCurrentlyLinked) {
+            } else if (isCurrentlyLinked) {
+              const updatedEnrollmentDates = { ...(c.enrollmentDates || {}) };
+              delete updatedEnrollmentDates[studentId];
+
               await updateDoc(doc(db, "classes", c.id), {
-                studentIds: c.studentIds.filter((id: string) => id !== studentId)
+                studentIds: c.studentIds.filter((id: string) => id !== studentId),
+                enrollmentDates: updatedEnrollmentDates,
+                updatedAt: serverTimestamp()
               });
             }
           }
@@ -1569,6 +1608,9 @@ export default function App() {
             currentUser={null}
             selectedUserId={null}
             setShowPasswordModal={(show) => setShowPasswordModal(show)}
+            selectedEnrollmentDates={selectedEnrollmentDates}
+            setSelectedEnrollmentDates={setSelectedEnrollmentDates}
+            setEnrollmentModalClassId={setEnrollmentModalClassId}
           />
         ) : !currentUser ? (
           // Protected Views Safety Net: if no user, but trying to access protected view
@@ -1700,7 +1742,10 @@ export default function App() {
             setSelectedUserClasses={setSelectedUserClasses}
             handleDeleteUser={handleDeleteUser}
             onResetPassword={handleAdminResetPassword}
+            onUpdateEnrollmentDate={handleUpdateEnrollmentDate}
+            isGestor={role === "Gestor"}
             setSelectedClassId={setSelectedClassId}
+            setSelectedEnrollmentDates={setSelectedEnrollmentDates}
           />
         ) : view === "create_class" ? (
           <CreateClassView 
@@ -1769,6 +1814,9 @@ export default function App() {
                 setShowPasswordModal(show);
               }
             }}
+            selectedEnrollmentDates={selectedEnrollmentDates}
+            setSelectedEnrollmentDates={setSelectedEnrollmentDates}
+            setEnrollmentModalClassId={setEnrollmentModalClassId}
           />
                           ) : view === "self_assessment" ? (
           <SelfAssessmentView 
@@ -1946,6 +1994,77 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Enrollment Date Modal (during registration) */}
+      <AnimatePresence>
+        {enrollmentModalClassId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-[#004e63]/80 backdrop-blur-md z-[110] flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl"
+            >
+              <div className="bg-pro-teal p-8 text-center">
+                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-white mx-auto mb-3 backdrop-blur-md">
+                   <Calendar size={24} />
+                </div>
+                <h3 className="text-white text-lg font-black uppercase tracking-tight">Data de Matrícula</h3>
+                <p className="text-teal-50/70 text-[10px] mt-1 uppercase tracking-widest font-bold">Turma: {classes.find(c => c.id === enrollmentModalClassId)?.code}</p>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Informe a data de início</label>
+                  <input
+                    type="date"
+                    required
+                    value={enrollmentModalDate}
+                    onChange={(e) => setEnrollmentModalDate(e.target.value)}
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-pro-teal outline-none font-bold text-sm transition-all"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      // Remove class if cancelled and no date was set
+                      if (!selectedEnrollmentDates[enrollmentModalClassId]) {
+                        setSelectedUserClasses(prev => prev.filter(id => id !== enrollmentModalClassId));
+                      }
+                      setEnrollmentModalClassId(null);
+                      setEnrollmentModalDate("");
+                    }}
+                    className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                  >
+                    IGNORAR
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (enrollmentModalDate) {
+                        setSelectedEnrollmentDates(prev => ({
+                          ...prev,
+                          [enrollmentModalClassId]: enrollmentModalDate
+                        }));
+                      }
+                      setEnrollmentModalClassId(null);
+                      setEnrollmentModalDate("");
+                    }}
+                    className="flex-1 py-4 bg-pro-teal text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-teal-900/20"
+                  >
+                    CONFIRMAR
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}

@@ -41,6 +41,7 @@
         "inactivationReason": { "type": "string" },
         "teacherId": { "type": "string" },
         "studentIds": { "type": "array", "items": { "type": "string" } },
+        "enrollmentDates": { "type": "object", "additionalProperties": { "type": "string" } },
         "createdAt": { "type": "object" },
         "updatedAt": { "type": "object" }
       },
