@@ -61,6 +61,30 @@
         "year": { "type": "number" },
         "notes": { "type": "object" },
         "openAnswers": { "type": "object" },
+        "pedagogicalAnalysis": {
+          "type": "object",
+          "properties": {
+            "status_turma": {
+              "type": "object",
+              "properties": {
+                "clima_emocional": { "type": "string" },
+                "nivel_engajamento": { "type": "string", "enum": ["alto", "medio", "baixo"] }
+              }
+            },
+            "pilares_individuais": {
+              "type": "object",
+              "properties": {
+                "acolhimento": { "type": "string", "enum": ["baixo", "medio", "alto"] },
+                "presenca": { "type": "string", "enum": ["baixo", "medio", "alto"] },
+                "desafio": { "type": "string", "enum": ["baixo", "medio", "alto"] },
+                "clareza": { "type": "string", "enum": ["baixo", "medio", "alto"] },
+                "coletividade": { "type": "string", "enum": ["baixo", "medio", "alto"] }
+              }
+            },
+            "analise_qualitativa": { "type": "string" },
+            "alerta_coordenacao": { "type": "boolean" }
+          }
+        },
         "createdAt": { "type": "object" },
         "updatedAt": { "type": "object" }
       },
@@ -119,16 +143,131 @@
         "targetUserIds": { "type": "array", "items": { "type": "string" } },
         "scheduledFor": { "type": "object" },
         "createdBy": { "type": "string" },
+        "likes": { "type": "array", "items": { "type": "string" } },
+        "forces": { "type": "array", "items": { "type": "string" } },
         "createdAt": { "type": "object" },
         "updatedAt": { "type": "object" }
       },
       "required": ["title", "content", "target"]
+    },
+    "Post": {
+      "title": "Post do Mural",
+      "description": "Postagem no mural social da turma",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "classId": { "type": "string" },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "likes": { "type": "array", "items": { "type": "string" } },
+        "forces": { "type": "array", "items": { "type": "string" } },
+        "timestamp": { "type": "object" }
+      },
+      "required": ["authorId", "classId", "content", "timestamp"]
+    },
+    "Badge": {
+      "title": "Conquista",
+      "description": "Definição de uma conquista/badge no sistema",
+      "type": "object",
+      "properties": {
+        "badgeId": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["badgeId", "name", "icon", "description"]
+    },
+    "UserBadge": {
+      "title": "Conquista do Usuário",
+      "description": "Uma conquista atribuída a um usuário específico",
+      "type": "object",
+      "properties": {
+        "badgeId": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "description": { "type": "string" },
+        "dateReceived": { "type": "object" },
+        "message": { "type": "string" }
+      },
+      "required": ["badgeId", "dateReceived", "message"]
+    },
+    "SchoolEvent": {
+      "title": "Evento da Escola",
+      "description": "Agenda de ensaios, peças e workshops",
+      "type": "object",
+      "properties": {
+        "titulo": { "type": "string" },
+        "tipo": { "type": "string", "enum": ["Ensaio", "Peça", "Workshop", "Aula Aberta"] },
+        "data": { "type": "object" },
+        "inicio": { "type": "string" },
+        "fim": { "type": "string" },
+        "local": { "type": "string" },
+        "descricao": { "type": "string" },
+        "obrigatorio": { "type": "boolean" },
+        "criadoPor": { "type": "string" },
+        "lastUpdate": { "type": "object" }
+      },
+      "required": ["titulo", "tipo", "data", "inicio", "fim", "local"]
+    },
+    "ClassFeedback": {
+      "title": "Feedback de Aula",
+      "description": "Percepção do aluno sobre uma aula específica",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "date": { "type": "object" },
+        "rating": { "type": "number", "minimum": 1, "maximum": 5 },
+        "comment": { "type": "string" },
+        "timestamp": { "type": "object" }
+      },
+      "required": ["studentId", "studentName", "classId", "rating"]
+    },
+    "PedagogicalMeetingRequest": {
+      "title": "Solicitação de Agendamento Pedagógico",
+      "description": "Solicitação de reunião entre aluno e professor para discutir notas",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pendente", "Agendado", "Concluído"] },
+        "requestDate": { "type": "object" },
+        "timestamp": { "type": "object" }
+      },
+      "required": ["studentId", "studentName", "classId", "status"]
     }
   },
   "firestore": {
+    "pedagogical-requests/{requestId}": {
+      "schema": "PedagogicalMeetingRequest",
+      "description": "Solicitações de agendamento pedagógico"
+    },
+    "feedbacks-aulas/{feedbackId}": {
+      "schema": "ClassFeedback",
+      "description": "Coleção de feedbacks de aulas enviados pelos alunos"
+    },
+    "eventos-escola/{eventId}": {
+      "schema": "SchoolEvent",
+      "description": "Coleção de eventos e ensaios da escola"
+    },
     "usuarios/{userId}": {
       "schema": "User",
       "description": "Coleção de usuários"
+    },
+    "usuarios/{userId}/userBadges/{badgeId}": {
+      "schema": "UserBadge",
+      "description": "Subcoleção de conquistas conquistadas pelo usuário"
+    },
+    "badges/{badgeId}": {
+      "schema": "Badge",
+      "description": "Coleção de definições de conquistas"
     },
     "classes/{classId}": {
       "schema": "Class",
@@ -149,6 +288,10 @@
     "avisos/{avisoId}": {
       "schema": "Announcement",
       "description": "Coleção de avisos"
+    },
+    "posts/{postId}": {
+      "schema": "Post",
+      "description": "Coleção de postagens do mural"
     }
   }
 }

@@ -3,29 +3,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useState } from "react";
 import { motion } from "motion/react";
 import { 
   Pencil, 
   Drama, 
   LogOut, 
   UserCircle,
-  Calendar
+  Calendar,
+  Sparkles,
+  ChevronRight
 } from "lucide-react";
 import { THEME } from "../theme";
 import { Logo, Avatar } from "../components/CommonComponents";
 import { AnnouncementPanel } from "../components/AnnouncementPanel";
+import { MyConquests } from "../components/MyConquests";
+import { FeedbackForm } from "../components/FeedbackForm";
+import { UserBadge } from "../types";
 
 interface StudentDashboardProps {
   currentUser: any;
   users: any[];
   handleLogout: () => void;
-  setView: (view: any) => void;
+  setView: (view: "login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup" | "school_agenda") => void;
   setFormData: (data: any) => void;
   setPhotoPreview: (photo: string | null) => void;
   setSelectedUserClasses: (classes: string[]) => void;
   setAssessmentForm: (form: any) => void;
+  setSelectedClassId: (id: string | null) => void;
   classes: any[];
   filteredAnnouncements: any[];
+  userBadges: UserBadge[];
 }
 
 export const StudentDashboard = ({
@@ -37,10 +45,16 @@ export const StudentDashboard = ({
   setPhotoPreview,
   setSelectedUserClasses,
   setAssessmentForm,
+  setSelectedClassId,
   classes,
-  filteredAnnouncements
+  filteredAnnouncements,
+  userBadges
 }: StudentDashboardProps) => {
   const user = users.find(u => u.id === currentUser?.uid);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+
+  // Filter classes only for this student
+  const studentClasses = classes.filter(c => c.studentIds?.includes(user?.id));
   
   return (
     <motion.div
@@ -71,9 +85,86 @@ export const StudentDashboard = ({
             <p className="text-slate-400 font-bold mt-2">O que deseja realizar hoje?</p>
           </div>
 
-          <AnnouncementPanel announcements={filteredAnnouncements} />
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="bg-amber-100 p-1.5 rounded-lg text-amber-600">
+                <Calendar size={16} fill="currentColor" />
+              </div>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Mural Geral</h3>
+            </div>
+            <AnnouncementPanel announcements={filteredAnnouncements} currentUser={user} />
+          </div>
+
+          <div className="space-y-6">
+             <MyConquests userBadges={userBadges} />
+          </div>
+
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="bg-pro-teal/10 p-1.5 rounded-lg text-pro-teal">
+                <Drama size={16} fill="currentColor" />
+              </div>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Minhas Turmas</h3>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {classes.filter(c => c.studentIds?.includes(user?.id)).length > 0 ? (
+                classes.filter(c => c.studentIds?.includes(user?.id)).map(c => (
+                  <motion.button
+                    key={c.id}
+                    onClick={() => {
+                      setSelectedClassId(c.id);
+                      setView("class_details");
+                    }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="p-6 bg-white rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-pro-teal transition-all text-left"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-pro-teal/5 rounded-2xl flex items-center justify-center text-pro-teal group-hover:bg-pro-teal group-hover:text-white transition-all">
+                        <Drama size={24} />
+                      </div>
+                      <div>
+                        <h4 className="font-black text-slate-800 uppercase tracking-tight">{c.code}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{c.type} • {c.year}</p>
+                      </div>
+                    </div>
+                    <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-pro-teal group-hover:text-white transition-all">
+                      <Pencil size={16} />
+                    </div>
+                  </motion.button>
+                ))
+              ) : (
+                <div className="col-span-full py-12 text-center bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200">
+                  <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Nenhuma turma encontrada</p>
+                </div>
+              )}
+            </div>
+          </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+          <div className="space-y-4">
+            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] px-2">Acesso Rápido</h3>
+            
+            {/* Feedback Button - Featured */}
+            <motion.button
+              onClick={() => setIsFeedbackOpen(true)}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className="w-full p-8 bg-gradient-to-br from-[#016a86] to-slate-800 rounded-[32px] flex items-center justify-between text-white shadow-xl shadow-teal-900/10 transition-all border-b-8 border-black/20 text-left relative overflow-hidden group mb-4"
+            >
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-white/10 transition-all" />
+              <div className="flex items-center gap-6 relative z-10">
+                <div className="bg-white/10 p-4 rounded-3xl shadow-lg ring-1 ring-white/20 backdrop-blur-sm">
+                  <Sparkles size={32} className="text-[#ffbc00] animate-pulse" />
+                </div>
+                <div>
+                  <div className="font-black text-2xl uppercase tracking-tighter leading-none">Como foi sua aula?</div>
+                  <div className="text-[10px] font-black uppercase tracking-widest opacity-60 mt-2">Dê sua percepção em 10 segundos</div>
+                </div>
+              </div>
+              <ChevronRight size={32} className="opacity-30 group-hover:translate-x-2 transition-transform hidden md:block" />
+            </motion.button>
+
             {/* Atualizar Cadastro */}
             <motion.button
               onClick={() => {
@@ -112,6 +203,22 @@ export const StudentDashboard = ({
             </motion.button>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Eventos da Escola */}
+              <motion.button
+                onClick={() => setView("school_agenda")}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                className="w-full p-6 bg-slate-800 rounded-2xl flex items-center gap-5 text-white shadow-lg shadow-slate-900/10 transition-all text-left border-2 border-white/50"
+              >
+                <div className="bg-white/20 p-3 rounded-xl shadow-lg">
+                  <Calendar size={24} />
+                </div>
+                <div>
+                  <div className="font-bold text-lg leading-none uppercase tracking-tight">Eventos da Escola</div>
+                  <div className="text-xs opacity-70 mt-1 font-bold">Agenda de ensaios e peças</div>
+                </div>
+              </motion.button>
+
               {/* Fazer Autoavaliação */}
               <motion.button
                 onClick={() => {
@@ -184,6 +291,16 @@ export const StudentDashboard = ({
           </div>
         </div>
       </div>
+
+      <FeedbackForm 
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+        currentUser={user}
+        studentClasses={studentClasses}
+        onSuccess={() => {
+          // Success handled in form
+        }}
+      />
     </motion.div>
   );
 };

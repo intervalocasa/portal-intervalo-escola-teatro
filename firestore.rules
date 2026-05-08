@@ -27,6 +27,15 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isValidPost(data) {
+      return data.authorId is string && data.authorId == request.auth.uid
+          && data.classId is string && data.classId.size() > 0
+          && data.content is string && data.content.size() <= 2000
+          && data.likes is list
+          && (data.forces == null || data.forces is list)
+          && (data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 2048));
+    }
+
     function isValidUser(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 200
           && data.email is string && data.email.size() <= 100
@@ -39,6 +48,16 @@ service cloud.firestore {
       allow create: if true; // Allow users to create their own profile on first login
       allow update: if isSignedIn(); // Allow any signed in user to update their own data during migration
       allow delete: if isGestor();
+
+      match /userBadges/{badgeId} {
+        allow read: if true;
+        allow write: if isGestor() || isProfessor();
+      }
+    }
+
+    match /badges/{badgeId} {
+      allow read: if true;
+      allow write: if isGestor();
     }
 
     match /classes/{classId} {
@@ -61,6 +80,43 @@ service cloud.firestore {
     match /evolucao/{evId} {
       allow read: if true;
       allow write: if isSignedIn();
+    }
+
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidPost(request.resource.data);
+      allow update: if isSignedIn() && (
+        isValidPost(request.resource.data) && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'forces'])
+          || resource.data.authorId == request.auth.uid 
+          || isGestor()
+        )
+      );
+      allow delete: if isGestor() || (isSignedIn() && resource.data.authorId == request.auth.uid);
+    }
+
+    match /avisos/{avisoId} {
+      allow read: if isSignedIn();
+      allow create: if isGestor();
+      allow update: if isGestor() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'forces']));
+      allow delete: if isGestor();
+    }
+
+    match /eventos-escola/{eventId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isGestor();
+    }
+
+    match /feedbacks-aulas/{feedbackId} {
+      allow read: if isGestor() || (isSignedIn() && resource.data.studentId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow delete: if isGestor();
+    }
+
+    match /pedagogical-requests/{requestId} {
+      allow read: if isGestor() || (isSignedIn() && resource.data.studentId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow update, delete: if isGestor();
     }
 
     match /system/{docId} {

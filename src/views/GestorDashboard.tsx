@@ -35,6 +35,8 @@ export const GestorDashboard = ({
   handleResetUserForm,
   filteredAnnouncements
 }: GestorDashboardProps) => {
+  const user = users.find(u => u.id === currentUser?.uid);
+  
   return (
     <motion.div
       key="dashboard-gestor"
@@ -64,7 +66,7 @@ export const GestorDashboard = ({
             <p className="text-slate-400 font-bold mt-2">Selecione uma área para gerenciar a escola de forma estratégica.</p>
           </div>
 
-          <AnnouncementPanel announcements={filteredAnnouncements} />
+          <AnnouncementPanel announcements={filteredAnnouncements} currentUser={user || null} />
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Gerenciar Turmas */}
@@ -158,6 +160,21 @@ export const GestorDashboard = ({
               <div>
                 <div className="font-bold text-lg leading-none">Diário de Classe</div>
                 <div className="text-xs opacity-70 mt-1">Acompanhamento Pedagógico</div>
+              </div>
+            </motion.button>
+
+            <motion.button
+              onClick={() => setView("school_agenda")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className={`w-full p-6 bg-slate-800 rounded-2xl flex items-center gap-5 text-white shadow-lg shadow-slate-900/10 transition-all text-left group`}
+            >
+              <div className="bg-white/20 p-3 rounded-xl group-hover:scale-110 transition-transform">
+                <Calendar size={24} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-none">Agenda da Escola</div>
+                <div className="text-xs opacity-70 mt-1">Ensaios, Peças e Workshops</div>
               </div>
             </motion.button>
 

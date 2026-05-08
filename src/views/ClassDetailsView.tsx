@@ -5,9 +5,10 @@
 
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, UserCircle, Edit, Users, Calendar, Info, UserPlus, X, Search, Plus } from "lucide-react";
+import { ArrowLeft, UserCircle, Edit, Users, Calendar, Info, UserPlus, X, Search, Plus, LayoutGrid, MessageSquare } from "lucide-react";
 import { Class, User, UserRole } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
+import { MuralTurma } from "../components/MuralTurma";
 import { db } from "../lib/firebase";
 import { doc, updateDoc, arrayUnion } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
@@ -17,6 +18,7 @@ interface ClassDetailsViewProps {
   classes: Class[];
   users: User[];
   role: UserRole | null;
+  currentUser: User | null;
   setSelectedUserId: (id: string | null) => void;
   setView: (view: string) => void;
   setClassData: (data: any) => void;
@@ -28,11 +30,13 @@ export const ClassDetailsView = ({
   classes,
   users,
   role,
+  currentUser,
   setSelectedUserId,
   setView,
   setClassData,
   showNotification
 }: ClassDetailsViewProps) => {
+  const [activeTab, setActiveTab] = useState<"elenco" | "mural">("elenco");
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,7 +47,7 @@ export const ClassDetailsView = ({
   const classStudents = useMemo(() => {
     return users
       .filter(u => targetClass?.studentIds?.includes(u.id))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+      .sort((a, b) => (a.artisticName || a.name || "").localeCompare(b.artisticName || b.name || "", 'pt-BR'));
   }, [users, targetClass?.studentIds]);
 
   const availableStudents = useMemo(() => {
@@ -55,7 +59,7 @@ export const ClassDetailsView = ({
         (u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
          u.artisticName?.toLowerCase().includes(searchQuery.toLowerCase()))
       )
-      .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+      .sort((a, b) => (a.artisticName || a.name || "").localeCompare(b.artisticName || b.name || "", 'pt-BR'));
   }, [users, targetClass, searchQuery]);
 
   if (!targetClass) return null;
@@ -103,7 +107,7 @@ export const ClassDetailsView = ({
       <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-20">
          <div className="absolute top-6 left-6 md:top-10 md:left-10 z-20">
            <BackButton 
-            onClick={() => setView("classes_list")}
+            onClick={() => setView(role === "Aluno" ? "dashboard" : "classes_list")}
             className="!text-white pointer-events-auto"
            />
          </div>
@@ -118,147 +122,180 @@ export const ClassDetailsView = ({
            </span>
          </div>
       </div>
-
       <div className="flex-1 p-8 md:p-16 overflow-y-auto custom-scrollbar bg-slate-50">
-        <div className="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-10">
+        <div className="max-w-6xl mx-auto w-full">
           
-          <div className="lg:col-span-2 space-y-10">
-            {/* Class Info */}
-            <div className="bg-white p-8 md:p-12 rounded-[40px] border border-slate-100 shadow-sm space-y-8">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-pro-teal/5 rounded-2xl flex items-center justify-center text-pro-teal"><Users size={24} /></div>
-                  <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Estudantes do Elenco</h2>
-                </div>
-                <div className="flex gap-3">
-                  <button 
-                    onClick={() => setIsEnrollModalOpen(true)}
-                    className="p-4 bg-pro-yellow text-pro-teal rounded-2xl hover:brightness-110 transition-all shadow-lg shadow-yellow-900/10 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
-                  >
-                    <UserPlus size={16} /> Matricular Aluno
-                  </button>
-                  <button 
-                    onClick={() => {
-                      if (targetClass) {
-                        setClassData({
-                          id: targetClass.id,
-                          code: targetClass.code,
-                          type: targetClass.type,
-                          teacherId: targetClass.teacherId,
-                          studentIds: targetClass.studentIds || [],
-                          isActive: targetClass.isActive,
-                          inactivationReason: targetClass.inactivationReason || "",
-                          year: targetClass.year,
-                          weekday: targetClass.weekday || "",
-                          time: targetClass.time || "",
-                          startDate: targetClass.startDate || ""
-                        });
-                        setView("edit_class");
-                      }
-                    }}
-                    className="p-4 bg-white border border-slate-200 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
-                  >
-                    <Edit size={16} /> Editar Turma
-                  </button>
-                </div>
+          {/* Layout: Sidebar on right for stats/teacher, main content on left */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+            
+            <div className="lg:col-span-2 space-y-10">
+              
+              {/* Tab Switcher */}
+              <div className="flex p-1.5 bg-white rounded-[24px] border border-slate-100 shadow-sm w-fit">
+                <button
+                  onClick={() => setActiveTab("elenco")}
+                  className={`px-8 py-3 rounded-[20px] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${activeTab === "elenco" ? 'bg-pro-teal text-white shadow-lg shadow-teal-900/10' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  <LayoutGrid size={16} />
+                  Elenco
+                </button>
+                <button
+                  onClick={() => setActiveTab("mural")}
+                  className={`px-8 py-3 rounded-[20px] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${activeTab === "mural" ? 'bg-pro-teal text-white shadow-lg shadow-teal-900/10' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  <MessageSquare size={16} />
+                  Mural da Turma
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {classStudents.length > 0 ? (
-                  classStudents.map(s => (
-                    <button 
-                      key={s.id} 
-                      onClick={() => {
-                        setSelectedUserId(s.id);
-                        setView("user_details");
-                      }}
-                      className="p-4 bg-slate-50 rounded-3xl border border-slate-100 flex items-center gap-4 group hover:bg-white hover:border-pro-teal transition-all text-left w-full relative"
-                    >
-                      <div className="w-12 h-12 rounded-2xl bg-white overflow-hidden flex items-center justify-center text-slate-300 shadow-sm">
-                        <Avatar src={s.photo} fallbackSize={24} className="w-full h-full rounded-none" />
+              {activeTab === "elenco" ? (
+                /* Elenco View */
+                <div className="bg-white p-8 md:p-12 rounded-[40px] border border-slate-100 shadow-sm space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-pro-teal/5 rounded-2xl flex items-center justify-center text-pro-teal"><Users size={24} /></div>
+                      <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Estudantes do Elenco</h2>
+                    </div>
+                    {role === "Gestor" && (
+                      <div className="flex gap-3">
+                        <button 
+                          onClick={() => setIsEnrollModalOpen(true)}
+                          className="p-4 bg-pro-yellow text-pro-teal rounded-2xl hover:brightness-110 transition-all shadow-lg shadow-yellow-900/10 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                        >
+                          <UserPlus size={16} /> Matricular Aluno
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if (targetClass) {
+                              setClassData({
+                                id: targetClass.id,
+                                code: targetClass.code,
+                                type: targetClass.type,
+                                teacherId: targetClass.teacherId,
+                                studentIds: targetClass.studentIds || [],
+                                isActive: targetClass.isActive,
+                                inactivationReason: targetClass.inactivationReason || "",
+                                year: targetClass.year,
+                                weekday: targetClass.weekday || "",
+                                time: targetClass.time || "",
+                                startDate: targetClass.startDate || ""
+                              });
+                              setView("edit_class");
+                            }
+                          }}
+                          className="p-4 bg-white border border-slate-200 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                        >
+                          <Edit size={16} /> Editar Turma
+                        </button>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-black text-slate-700 uppercase tracking-tight leading-none mb-1">{s.name}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{s.artisticName || "..."}</p>
-                      </div>
-                      {targetClass.enrollmentDates?.[s.id] && (
-                        <div className="absolute top-2 right-4 flex items-center gap-1.5 text-slate-300">
-                          <Calendar size={10} />
-                          <span className="text-[8px] font-black uppercase tracking-widest">
-                            {new Date(targetClass.enrollmentDates[s.id] + 'T00:00:00').toLocaleDateString('pt-BR')}
-                          </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {classStudents.length > 0 ? (
+                      classStudents.map(s => (
+                        <div 
+                          key={s.id} 
+                          onClick={() => {
+                            if (role !== "Aluno") {
+                              setSelectedUserId(s.id);
+                              setView("user_details");
+                            }
+                          }}
+                          className={`p-4 bg-slate-50 rounded-3xl border border-slate-100 flex items-center gap-4 group transition-all text-left w-full relative ${role !== "Aluno" ? "cursor-pointer hover:bg-white hover:border-pro-teal" : "cursor-default"}`}
+                        >
+                          <div className="w-12 h-12 rounded-2xl bg-white overflow-hidden flex items-center justify-center text-slate-300 shadow-sm">
+                            <Avatar src={s.photo} fallbackSize={24} className="w-full h-full rounded-none" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-black text-slate-700 uppercase tracking-tight leading-none mb-1">{s.artisticName || s.name}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{s.artisticName ? s.name : "..."}</p>
+                          </div>
+                          {targetClass.enrollmentDates?.[s.id] && (
+                            <div className="absolute top-2 right-4 flex items-center gap-1.5 text-slate-300">
+                              <Calendar size={10} />
+                              <span className="text-[8px] font-black uppercase tracking-widest">
+                                {new Date(targetClass.enrollmentDates[s.id] + 'T00:00:00').toLocaleDateString('pt-BR')}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </button>
-                  ))
-                ) : (
-                  <div className="col-span-full py-12 text-center bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200">
-                    <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Nenhum aluno matriculado nesta turma.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {!targetClass.isActive && targetClass.inactivationReason && (
-              <div className="bg-red-50 p-8 rounded-[40px] border border-red-100 space-y-4">
-                <div className="flex items-center gap-3 text-red-600">
-                  <Info size={20} />
-                  <h4 className="text-[10px] font-black uppercase tracking-widest">Motivo da Inativação</h4>
-                </div>
-                <p className="text-sm text-red-700/70 font-semibold leading-relaxed">"{targetClass.inactivationReason}"</p>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-10">
-            {/* Teacher Info */}
-            <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm space-y-6">
-              <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-widest border-b border-slate-50 pb-4">Professor Titular</h4>
-              {teacher ? (
-                <div className="flex flex-col items-center text-center gap-4 p-4 rounded-3xl bg-slate-50/50 border border-slate-100">
-                  <div className="w-24 h-24 rounded-[32px] bg-white overflow-hidden flex items-center justify-center text-slate-200 border-4 border-white shadow-xl">
-                    <Avatar src={teacher.photo} fallbackSize={48} className="w-full h-full rounded-none" />
-                  </div>
-                  <div>
-                    <h5 className="font-black text-slate-800 uppercase tracking-tight text-lg">{teacher.name}</h5>
-                    <p className="text-[10px] font-black text-pro-teal uppercase tracking-widest mt-1 bg-pro-teal/5 px-3 py-1 rounded-full">{teacher.artisticName || "Professor"}</p>
+                      ))
+                    ) : (
+                      <div className="col-span-full py-12 text-center bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200">
+                        <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Nenhum aluno matriculado nesta turma.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-slate-400 font-bold italic text-center py-4">Nenhum professor vinculado</p>
+                /* Mural View */
+                <div className="animate-in fade-in slide-in-from-bottom-4">
+                  <MuralTurma classId={targetClass.id} currentUser={currentUser} />
+                </div>
+              )}
+
+              {!targetClass.isActive && targetClass.inactivationReason && (
+                <div className="bg-red-50 p-8 rounded-[40px] border border-red-100 space-y-4">
+                  <div className="flex items-center gap-3 text-red-600">
+                    <Info size={20} />
+                    <h4 className="text-[10px] font-black uppercase tracking-widest">Motivo da Inativação</h4>
+                  </div>
+                  <p className="text-sm text-red-700/70 font-semibold leading-relaxed">"{targetClass.inactivationReason}"</p>
+                </div>
               )}
             </div>
 
-            {/* Quick Stats */}
-            <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm space-y-6">
-               <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest border-b border-slate-50 pb-4">Resumo da Turma</h4>
-               <div className="space-y-4">
-                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+            <div className="space-y-10">
+              {/* Teacher Info */}
+              <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm space-y-6">
+                <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-widest border-b border-slate-50 pb-4">Professor Titular</h4>
+                {teacher ? (
+                  <div className="flex flex-col items-center text-center gap-4 p-4 rounded-3xl bg-slate-50/50 border border-slate-100">
+                    <div className="w-24 h-24 rounded-[32px] bg-white overflow-hidden flex items-center justify-center text-slate-200 border-4 border-white shadow-xl">
+                      <Avatar src={teacher.photo} fallbackSize={48} className="w-full h-full rounded-none" />
+                    </div>
+                    <div>
+                      <h5 className="font-black text-slate-800 uppercase tracking-tight text-lg">{teacher.name}</h5>
+                      <p className="text-[10px] font-black text-pro-teal uppercase tracking-widest mt-1 bg-pro-teal/5 px-3 py-1 rounded-full">{teacher.artisticName || "Professor"}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 font-bold italic text-center py-4">Nenhum professor vinculado</p>
+                )}
+              </div>
+
+              {/* Quick Stats */}
+              <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm space-y-6">
+                <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest border-b border-slate-50 pb-4">Resumo da Turma</h4>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
                     <div className="flex items-center gap-3 text-slate-400"><Users size={16} /><span className="text-[10px] font-black uppercase tracking-widest">Capacidade</span></div>
                     <span className="text-sm font-black text-slate-700">{targetClass.studentIds?.length || 0} de 20</span>
-                 </div>
-                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
                     <div className="flex items-center gap-3 text-slate-400"><Calendar size={16} /><span className="text-[10px] font-black uppercase tracking-widest">Data de Início</span></div>
                     <span className="text-sm font-black text-slate-700">
                       {targetClass.startDate ? new Date(targetClass.startDate + 'T00:00:00').toLocaleDateString('pt-BR') : targetClass.year}
                     </span>
-                 </div>
-                 {targetClass.weekday && (
-                   <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                  </div>
+                  {targetClass.weekday && (
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
                       <div className="flex items-center gap-3 text-slate-400"><Calendar size={16} /><span className="text-[10px] font-black uppercase tracking-widest">Dias</span></div>
                       <span className="text-sm font-black text-slate-700">{targetClass.weekday}</span>
-                   </div>
-                 )}
-                 {targetClass.time && (
-                   <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                    </div>
+                  )}
+                  {targetClass.time && (
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
                       <div className="flex items-center gap-3 text-slate-400"><Calendar size={16} /><span className="text-[10px] font-black uppercase tracking-widest">Horário</span></div>
                       <span className="text-sm font-black text-slate-700">{targetClass.time}</span>
-                   </div>
-                 )}
-               </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
 
+          </div>
         </div>
       </div>
 
@@ -323,8 +360,8 @@ export const ClassDetailsView = ({
                                 <Avatar src={student.photo} fallbackSize={20} className="w-full h-full rounded-none" />
                               </div>
                               <div>
-                                <p className="text-sm font-black text-slate-700 uppercase tracking-tight">{student.name}</p>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{student.artisticName || "..."}</p>
+                                <p className="text-sm font-black text-slate-700 uppercase tracking-tight">{student.artisticName || student.name}</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{student.artisticName ? student.name : "..."}</p>
                               </div>
                             </div>
                             <button 
@@ -356,7 +393,10 @@ export const ClassDetailsView = ({
                       <div>
                         <p className="text-[10px] font-black text-pro-teal uppercase tracking-widest mb-1">Matriculando aluno:</p>
                         <p className="text-lg font-black text-slate-800 uppercase tracking-tight">
-                          {users.find(u => u.id === enrollmentProcess.studentId)?.name}
+                          {(() => {
+                            const student = users.find(u => u.id === enrollmentProcess.studentId);
+                            return student?.artisticName || student?.name;
+                          })()}
                         </p>
                       </div>
                     </div>

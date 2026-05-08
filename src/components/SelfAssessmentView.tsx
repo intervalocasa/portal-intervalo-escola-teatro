@@ -8,7 +8,8 @@ import {
   CheckCircle2, 
   LogOut, 
   Drama,
-  ArrowLeft 
+  ArrowLeft,
+  AlertTriangle
 } from 'lucide-react';
 import { Logo, BackButton } from './CommonComponents';
 import { 
@@ -216,6 +217,75 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                   <LogOut size={20} className="rotate-180" />
                 </button>
               </div>
+
+              {/* AI Pedagogical Analysis Section */}
+              {viewingEvaluation.pedagogicalAnalysis && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-gradient-to-br from-pro-teal/5 to-pro-teal/10 p-8 rounded-[40px] border border-pro-teal/20 space-y-6 shadow-inner"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-pro-teal text-white rounded-xl flex items-center justify-center">
+                      <Drama size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Análise Pedagógica (IA)</h3>
+                      <p className="text-[10px] font-black text-pro-teal uppercase tracking-widest">Processado pelo Assistente da Intervalo</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white p-4 rounded-3xl border border-slate-100 flex flex-col items-center text-center gap-1">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Clima Emocional</span>
+                      <span className="text-sm font-black text-pro-teal uppercase">{viewingEvaluation.pedagogicalAnalysis.status_turma.clima_emocional}</span>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-100 flex flex-col items-center text-center gap-1">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Engajamento</span>
+                      <span className={`text-sm font-black uppercase ${
+                        viewingEvaluation.pedagogicalAnalysis.status_turma.nivel_engajamento === 'alto' ? 'text-green-500' :
+                        viewingEvaluation.pedagogicalAnalysis.status_turma.nivel_engajamento === 'medio' ? 'text-pro-yellow' : 'text-red-500'
+                      }`}>
+                        {viewingEvaluation.pedagogicalAnalysis.status_turma.nivel_engajamento}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-3xl border border-slate-100 space-y-4">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">Pilares Pedagógicos</h4>
+                    <div className="grid grid-cols-1 gap-3">
+                      {Object.entries(viewingEvaluation.pedagogicalAnalysis.pilares_individuais).map(([pilar, intensity]) => (
+                        <div key={pilar} className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-600 capitalize">{pilar}</span>
+                          <div className="flex gap-1">
+                            {[1, 2, 3].map(i => (
+                              <div key={i} className={`w-6 h-1.5 rounded-full ${
+                                (intensity === 'baixo' && i <= 1) ? 'bg-red-400' :
+                                (intensity === 'medio' && i <= 2) ? 'bg-pro-yellow' :
+                                intensity === 'alto' && i <= 3 ? 'bg-green-400' : 'bg-slate-100'
+                              }`} />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-3xl border border-slate-100">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2 mb-3">Síntese de Evolução</h4>
+                    <p className="text-sm font-medium text-slate-700 italic leading-relaxed">
+                      "{viewingEvaluation.pedagogicalAnalysis.analise_qualitativa}"
+                    </p>
+                  </div>
+                  
+                  {viewingEvaluation.pedagogicalAnalysis.alerta_coordenacao && (
+                    <div className="bg-red-50 p-4 rounded-2xl border border-red-100 flex items-center gap-3">
+                      <AlertTriangle className="text-red-500" size={20} />
+                      <p className="text-[10px] font-black text-red-700 uppercase tracking-tight">Postura de cuidado: Este relato requer atenção da coordenação.</p>
+                    </div>
+                  )}
+                </motion.div>
+              )}
 
               <div className="grid gap-6">
                 {(viewingEvaluation.classType === "Prática Profissional de Montagem" 

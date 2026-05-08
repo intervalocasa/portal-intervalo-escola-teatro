@@ -87,8 +87,8 @@ export const UsersListView = ({
                         <Avatar src={u.photo} fallbackSize={20} className="w-full h-full rounded-none" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-black text-slate-700 uppercase tracking-tight leading-none mb-1">{u.name}</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{u.artisticName || "..."}</span>
+                        <span className="font-black text-slate-700 uppercase tracking-tight leading-none mb-1">{u.artisticName || u.name}</span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{u.artisticName ? u.name : "..."}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">

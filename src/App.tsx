@@ -69,8 +69,10 @@ import {
   orderBy
 } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "./lib/firestoreErrorHandler";
+import { analyzePedagogicalFeedback } from "./services/geminiService";
 import { THEME } from "./theme";
-import { UserRole, User, Class, Diary, Evaluation } from "./types";
+import { BADGES } from "./constants/badges";
+import { UserRole, User, Class, Diary, Evaluation, UserBadge } from "./types";
 import { Logo, LoadingScreen, DetailItem, BackButton } from "./components/CommonComponents";
 import { LoginView } from "./views/LoginView";
 import { GestorDashboard } from "./views/GestorDashboard";
@@ -89,6 +91,7 @@ import { EvolutionChartsView } from "./components/EvolutionChartsView";
 import { ProfessorDiaryView } from "./views/ProfessorDiaryView";
 import { StudentDiaryFormView } from "./views/StudentDiaryFormView";
 import { ManageDiariesView } from "./views/ManageDiariesView";
+import { AgendaEventos } from "./components/AgendaEventos";
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
@@ -143,7 +146,7 @@ export default function App() {
   }, []);
 
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [_view, _setView] = useState<"login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup">("login");
+  const [_view, _setView] = useState<"login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup" | "school_agenda">("login");
   
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -240,7 +243,10 @@ export default function App() {
   const [classes, setClasses] = useState<any[]>([]);
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [diaries, setDiaries] = useState<any[]>([]);
+  const [pedagogicalRequests, setPedagogicalRequests] = useState<any[]>([]);
   const [evolutionRecords, setEvolutionRecords] = useState<any[]>([]);
+  const [currentUserBadges, setCurrentUserBadges] = useState<UserBadge[]>([]);
+  const [selectedUserBadges, setSelectedUserBadges] = useState<UserBadge[]>([]);
   const [loading, setLoading] = useState(true);
   const [gestorError, setGestorError] = useState<string | null>(null);
 
@@ -705,6 +711,12 @@ export default function App() {
       handleFirestoreError(err, OperationType.LIST, "diarios_classe");
     });
 
+    const unsubscribePedagogical = onSnapshot(collection(db, "pedagogical-requests"), (snapshot) => {
+      setPedagogicalRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, "pedagogical-requests");
+    });
+
     const unsubscribeEvolutions = onSnapshot(collection(db, "evolucao"), (snapshot) => {
       setEvolutionRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (err) => {
@@ -735,6 +747,7 @@ export default function App() {
       unsubscribeClasses();
       unsubscribeEvals();
       unsubscribeDiaries();
+      unsubscribePedagogical();
       unsubscribeEvolutions();
       unsubscribeAnnouncements();
     };
@@ -826,6 +839,53 @@ export default function App() {
 
   const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
 
+  // Badge Logic
+  useEffect(() => {
+    if (!currentUser) {
+      setCurrentUserBadges([]);
+      return;
+    }
+    const q = collection(db, "usuarios", currentUser.uid, "userBadges");
+    const unsub = onSnapshot(q, (snapshot) => {
+      setCurrentUserBadges(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserBadge)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `usuarios/${currentUser.uid}/userBadges`);
+    });
+    return unsub;
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!selectedUserId) {
+      setSelectedUserBadges([]);
+      return;
+    }
+    const q = collection(db, "usuarios", selectedUserId, "userBadges");
+    const unsub = onSnapshot(q, (snapshot) => {
+      setSelectedUserBadges(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserBadge)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `usuarios/${selectedUserId}/userBadges`);
+    });
+    return unsub;
+  }, [selectedUserId]);
+
+  const handleAwardBadge = async (studentId: string, badgeDef: any, customMessage?: string) => {
+    try {
+      const badgeData = {
+        badgeId: badgeDef.badgeId,
+        name: badgeDef.name,
+        icon: badgeDef.badgeId, 
+        description: badgeDef.description,
+        dateReceived: serverTimestamp(),
+        message: customMessage || badgeDef.defaultMessage
+      };
+      
+      await setDoc(doc(db, "usuarios", studentId, "userBadges", badgeDef.badgeId), badgeData);
+      showNotification(`Conquista "${badgeDef.name}" atribuída com sucesso!`, "Sucesso");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `usuarios/${studentId}/userBadges/${badgeDef.badgeId}`);
+    }
+  };
+
   // Custom Notification Modal State
   const [notification, setNotification] = useState<{
     isOpen: boolean;
@@ -893,13 +953,13 @@ export default function App() {
 
       const diaryData = {
         studentId: selectedDiaryStudentId,
-        studentName: studentData.name,
+        studentName: studentData.artisticName || studentData.name,
         studentEmail: studentData.email || "",
         classId: selectedClassId,
         className: selectedClass.code,
         classType: selectedClass.type,
         teacherId: currentUser.uid,
-        teacherName: teacherData?.name || "Professor",
+        teacherName: teacherData?.artisticName || teacherData?.name || "Professor",
         month: diaryFilterMonth,
         year: diaryFilterYear,
         presences: Number(diaryFormData.presences || 0),
@@ -923,6 +983,15 @@ export default function App() {
       }
 
       showNotification(status === "concluido" ? "Diário de Classe concluído com sucesso." : "Diário de Classe salvo com sucesso.", "Sucesso");
+      
+      // Check for Presença VIP (100% frequency)
+      if (status === "concluido" && Number(diaryFormData.absences || 0) === 0 && Number(diaryFormData.presences || 0) > 0) {
+        const vipBadge = BADGES.find(b => b.badgeId === 'presenca-vip');
+        if (vipBadge) {
+          await handleAwardBadge(selectedDiaryStudentId, vipBadge);
+        }
+      }
+
       setView("professor_diary");
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "diarios_classe");
@@ -961,7 +1030,7 @@ export default function App() {
   const [filter, setFilter] = useState<UserRole | "Todos">("Todos");
   const filteredUsers = useMemo(() => {
     const list = filter === "Todos" ? users : users.filter(u => u.role === filter);
-    return [...list].sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+    return [...list].sort((a, b) => (a.artisticName || a.name || "").localeCompare(b.artisticName || b.name || "", 'pt-BR'));
   }, [users, filter]);
 
   // Form State for Registration
@@ -1367,6 +1436,14 @@ export default function App() {
 
     setLoading(true);
     try {
+      showNotification("Analisando seu relato pedagógico...", "IA", "success");
+      const pedagogicalAnalysis = await analyzePedagogicalFeedback(
+        studentData?.name || "Aluno",
+        selectedClass.code,
+        assessmentForm.openAnswers,
+        assessmentForm.notes
+      );
+
       const existingEval = evaluations.find(e => 
         e.studentId === studentId && 
         e.classId === assessmentForm.classId && 
@@ -1384,6 +1461,7 @@ export default function App() {
         year: assessmentYear,
         notes: assessmentForm.notes,
         openAnswers: assessmentForm.openAnswers,
+        pedagogicalAnalysis: pedagogicalAnalysis || null,
         updatedAt: serverTimestamp()
       };
 
@@ -1724,8 +1802,10 @@ export default function App() {
               setPhotoPreview={setPhotoPreview}
               setSelectedUserClasses={setSelectedUserClasses}
               setAssessmentForm={setAssessmentForm}
+              setSelectedClassId={setSelectedClassId}
               classes={classes}
               filteredAnnouncements={filteredAnnouncements}
+              userBadges={currentUserBadges}
             />
           )
         ) : view === "users_list" ? (
@@ -1751,6 +1831,9 @@ export default function App() {
             handleDeleteUser={handleDeleteUser}
             onResetPassword={handleAdminResetPassword}
             onUpdateEnrollmentDate={handleUpdateEnrollmentDate}
+            onAwardBadge={handleAwardBadge}
+            selectedUserBadges={selectedUserBadges}
+            currentUserRole={role || undefined}
             isGestor={role === "Gestor"}
             setSelectedClassId={setSelectedClassId}
             setSelectedEnrollmentDates={setSelectedEnrollmentDates}
@@ -1790,6 +1873,7 @@ export default function App() {
             classes={classes}
             users={users}
             role={role}
+            currentUser={currentUser}
             setSelectedUserId={setSelectedUserId}
             setView={setView}
             setClassData={setClassData}
@@ -1899,6 +1983,7 @@ export default function App() {
           <ManageDiariesView 
             diaries={diaries}
             users={users}
+            pedagogicalRequests={pedagogicalRequests}
             setSelectedClassId={setSelectedClassId}
             setSelectedDiaryStudentId={setSelectedDiaryStudentId}
             setDiaryFilterMonth={setDiaryFilterMonth}
@@ -1907,6 +1992,16 @@ export default function App() {
             setView={setView}
             handleDeleteDiary={handleDeleteDiary}
           />
+        ) : view === "school_agenda" ? (
+          <div className="flex-1 space-y-6">
+            <BackButton onClick={() => setView("dashboard")} />
+            <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+              <AgendaEventos 
+                currentUser={users.find(u => u.id === currentUser?.uid) || null}
+                isGestor={role === "Gestor"}
+              />
+            </div>
+          </div>
         ) : view === "create_announcement" ? (
           <CreateAnnouncementView 
             handleAnnouncementSubmit={handleAnnouncementSubmit}

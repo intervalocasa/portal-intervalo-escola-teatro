@@ -4,15 +4,64 @@
  */
 
 import { motion, AnimatePresence } from "motion/react";
-import { Megaphone, X, ChevronRight, Bell } from "lucide-react";
-import { useState } from "react";
+import { Megaphone, X, ChevronRight, Bell, ThumbsUp, Zap } from "lucide-react";
+import { useState, MouseEvent } from "react";
+import { doc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
+import { db } from "../lib/firebase";
+import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
+import { User, Announcement } from "../types";
 
 interface AnnouncementPanelProps {
-  announcements: any[];
+  announcements: Announcement[];
+  currentUser: User | null;
 }
 
-export const AnnouncementPanel = ({ announcements }: AnnouncementPanelProps) => {
+export const AnnouncementPanel = ({ announcements, currentUser }: AnnouncementPanelProps) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const toggleLike = async (e: MouseEvent, aviso: Announcement) => {
+    e.stopPropagation();
+    if (!currentUser) return;
+
+    const isLiked = aviso.likes?.includes(currentUser.id);
+    const avisoRef = doc(db, "avisos", aviso.id);
+
+    try {
+      if (isLiked) {
+        await updateDoc(avisoRef, {
+          likes: arrayRemove(currentUser.id)
+        });
+      } else {
+        await updateDoc(avisoRef, {
+          likes: arrayUnion(currentUser.id)
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `avisos/${aviso.id}`);
+    }
+  };
+
+  const toggleForce = async (e: MouseEvent, aviso: Announcement) => {
+    e.stopPropagation();
+    if (!currentUser) return;
+
+    const isForced = aviso.forces?.includes(currentUser.id);
+    const avisoRef = doc(db, "avisos", aviso.id);
+
+    try {
+      if (isForced) {
+        await updateDoc(avisoRef, {
+          forces: arrayRemove(currentUser.id)
+        });
+      } else {
+        await updateDoc(avisoRef, {
+          forces: arrayUnion(currentUser.id)
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `avisos/${aviso.id}`);
+    }
+  };
 
   if (!announcements || announcements.length === 0) return null;
 
@@ -59,6 +108,31 @@ export const AnnouncementPanel = ({ announcements }: AnnouncementPanelProps) => 
                 </div>
               </div>
               
+              <div className="flex items-center gap-2 pr-2">
+                <button
+                  onClick={(e) => toggleLike(e, aviso)}
+                  className={`p-2 rounded-xl transition-all flex items-center gap-1 ${
+                    aviso.likes?.includes(currentUser?.id || "") 
+                      ? "bg-pro-teal/10 text-pro-teal" 
+                      : "bg-slate-50 text-slate-400 hover:bg-pro-teal/5"
+                  }`}
+                >
+                  <ThumbsUp size={14} className={aviso.likes?.includes(currentUser?.id || "") ? "fill-current" : ""} />
+                  <span className="text-[9px] font-black">{aviso.likes?.length || 0}</span>
+                </button>
+                <button
+                  onClick={(e) => toggleForce(e, aviso)}
+                  className={`p-2 rounded-xl transition-all flex items-center gap-1 ${
+                    aviso.forces?.includes(currentUser?.id || "") 
+                      ? "bg-pro-orange/10 text-pro-orange" 
+                      : "bg-slate-50 text-slate-400 hover:bg-pro-orange/5"
+                  }`}
+                >
+                  <Zap size={14} className={aviso.forces?.includes(currentUser?.id || "") ? "fill-current" : ""} />
+                  <span className="text-[9px] font-black">{aviso.forces?.length || 0}</span>
+                </button>
+              </div>
+
               <div className={`p-2 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-pro-teal group-hover:text-white transition-all ${
                 expandedId === aviso.id ? "rotate-90 bg-pro-teal text-white" : ""
               }`}>

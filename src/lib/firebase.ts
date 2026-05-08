@@ -4,6 +4,7 @@ import {
   initializeFirestore, 
   enableMultiTabIndexedDbPersistence,
 } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Configurações do Firebase. Usa Variáveis de Ambiente (VITE_...)
 // No AI Studio, preencha em Settings > Secrets. No Vercel, preencha em Environment Variables.
@@ -21,6 +22,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 // initializeFirestore permite configurações experimentais como Long Polling, 
 // útil em ambientes de proxy que bloqueiam WebSockets ou streams.

@@ -4,9 +4,12 @@
  */
 
 import { motion } from "motion/react";
-import { UserCircle, Eye, ArrowLeft } from "lucide-react";
-import { User, Class, Evaluation } from "../types";
+import { UserCircle, Eye, ArrowLeft, Award } from "lucide-react";
+import { User, Class, Evaluation, UserBadge } from "../types";
 import { DetailItem, Avatar, BackButton } from "../components/CommonComponents";
+import { BadgeAwardModal } from "../components/BadgeAwardModal";
+import { BADGES } from "../constants/badges";
+import { useState } from "react";
 
 interface UserDetailsViewProps {
   selectedUserId: string | null;
@@ -22,6 +25,9 @@ interface UserDetailsViewProps {
   setSelectedClassId: (id: string | null) => void;
   onResetPassword: (email: string) => void;
   onUpdateEnrollmentDate: (classId: string, studentId: string, newDate: string) => Promise<void>;
+  onAwardBadge: (studentId: string, badgeDef: any, customMessage?: string) => Promise<void>;
+  selectedUserBadges: UserBadge[];
+  currentUserRole?: string;
   isGestor: boolean;
   setSelectedEnrollmentDates: (dates: Record<string, string>) => void;
   setEditEnrollmentInfo: (info: {classId: string, studentId: string, date: string} | null) => void;
@@ -41,11 +47,15 @@ export const UserDetailsView = ({
   setSelectedClassId,
   onResetPassword,
   onUpdateEnrollmentDate,
+  onAwardBadge,
+  selectedUserBadges,
+  currentUserRole,
   isGestor,
   setSelectedEnrollmentDates,
   setEditEnrollmentInfo
 }: UserDetailsViewProps) => {
   const user = users.find(u => u.id === selectedUserId);
+  const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
 
   if (!user) return null;
 
@@ -233,6 +243,74 @@ export const UserDetailsView = ({
                 })()}
             </div>
           )}
+
+          {user.role === "Aluno" && (
+            <div className="col-span-full mt-4">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] border-l-4 border-amber-500 pl-3">Conquistas e Badges</h4>
+                {(isGestor || currentUserRole === "Professor") && (
+                  <button 
+                    onClick={() => setIsBadgeModalOpen(true)}
+                    className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border border-amber-200"
+                  >
+                    <Award size={14} /> Atribuir Reconhecimento
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-4">
+                {(() => {
+                  const uniqueBadgeIds = ['critico-de-arte', 'embaixador-da-arte'];
+                  
+                  // Get unique badges based on badgeId to iterate
+                  const distinctEarnedBadgeIds = Array.from(new Set(selectedUserBadges.map(ub => ub.badgeId)));
+                  
+                  if (distinctEarnedBadgeIds.length === 0) {
+                    return <p className="text-[10px] font-bold text-slate-400 italic">Nenhum badge conquistado ainda.</p>;
+                  }
+
+                  return distinctEarnedBadgeIds.map(badgeId => {
+                    const badgeDef = BADGES.find(b => b.badgeId === badgeId);
+                    const count = selectedUserBadges.filter(ub => ub.badgeId === badgeId).length;
+                    const latest = selectedUserBadges.filter(ub => ub.badgeId === badgeId).sort((a, b) => (b.dateReceived?.seconds || 0) - (a.dateReceived?.seconds || 0))[0];
+                    const isUnique = uniqueBadgeIds.includes(badgeId);
+
+                    return (
+                      <div 
+                        key={badgeId} 
+                        title={`${badgeDef?.name || badgeId}: ${badgeDef?.description || ''}\n\nÚltima mensagem: "${latest.message}"`}
+                        className="bg-white p-4 rounded-2xl border border-amber-100 flex flex-col items-center text-center gap-2 shadow-sm relative group cursor-help"
+                      >
+                        <div className="text-amber-500">
+                           {badgeDef?.icon || <Award size={20} />}
+                        </div>
+                        <span className="text-[8px] font-black text-slate-700 uppercase leading-none">{badgeDef?.name || badgeId}</span>
+                        
+                        {!isUnique && count > 1 && (
+                          <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full border-2 border-white shadow-sm">
+                            {count}
+                          </div>
+                        )}
+
+                        {/* Tooltip Message - Visible on hover */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-800 text-white p-3 rounded-xl text-[9px] font-medium leading-relaxed opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-30 shadow-xl">
+                          <p className="font-black text-amber-400 mb-1 uppercase tracking-tight">{badgeDef?.name || badgeId}</p>
+                          "{latest.message}"
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800" />
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
+
+          <BadgeAwardModal 
+            isOpen={isBadgeModalOpen}
+            onClose={() => setIsBadgeModalOpen(false)}
+            onAward={(badge, msg) => user && onAwardBadge(user.id, badge, msg)}
+            studentName={user.name}
+          />
 
           {user.role === "Aluno" && (
             <div className="col-span-full mt-4">

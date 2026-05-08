@@ -8,7 +8,8 @@ import {
   Pencil, 
   BookOpen, 
   LogOut, 
-  UserCircle 
+  UserCircle,
+  Calendar
 } from "lucide-react";
 import { THEME } from "../theme";
 import { Logo, Avatar } from "../components/CommonComponents";
@@ -18,7 +19,7 @@ interface ProfessorDashboardProps {
   currentUser: any;
   users: any[];
   handleLogout: () => void;
-  setView: (view: any) => void;
+  setView: (view: "login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup" | "school_agenda") => void;
   setFormData: (data: any) => void;
   setPhotoPreview: (photo: string | null) => void;
   setSelectedUserClasses: (classes: string[]) => void;
@@ -68,7 +69,7 @@ export const ProfessorDashboard = ({
             <p className="text-slate-400 font-bold mt-2">Pronto para inspirar seus alunos hoje?</p>
           </div>
 
-          <AnnouncementPanel announcements={filteredAnnouncements} />
+          <AnnouncementPanel announcements={filteredAnnouncements} currentUser={user} />
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Atualizar Cadastro */}
@@ -121,6 +122,22 @@ export const ProfessorDashboard = ({
               <div>
                 <div className="font-bold text-lg leading-none uppercase tracking-tight">Diário de Classe</div>
                 <div className="text-xs opacity-70 mt-1 font-bold">Chamadas e Acompanhamento</div>
+              </div>
+            </motion.button>
+
+            {/* Agenda da Escola */}
+            <motion.button
+              onClick={() => setView("school_agenda")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full p-6 bg-slate-800 rounded-2xl flex items-center gap-5 text-white shadow-lg shadow-slate-900/10 transition-all text-left"
+            >
+              <div className="bg-white/20 p-3 rounded-xl">
+                <Calendar size={24} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-none uppercase tracking-tight">Agenda da Escola</div>
+                <div className="text-xs opacity-70 mt-1 font-bold">Eventos e Ensaios</div>
               </div>
             </motion.button>
 

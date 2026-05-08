@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from "react";
+import { useState, useMemo } from "react";
 import { motion } from "motion/react";
-import { UserCircle, Presentation, ArrowLeft } from "lucide-react";
+import { UserCircle, Presentation, ArrowLeft, Drama } from "lucide-react";
 import { User, Class, Diary } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 
@@ -173,8 +173,8 @@ export const ProfessorDiaryView = ({
                           <Avatar src={student?.photo} fallbackSize={24} className="w-full h-full rounded-none" />
                         </div>
                         <div>
-                          <h4 className="font-black text-slate-800 uppercase tracking-tight leading-none mb-1">{student?.name || "Aluno Desconhecido"}</h4>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{student?.artisticName || "..."}</p>
+                          <h4 className="font-black text-slate-800 uppercase tracking-tight leading-none mb-1">{student?.artisticName || student?.name || "Aluno Desconhecido"}</h4>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{student?.artisticName ? student?.name : "..."}</p>
                         </div>
                       </div>
 

@@ -3,7 +3,89 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export interface Post {
+  id: string;
+  authorId: string;
+  authorName: string;
+  classId: string;
+  content: string;
+  imageUrl?: string;
+  likes: string[];
+  forces?: string[];
+  timestamp: any;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  target: "Todos" | "Alunos" | "Professores";
+  targetSpecificUsers?: boolean;
+  targetUserIds?: string[];
+  likes?: string[];
+  forces?: string[];
+  createdBy: string;
+  createdAt: any;
+}
+
 export type UserRole = "Aluno" | "Professor" | "Gestor";
+
+export interface Badge {
+  id: string;
+  badgeId: string;
+  name: string;
+  icon: string;
+  description: string;
+  category?: string;
+}
+
+export interface UserBadge {
+  id: string;
+  badgeId: string;
+  name: string;
+  icon: string;
+  description: string;
+  dateReceived: any;
+  message: string;
+}
+
+export interface SchoolEvent {
+  id: string;
+  titulo: string;
+  tipo: "Ensaio" | "Peça" | "Workshop" | "Aula Aberta";
+  data: any;
+  inicio: string;
+  fim: string;
+  local: string;
+  descricao: string;
+  obrigatorio: boolean;
+  criadoPor: string;
+  lastUpdate: any;
+}
+
+export interface ClassFeedback {
+  id: string;
+  studentId: string;
+  studentName: string;
+  classId: string;
+  className?: string;
+  date: any;
+  rating: number;
+  comment: string;
+  timestamp: any;
+}
+
+export interface PedagogicalMeetingRequest {
+  id: string;
+  studentId: string;
+  studentName: string;
+  teacherId?: string;
+  classId: string;
+  className: string;
+  status: "pendente" | "em_atendimento" | "concluido";
+  createdAt: any;
+  updatedAt: any;
+}
 
 export interface User {
   id: string;
@@ -43,12 +125,31 @@ export interface Class {
 export interface Evaluation {
   id: string;
   studentId: string;
+  studentName?: string;
+  studentEmail?: string;
   classId: string;
+  classType?: string;
   month: number;
   year: number;
   notes: Record<string, number>;
   openAnswers: Record<string, string>;
+  pedagogicalAnalysis?: {
+    status_turma: {
+      clima_emocional: string;
+      nivel_engajamento: "alto" | "medio" | "baixo";
+    };
+    pilares_individuais: {
+      acolhimento: "baixo" | "medio" | "alto";
+      presenca: "baixo" | "medio" | "alto";
+      desafio: "baixo" | "medio" | "alto";
+      clareza: "baixo" | "medio" | "alto";
+      coletividade: "baixo" | "medio" | "alto";
+    };
+    analise_qualitativa: string;
+    alerta_coordenacao: boolean;
+  } | null;
   createdAt: any;
+  updatedAt?: any;
 }
 
 export interface Diary {
