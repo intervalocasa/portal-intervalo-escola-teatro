@@ -120,12 +120,17 @@ export default function App() {
           return;
         }
 
-        const code = error.code || (error.message?.includes('permission') ? 'permission-denied' : '');
-        
+        const errMessage = error.message || "";
+        const errCode = error.code || "";
+        const isPermissionError = errCode === 'permission-denied' || 
+                                 errMessage.toLowerCase().includes('permission') ||
+                                 errMessage.toLowerCase().includes('insufficient');
+
         if (error.message?.includes('offline') || error.code === 'unavailable' || error.code === 'failed-precondition') {
           setConnectionError("Aguardando conexão com o Firebase... (Verifique se o Firestore está ativo no Console do Firebase)");
-        } else if (code === 'permission-denied') {
-          // Permissions are fine for connection verification
+        } else if (isPermissionError) {
+          // Permissions are fine for connection verification - it means we reached the server
+          console.log("Firebase connection verified (permission denied on test path - this is OK)");
           setConnectionError(null);
         } else if (error.message?.includes('internal')) {
           setConnectionError("O Firebase está inicializando. Tente recarregar a página em alguns instantes.");
@@ -259,6 +264,10 @@ export default function App() {
   const [pwdConfirm, setPwdConfirm] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+
+  const [gestorResettingUid, setGestorResettingUid] = useState<string | null>(null);
+  const [gestorNewPwd, setGestorNewPwd] = useState("");
+  const [gestorResetError, setGestorResetError] = useState("");
 
   // States for first password setup
   const [firstPwdEmail, setFirstPwdEmail] = useState("");
@@ -435,6 +444,61 @@ export default function App() {
     } finally {
       setIsAppLoading(false);
       setPasswordLoading(false);
+    }
+  };
+
+  const handleGestorPasswordReset = async (e: FormEvent) => {
+    e.preventDefault();
+    setGestorResetError("");
+
+    if (gestorNewPwd.length < 6) {
+      setGestorResetError("A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    setIsAppLoading(true);
+    try {
+      const response = await fetch("/api/admin/update-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: gestorResettingUid,
+          newPassword: gestorNewPwd,
+          adminUid: currentUser.uid
+        })
+      });
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Non-JSON response received:", text);
+        throw new Error(`Erro no servidor (${response.status}): O servidor não retornou JSON. Verifique as configurações.`);
+      }
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to update password");
+
+      showNotification("Senha alterada com sucesso pelo Gestor.", "Sucesso");
+      setGestorResettingUid(null);
+      setGestorNewPwd("");
+    } catch (err: any) {
+      console.error("Gestor Reset Error:", err);
+      setGestorResetError(err.message);
+    } finally {
+      setIsAppLoading(false);
+    }
+  };
+
+  const handleAdminResetPassword = async (userEmail: string) => {
+    if (!userEmail) return;
+    setIsAppLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, userEmail.trim().toLowerCase());
+      showNotification(`Link de redefinição enviado para ${userEmail}`, "Sucesso");
+    } catch (err: any) {
+      showNotification("Erro: " + err.message, "Erro");
+    } finally {
+      setIsAppLoading(false);
     }
   };
 
@@ -1634,6 +1698,7 @@ export default function App() {
             setPhotoPreview={setPhotoPreview}
             setSelectedUserClasses={setSelectedUserClasses}
             handleDeleteUser={handleDeleteUser}
+            onResetPassword={handleAdminResetPassword}
             setSelectedClassId={setSelectedClassId}
           />
         ) : view === "create_class" ? (
@@ -1696,7 +1761,13 @@ export default function App() {
             users={users}
             currentUser={currentUser}
             selectedUserId={selectedUserId}
-            setShowPasswordModal={(show) => setShowPasswordModal(show)}
+            setShowPasswordModal={(show) => {
+              if (view === "edit_user" && role === "Gestor" && selectedUserId !== currentUser?.uid) {
+                setGestorResettingUid(selectedUserId);
+              } else {
+                setShowPasswordModal(show);
+              }
+            }}
           />
                           ) : view === "self_assessment" ? (
           <SelfAssessmentView 
@@ -1871,6 +1942,96 @@ export default function App() {
                   >
                     {passwordLoading ? "Gravando..." : "Salvar Senha"}
                     {!passwordLoading && <CheckCircle2 size={14} />}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Gestor Password Reset Modal (Other User) */}
+      <AnimatePresence>
+        {gestorResettingUid && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-[#014e63]/80 backdrop-blur-md z-[100] flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl relative"
+            >
+              <button 
+                onClick={() => {
+                  setGestorResettingUid(null);
+                  setGestorNewPwd("");
+                  setGestorResetError("");
+                }}
+                className="absolute top-6 right-6 w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-all z-10"
+              >
+                <X size={20} />
+              </button>
+              
+              <div className="bg-gradient-to-br from-orange-500 to-[#014e63] p-10 text-center">
+                <div className="w-16 h-16 bg-white/10 rounded-3xl flex items-center justify-center text-white mx-auto mb-4 backdrop-blur-md">
+                  <Lock size={32} />
+                </div>
+                <h3 className="text-white text-xl font-black uppercase tracking-tight">Redefinir Senha</h3>
+                <p className="text-orange-50/70 text-[10px] mt-1 uppercase tracking-widest font-bold">Ação de Administrador</p>
+              </div>
+
+              <form onSubmit={handleGestorPasswordReset} className="p-10 space-y-6">
+                <div className="space-y-4">
+                  <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest mb-4">
+                    Você está redefinindo a senha para: <br/>
+                    <span className="text-pro-teal">{users.find(u => u.id === gestorResettingUid)?.name}</span>
+                  </p>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nova Senha Temporária</label>
+                    <input
+                      type="password"
+                      required
+                      value={gestorNewPwd}
+                      onChange={(e) => setGestorNewPwd(e.target.value)}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-pro-orange outline-none font-bold text-sm transition-all"
+                    />
+                  </div>
+
+                  {gestorResetError && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-4 bg-red-50 text-red-600 rounded-2xl border border-red-100 flex items-start gap-3"
+                    >
+                      <AlertCircle size={18} className="shrink-0" />
+                      <p className="text-[10px] font-bold uppercase leading-tight">{gestorResetError}</p>
+                    </motion.div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGestorResettingUid(null);
+                      setGestorNewPwd("");
+                      setGestorResetError("");
+                    }}
+                    className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                  >
+                    CANCELAR
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-4 bg-orange-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-orange-900/20"
+                  >
+                    REDEFINIR
                   </button>
                 </div>
               </form>

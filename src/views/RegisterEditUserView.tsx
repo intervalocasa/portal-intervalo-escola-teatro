@@ -283,14 +283,14 @@ export const RegisterEditUserView = ({
             </>
           )}
 
-          {view === "edit_self" && setShowPasswordModal && (
+          {(view === "edit_self" || (view === "edit_user" && isGestor)) && setShowPasswordModal && (
             <div className="col-span-full pt-4">
                <button 
                 type="button"
                 onClick={() => setShowPasswordModal(true)}
                 className="w-full py-4 bg-white text-slate-600 border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-pro-teal transition-all flex items-center justify-center gap-2"
                >
-                 Alterar Senha do Portal
+                 {view === "edit_self" ? "Alterar Minha Senha" : "Redefinir Senha do Usuário"}
                </button>
             </div>
           )}

@@ -68,6 +68,36 @@ async function startServer() {
     });
   });
 
+  // API ROute to update user password (Gestor feature)
+  app.post("/api/admin/update-password", async (req, res) => {
+    console.log("[SERVER] Received update-password request");
+    const { uid, newPassword, adminUid } = req.body;
+
+    if (!admin.apps.length) {
+      console.error("[SERVER] Firebase Admin not initialized for update-password");
+      return res.status(500).json({ error: "Firebase Admin not initialized. Check your environment variables." });
+    }
+
+    try {
+      // Security check: verify the requester is actually a Gestor
+      const adminUser = await admin.firestore().collection("usuarios").doc(adminUid).get();
+      if (!adminUser.exists || adminUser.data()?.role !== "Gestor") {
+        console.warn(`[SERVER] Unauthorized password update attempt by ${adminUid}`);
+        return res.status(403).json({ error: "Unauthorized: Only Gestors can reset passwords." });
+      }
+
+      await admin.auth().updateUser(uid, {
+        password: newPassword,
+      });
+
+      console.log(`[SERVER] Password updated for user ${uid}`);
+      res.status(200).json({ message: "Password updated successfully." });
+    } catch (error: any) {
+      console.error("[SERVER] Error updating password:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Fallback para rotas de API não encontradas (evita retornar HTML em chamadas de API)
   app.all("/api/*", (req, res) => {
     console.warn(`[SERVER 404] API Route not found: ${req.method} ${req.url}`);

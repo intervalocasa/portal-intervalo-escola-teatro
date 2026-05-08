@@ -68,7 +68,7 @@ export const ClassesListView = ({
             {filteredClasses.length > 0 ? (
               <div className="grid gap-3 pt-4">
                 {filteredClasses.map((c) => (
-                  <motion.button
+                  <motion.div
                     key={c.id}
                     layout
                     onClick={() => {
@@ -78,7 +78,7 @@ export const ClassesListView = ({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className="w-full p-5 bg-white rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-teal-900/5 hover:-translate-y-1 transition-all group text-left flex items-center justify-between"
+                    className="w-full p-5 bg-white rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-teal-900/5 hover:-translate-y-1 transition-all group text-left flex items-center justify-between cursor-pointer"
                   >
                     <div className="flex items-center gap-4">
                       <div className="w-14 h-14 bg-pro-teal/5 rounded-[20px] flex items-center justify-center text-pro-teal group-hover:bg-pro-teal group-hover:text-white transition-all transform group-hover:rotate-6">
@@ -137,7 +137,7 @@ export const ClassesListView = ({
                         </div>
                       </div>
                     </div>
-                  </motion.button>
+                  </motion.div>
                 ))}
               </div>
             ) : (
