@@ -746,6 +746,8 @@ export default function App() {
   const [enrollmentModalClassId, setEnrollmentModalClassId] = useState<string | null>(null);
   const [enrollmentModalDate, setEnrollmentModalDate] = useState("");
 
+  const [editEnrollmentInfo, setEditEnrollmentInfo] = useState<{classId: string, studentId: string, date: string} | null>(null);
+
   const handleUpdateEnrollmentDate = async (classId: string, studentId: string, newDate: string) => {
     setIsAppLoading(true);
     try {
@@ -1746,6 +1748,7 @@ export default function App() {
             isGestor={role === "Gestor"}
             setSelectedClassId={setSelectedClassId}
             setSelectedEnrollmentDates={setSelectedEnrollmentDates}
+            setEditEnrollmentInfo={setEditEnrollmentInfo}
           />
         ) : view === "create_class" ? (
           <CreateClassView 
@@ -1999,6 +2002,66 @@ export default function App() {
         )}
       </AnimatePresence>
       
+      {/* Enrollment Date Modal (Edit existing) */}
+      <AnimatePresence>
+        {editEnrollmentInfo && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-[#004e63]/80 backdrop-blur-md z-[110] flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl"
+            >
+              <div className="bg-pro-orange p-8 text-center text-white">
+                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-md">
+                   <Calendar size={24} />
+                </div>
+                <h3 className="text-lg font-black uppercase tracking-tight">Editar Matrícula</h3>
+                <p className="text-orange-50/70 text-[10px] mt-1 uppercase tracking-widest font-bold">Turma: {classes.find(c => c.id === editEnrollmentInfo.classId)?.code}</p>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nova Data de Matrícula</label>
+                  <input
+                    type="date"
+                    required
+                    value={editEnrollmentInfo.date}
+                    onChange={(e) => setEditEnrollmentInfo({...editEnrollmentInfo, date: e.target.value})}
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-pro-orange outline-none font-bold text-sm transition-all"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setEditEnrollmentInfo(null)}
+                    className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                  >
+                    CANCELAR
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (editEnrollmentInfo.date) {
+                        handleUpdateEnrollmentDate(editEnrollmentInfo.classId, editEnrollmentInfo.studentId, editEnrollmentInfo.date);
+                      }
+                      setEditEnrollmentInfo(null);
+                    }}
+                    className="flex-1 py-4 bg-pro-orange text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg"
+                  >
+                    SALVAR
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Enrollment Date Modal (during registration) */}
       <AnimatePresence>
         {enrollmentModalClassId && (

@@ -24,6 +24,7 @@ interface UserDetailsViewProps {
   onUpdateEnrollmentDate: (classId: string, studentId: string, newDate: string) => Promise<void>;
   isGestor: boolean;
   setSelectedEnrollmentDates: (dates: Record<string, string>) => void;
+  setEditEnrollmentInfo: (info: {classId: string, studentId: string, date: string} | null) => void;
 }
 
 export const UserDetailsView = ({
@@ -41,7 +42,8 @@ export const UserDetailsView = ({
   onResetPassword,
   onUpdateEnrollmentDate,
   isGestor,
-  setSelectedEnrollmentDates
+  setSelectedEnrollmentDates,
+  setEditEnrollmentInfo
 }: UserDetailsViewProps) => {
   const user = users.find(u => u.id === selectedUserId);
 
@@ -207,12 +209,11 @@ export const UserDetailsView = ({
                                 {isGestor && (
                                   <button
                                     onClick={() => {
-                                      const newDate = prompt("Nova data de matrícula (AAAA-MM-DD):", c.enrollmentDates?.[user.id] || "");
-                                      if (newDate && /^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
-                                        onUpdateEnrollmentDate(c.id, user.id, newDate);
-                                      } else if (newDate) {
-                                        alert("Formato inválido. Use AAAA-MM-DD.");
-                                      }
+                                      setEditEnrollmentInfo({
+                                        classId: c.id,
+                                        studentId: user.id,
+                                        date: c.enrollmentDates?.[user.id] || ""
+                                      });
                                     }}
                                     className="p-1.5 text-pro-teal hover:bg-pro-teal/5 rounded-md transition-all"
                                     title="Editar Data"
