@@ -151,6 +151,17 @@ export const RegisterEditUserView = ({
           </div>
 
           <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data de Nascimento</label>
+            <input
+              type="date"
+              name="birthDate"
+              value={formData.birthDate || ""}
+              onChange={handleInputChange}
+              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
+            />
+          </div>
+
+          <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Usuário</label>
             <div className="flex gap-2">
               {["Aluno", "Professor", "Gestor"].map((t) => (

@@ -9,6 +9,7 @@ export interface User {
   id: string;
   name: string;
   artisticName?: string;
+  birthDate?: string;
   email: string;
   role: UserRole;
   cpf: string;

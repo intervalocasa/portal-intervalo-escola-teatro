@@ -81,6 +81,7 @@ export const StudentDashboard = ({
                   setFormData({
                     name: user.name || "",
                     artisticName: user.artisticName || "",
+                    birthDate: user.birthDate || "",
                     email: user.email || "",
                     phone: user.phone || "",
                     address: user.address || "",

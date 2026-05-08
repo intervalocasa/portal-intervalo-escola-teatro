@@ -79,6 +79,7 @@ export const UserDetailsView = ({
                  id: user.id,
                  name: user.name,
                  artisticName: user.artisticName || "",
+                 birthDate: user.birthDate || "",
                  email: user.email,
                  role: user.role,
                  cpf: user.cpf,
@@ -123,6 +124,7 @@ export const UserDetailsView = ({
           </div>
           
           <DetailItem label="Nome Artístico" value={user.artisticName} />
+          <DetailItem label="Data de Nascimento" value={user.birthDate ? new Date(user.birthDate + 'T00:00:00').toLocaleDateString('pt-BR') : ""} />
           <DetailItem label="CPF (Login)" value={user.cpf} />
           <DetailItem label="E-mail" value={user.email} />
           <DetailItem label="Telefone" value={user.phone} />

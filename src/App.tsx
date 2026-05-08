@@ -936,6 +936,7 @@ export default function App() {
   const [formData, setFormData] = useState({
     name: "",
     artisticName: "",
+    birthDate: "",
     email: "",
     phone: "",
     address: "",

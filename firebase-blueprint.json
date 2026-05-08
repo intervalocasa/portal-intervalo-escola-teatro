@@ -7,6 +7,7 @@
       "properties": {
         "name": { "type": "string" },
         "artisticName": { "type": "string" },
+        "birthDate": { "type": "string", "format": "date" },
         "role": { "type": "string", "enum": ["Aluno", "Professor", "Gestor"] },
         "cpf": { "type": "string" },
         "email": { "type": "string", "format": "email" },
