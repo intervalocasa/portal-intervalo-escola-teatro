@@ -18,7 +18,7 @@ interface ClassDetailsViewProps {
   classes: Class[];
   users: User[];
   role: UserRole | null;
-  currentUser: User | null;
+  currentUser: any;
   setSelectedUserId: (id: string | null) => void;
   setView: (view: string) => void;
   setClassData: (data: any) => void;
@@ -44,6 +44,7 @@ export const ClassDetailsView = ({
 
   const targetClass = classes.find(c => c.id === selectedClassId);
   const teacher = users.find(u => u.id === targetClass?.teacherId);
+  const enrichedUser = users.find(u => u.id === currentUser?.uid) || null;
   const classStudents = useMemo(() => {
     return users
       .filter(u => targetClass?.studentIds?.includes(u.id))
@@ -231,7 +232,7 @@ export const ClassDetailsView = ({
               ) : (
                 /* Mural View */
                 <div className="animate-in fade-in slide-in-from-bottom-4">
-                  <MuralTurma classId={targetClass.id} currentUser={currentUser} />
+                  <MuralTurma classId={targetClass.id} currentUser={enrichedUser} />
                 </div>
               )}
 

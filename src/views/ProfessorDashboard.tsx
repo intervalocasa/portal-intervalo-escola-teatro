@@ -58,21 +58,37 @@ export const ProfessorDashboard = ({
            <div className="w-16 h-16 rounded-full border-4 border-white/20 overflow-hidden bg-white/10 mb-2 shadow-xl flex items-center justify-center">
               <Avatar src={user?.photo} fallbackSize={40} />
            </div>
-           <span className="text-white font-bold text-sm tracking-tight">{user?.name || "Professor"}</span>
+           <span className="text-white font-bold text-sm tracking-tight">{user?.artisticName || user?.name || "Professor"}</span>
         </div>
       </div>
 
       <div className="p-8 md:p-16 flex-1 md:overflow-y-auto bg-slate-50/30 flex flex-col">
         <div className="max-w-6xl mx-auto w-full space-y-8 flex-1">
           <div className="mb-0 hidden md:block border-b border-slate-100 pb-8">
-            <h2 className="text-4xl font-black text-slate-800 tracking-tight">Bem-vindo(a), Prof.</h2>
+            <h2 className="text-4xl font-black text-slate-800 tracking-tight">Bem-vindo(a), {user?.artisticName || "Prof."}</h2>
             <p className="text-slate-400 font-bold mt-2">Pronto para inspirar seus alunos hoje?</p>
           </div>
 
           <AnnouncementPanel announcements={filteredAnnouncements} currentUser={user} />
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Atualizar Cadastro */}
+            {/* Minhas Turmas */}
+            <motion.button
+              onClick={() => setView("classes_list")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full p-6 bg-white rounded-2xl flex items-center gap-5 text-slate-800 shadow-lg shadow-slate-900/5 transition-all text-left border border-slate-100"
+            >
+              <div className="bg-pro-teal p-3 rounded-xl text-white">
+                <Calendar size={24} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-none uppercase tracking-tight">Minhas Turmas</div>
+                <div className="text-xs text-slate-400 mt-1 font-bold">Acessar Mural e Elenco</div>
+              </div>
+            </motion.button>
+
+            {/* Diário do Professor */}
             <motion.button
               onClick={() => {
                 if (user) {

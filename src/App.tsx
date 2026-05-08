@@ -887,11 +887,43 @@ export default function App() {
         : (forceUniqueKey || `${badgeDef.badgeId}_${Date.now()}`);
 
       await setDoc(doc(db, "usuarios", studentId, "userBadges", docId), badgeData);
+
+      // Create an announcement for the badge award
+      const studentData = users.find(u => u.id === studentId);
+      if (studentData) {
+        const announcementData = {
+          title: `🏆 CONQUISTA: ${badgeDef.name.toUpperCase()}`,
+          content: customMessage || badgeDef.defaultMessage,
+          target: "Alunos",
+          targetSpecificUsers: true,
+          targetUserIds: [studentId],
+          createdBy: currentUser?.uid || "System",
+          createdAt: serverTimestamp()
+        };
+        
+        // Use a predictable ID for automated badges to avoid duplicate announcements if re-awarded
+        const announcementId = forceUniqueKey ? `badge_${studentId}_${forceUniqueKey}` : null;
+        if (announcementId) {
+          await setDoc(doc(db, "avisos", announcementId), announcementData);
+        } else {
+          await addDoc(collection(db, "avisos"), announcementData);
+        }
+      }
+
       if (!forceUniqueKey) {
         showNotification(`Conquista "${badgeDef.name}" atribuída com sucesso!`, "Sucesso");
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `usuarios/${studentId}/userBadges/${badgeDef.badgeId}`);
+    }
+  };
+
+  const handleRemoveBadge = async (studentId: string, badgeId: string) => {
+    try {
+      await deleteDoc(doc(db, "usuarios", studentId, "userBadges", badgeId));
+      showNotification("Conquista removida com sucesso!", "Sucesso");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `usuarios/${studentId}/userBadges/${badgeId}`);
     }
   };
 
@@ -1868,6 +1900,7 @@ export default function App() {
             onResetPassword={handleAdminResetPassword}
             onUpdateEnrollmentDate={handleUpdateEnrollmentDate}
             onAwardBadge={handleAwardBadge}
+            onRemoveBadge={handleRemoveBadge}
             selectedUserBadges={selectedUserBadges}
             currentUserRole={role || undefined}
             isGestor={role === "Gestor"}
@@ -1891,6 +1924,8 @@ export default function App() {
             setSelectedClassId={setSelectedClassId}
             setClassData={setClassData}
             setView={setView}
+            role={role}
+            currentUser={currentUser}
           />
         ) : view === "edit_class" ? (
           <CreateClassView 

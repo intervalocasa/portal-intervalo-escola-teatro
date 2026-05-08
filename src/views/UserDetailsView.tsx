@@ -4,7 +4,7 @@
  */
 
 import { motion } from "motion/react";
-import { UserCircle, Eye, ArrowLeft, Award } from "lucide-react";
+import { UserCircle, Eye, ArrowLeft, Award, Trash2, X } from "lucide-react";
 import { User, Class, Evaluation, UserBadge } from "../types";
 import { DetailItem, Avatar, BackButton } from "../components/CommonComponents";
 import { BadgeAwardModal } from "../components/BadgeAwardModal";
@@ -26,6 +26,7 @@ interface UserDetailsViewProps {
   onResetPassword: (email: string) => void;
   onUpdateEnrollmentDate: (classId: string, studentId: string, newDate: string) => Promise<void>;
   onAwardBadge: (studentId: string, badgeDef: any, customMessage?: string) => Promise<void>;
+  onRemoveBadge: (studentId: string, badgeId: string) => Promise<void>;
   selectedUserBadges: UserBadge[];
   currentUserRole?: string;
   isGestor: boolean;
@@ -48,6 +49,7 @@ export const UserDetailsView = ({
   onResetPassword,
   onUpdateEnrollmentDate,
   onAwardBadge,
+  onRemoveBadge,
   selectedUserBadges,
   currentUserRole,
   isGestor,
@@ -56,6 +58,7 @@ export const UserDetailsView = ({
 }: UserDetailsViewProps) => {
   const user = users.find(u => u.id === selectedUserId);
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
+  const [managingBadgeId, setManagingBadgeId] = useState<string | null>(null);
 
   if (!user) return null;
 
@@ -278,7 +281,7 @@ export const UserDetailsView = ({
                       <div 
                         key={badgeId} 
                         title={`${badgeDef?.name || badgeId}: ${badgeDef?.description || ''}\n\nÚltima mensagem: "${latest.message}"`}
-                        className="bg-white p-4 rounded-2xl border border-amber-100 flex flex-col items-center text-center gap-2 shadow-sm relative group cursor-help"
+                        className="bg-white p-4 rounded-2xl border border-amber-100 flex flex-col items-center text-center gap-2 shadow-sm relative group cursor-help transition-all hover:border-amber-300"
                       >
                         <div className="text-amber-500">
                            {badgeDef?.icon || <Award size={20} />}
@@ -289,6 +292,19 @@ export const UserDetailsView = ({
                           <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full border-2 border-white shadow-sm">
                             {count}
                           </div>
+                        )}
+
+                        {isGestor && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setManagingBadgeId(badgeId);
+                            }}
+                            className="absolute -top-2 -left-2 bg-white text-red-500 p-1.5 rounded-full border border-red-100 shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50"
+                            title="Gerenciar Instâncias"
+                          >
+                            <Trash2 size={12} />
+                          </button>
                         )}
 
                         {/* Tooltip Message - Visible on hover */}
@@ -311,6 +327,74 @@ export const UserDetailsView = ({
             onAward={(badge, msg) => user && onAwardBadge(user.id, badge, msg)}
             studentName={user.name}
           />
+
+          {/* Manage Badge Instances Modal */}
+          {managingBadgeId && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-[32px] w-full max-w-md overflow-hidden shadow-2xl border border-slate-100"
+              >
+                <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-amber-100 p-3 rounded-2xl text-amber-600">
+                      {BADGES.find(b => b.badgeId === managingBadgeId)?.icon || <Award size={24} />}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+                        {BADGES.find(b => b.badgeId === managingBadgeId)?.name || managingBadgeId}
+                      </h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gerenciar Conquistas</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setManagingBadgeId(null)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+                
+                <div className="p-8 max-h-[60vh] overflow-y-auto space-y-4">
+                  {selectedUserBadges
+                    .filter(ub => ub.badgeId === managingBadgeId)
+                    .sort((a, b) => (b.dateReceived?.seconds || 0) - (a.dateReceived?.seconds || 0))
+                    .map((ub, idx) => (
+                      <div key={ub.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between group">
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-slate-600 leading-tight">"{ub.message}"</p>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                            {ub.dateReceived?.seconds 
+                              ? new Date(ub.dateReceived.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                              : "Automático"}
+                          </p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (window.confirm("Tem certeza que deseja remover esta conquista?")) {
+                              await onRemoveBadge(user.id, ub.id);
+                              // If no more badges of this type, close modal
+                              const remaining = selectedUserBadges.filter(b => b.badgeId === managingBadgeId && b.id !== ub.id);
+                              if (remaining.length === 0) setManagingBadgeId(null);
+                            }
+                          }}
+                          className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                </div>
+                
+                <div className="p-8 bg-slate-50 border-t border-slate-100">
+                  <button
+                    onClick={() => setManagingBadgeId(null)}
+                    className="w-full py-4 bg-white text-slate-500 border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-100 transition-all"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
 
           {user.role === "Aluno" && (
             <div className="col-span-full mt-4">

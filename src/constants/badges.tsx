@@ -52,7 +52,7 @@ export const BADGES: BadgeDefinition[] = [
   {
     badgeId: 'critico-de-arte',
     name: 'Crítico de Arte',
-    description: 'Contribua com análises profundas e percepções artísticas valiosas durante os debates.',
+    description: 'Avalie todas as aulas do mês para obter',
     icon: <Search className="w-8 h-8" />,
     defaultMessage: 'Sua visão analítica enriquece nossa escola. Obrigado por compartilhar sua percepção e ajudar a elevar o nível do nosso debate artístico.'
   },

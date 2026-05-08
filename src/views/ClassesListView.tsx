@@ -15,6 +15,8 @@ interface ClassesListViewProps {
   setSelectedClassId: (id: string | null) => void;
   setView: (view: string) => void;
   setClassData: (data: any) => void;
+  role?: string | null;
+  currentUser?: any;
 }
 
 export const ClassesListView = ({
@@ -22,15 +24,25 @@ export const ClassesListView = ({
   users,
   setSelectedClassId,
   setView,
-  setClassData
+  setClassData,
+  role,
+  currentUser
 }: ClassesListViewProps) => {
   const [searchTerm, setSearchTerm] = React.useState("");
 
-  const filteredClasses = classes.filter(c => 
-    c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (users.find(u => u.id === c.teacherId)?.name || "").toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredClasses = classes.filter(c => {
+    // If professor, only show their classes by default or match search
+    const isTeacher = role === "Professor" && c.teacherId === currentUser?.uid;
+    const matchesSearch = c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (users.find(u => u.id === c.teacherId)?.name || "").toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (role === "Professor") {
+      return isTeacher && matchesSearch;
+    }
+    
+    return matchesSearch;
+  });
   return (
     <motion.div
       key="classes-list-screen"
@@ -108,30 +120,32 @@ export const ClassesListView = ({
                         <p className="text-[11px] font-bold text-slate-500 uppercase">{users.find(u => u.id === c.teacherId)?.name || "..."}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedClassId(c.id);
-                            setClassData({
-                              id: c.id,
-                              code: c.code,
-                              type: c.type,
-                              teacherId: c.teacherId,
-                              studentIds: c.studentIds || [],
-                              isActive: c.isActive,
-                              inactivationReason: c.inactivationReason || "",
-                              year: c.year,
-                              weekday: c.weekday || "",
-                              time: c.time || "",
-                              startDate: c.startDate || ""
-                            });
-                            setView("edit_class");
-                          }}
-                          className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-pro-teal hover:text-white transition-all shadow-sm"
-                          title="Editar Turma"
-                        >
-                          <Edit size={16} />
-                        </button>
+                        {role === "Gestor" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedClassId(c.id);
+                              setClassData({
+                                id: c.id,
+                                code: c.code,
+                                type: c.type,
+                                teacherId: c.teacherId,
+                                studentIds: c.studentIds || [],
+                                isActive: c.isActive,
+                                inactivationReason: c.inactivationReason || "",
+                                year: c.year,
+                                weekday: c.weekday || "",
+                                time: c.time || "",
+                                startDate: c.startDate || ""
+                              });
+                              setView("edit_class");
+                            }}
+                            className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-pro-teal hover:text-white transition-all shadow-sm"
+                            title="Editar Turma"
+                          >
+                            <Edit size={16} />
+                          </button>
+                        )}
                         <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-pro-teal/10 group-hover:text-pro-teal transition-all">
                           <ChevronDown size={20} className="-rotate-90" />
                         </div>
