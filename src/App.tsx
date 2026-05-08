@@ -66,7 +66,8 @@ import {
   getDoc,
   getDocs,
   getDocFromServer,
-  orderBy
+  orderBy,
+  Timestamp
 } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "./lib/firestoreErrorHandler";
 import { analyzePedagogicalFeedback } from "./services/geminiService";
@@ -868,7 +869,7 @@ export default function App() {
     return unsub;
   }, [selectedUserId]);
 
-  const handleAwardBadge = async (studentId: string, badgeDef: any, customMessage?: string) => {
+  const handleAwardBadge = async (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string) => {
     try {
       const badgeData = {
         badgeId: badgeDef.badgeId,
@@ -879,8 +880,16 @@ export default function App() {
         message: customMessage || badgeDef.defaultMessage
       };
       
-      await setDoc(doc(db, "usuarios", studentId, "userBadges", badgeDef.badgeId), badgeData);
-      showNotification(`Conquista "${badgeDef.name}" atribuída com sucesso!`, "Sucesso");
+      // Embaixador da Arte is strictly unique (one doc per student)
+      // Others use unique keys to allow multiple awards (counts)
+      const docId = badgeDef.badgeId === 'embaixador-da-arte' 
+        ? badgeDef.badgeId 
+        : (forceUniqueKey || `${badgeDef.badgeId}_${Date.now()}`);
+
+      await setDoc(doc(db, "usuarios", studentId, "userBadges", docId), badgeData);
+      if (!forceUniqueKey) {
+        showNotification(`Conquista "${badgeDef.name}" atribuída com sucesso!`, "Sucesso");
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `usuarios/${studentId}/userBadges/${badgeDef.badgeId}`);
     }
@@ -984,11 +993,38 @@ export default function App() {
 
       showNotification(status === "concluido" ? "Diário de Classe concluído com sucesso." : "Diário de Classe salvo com sucesso.", "Sucesso");
       
-      // Check for Presença VIP (100% frequency)
-      if (status === "concluido" && Number(diaryFormData.absences || 0) === 0 && Number(diaryFormData.presences || 0) > 0) {
-        const vipBadge = BADGES.find(b => b.badgeId === 'presenca-vip');
-        if (vipBadge) {
-          await handleAwardBadge(selectedDiaryStudentId, vipBadge);
+      if (status === "concluido") {
+        const uniqueCycleKey = `_${diaryFilterMonth}_${diaryFilterYear}_${selectedClassId}`;
+        
+        // 1. Check for Presença VIP (100% frequency)
+        if (Number(diaryFormData.absences || 0) === 0 && Number(diaryFormData.presences || 0) > 0) {
+          const vipBadge = BADGES.find(b => b.badgeId === 'presenca-vip');
+          if (vipBadge) {
+            await handleAwardBadge(selectedDiaryStudentId, vipBadge, undefined, `presenca-vip${uniqueCycleKey}`);
+          }
+        }
+
+        // 2. Check for Crítico de Arte (Evaluated all attended classes)
+        // We query feedbacks for this student and class in the given month
+        const startOfMonth = new Date(diaryFilterYear, diaryFilterMonth - 1, 1);
+        const endOfMonth = new Date(diaryFilterYear, diaryFilterMonth, 0, 23, 59, 59);
+
+        const feedbackQuery = query(
+          collection(db, "feedbacks-aulas"),
+          where("studentId", "==", selectedDiaryStudentId),
+          where("classId", "==", selectedClassId),
+          where("timestamp", ">=", Timestamp.fromDate(startOfMonth)),
+          where("timestamp", "<=", Timestamp.fromDate(endOfMonth))
+        );
+        
+        const feedbackSnap = await getDocs(feedbackQuery);
+        const feedbackCount = feedbackSnap.size;
+
+        if (feedbackCount >= Number(diaryFormData.presences || 0) && Number(diaryFormData.presences || 0) > 0) {
+          const criticoBadge = BADGES.find(b => b.badgeId === 'critico-de-arte');
+          if (criticoBadge) {
+            await handleAwardBadge(selectedDiaryStudentId, criticoBadge, undefined, `critico-de-arte${uniqueCycleKey}`);
+          }
         }
       }
 
@@ -1978,6 +2014,7 @@ export default function App() {
             setDiaryFormData={setDiaryFormData}
             handleSubmitDiary={handleDiarySubmit}
             handleAwardBadge={handleAwardBadge}
+            userRole={role}
             setView={setView}
           />
         ) : view === "manage_diaries" ? (

@@ -26,8 +26,8 @@ export const MyConquests: React.FC<MyConquestsProps> = ({ userBadges }) => {
   const monthName = cycleStartDate.toLocaleString('pt-BR', { month: 'long' });
 
   // Grouping
-  const uniqueBadgeIds = ['critico-de-arte', 'embaixador-da-arte'];
-  const monthlyBadgeIds = ['presenca-vip', 'rato-de-coxia', 'curinga-cenico', 'escuta-ativa'];
+  const uniqueBadgeIds = ['embaixador-da-arte'];
+  const monthlyBadgeIds = ['presenca-vip', 'rato-de-coxia', 'curinga-cenico', 'escuta-ativa', 'critico-de-arte'];
 
   const getBadgeCount = (badgeId: string) => {
     return userBadges.filter(ub => ub.badgeId === badgeId).length;
@@ -76,6 +76,13 @@ export const MyConquests: React.FC<MyConquestsProps> = ({ userBadges }) => {
         <div className="space-y-1">
           <p className="text-[10px] font-black text-slate-700 uppercase tracking-tight leading-none group-hover:text-amber-600 transition-colors">
             {badgeDef.name}
+          </p>
+        </div>
+        
+        {/* Requirement Tooltip on Hover */}
+        <div className="absolute inset-0 bg-slate-900/90 text-white p-4 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-[32px] pointer-events-none z-10">
+          <p className="text-[9px] font-bold uppercase tracking-widest leading-relaxed">
+            {badgeDef.description}
           </p>
         </div>
         

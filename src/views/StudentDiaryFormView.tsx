@@ -14,6 +14,7 @@ import {
 } from "../constants";
 import { BADGES } from "../constants/badges";
 import { Award, Star } from "lucide-react";
+import { UserRole } from "../types";
 
 interface StudentDiaryFormViewProps {
   selectedClassId: string | null;
@@ -26,6 +27,7 @@ interface StudentDiaryFormViewProps {
   setDiaryFormData: (data: any) => void;
   handleSubmitDiary: (status: "rascunho" | "concluido") => void;
   handleAwardBadge: (studentId: string, badgeDef: any) => Promise<void>;
+  userRole?: UserRole | null;
   setView: (view: string) => void;
 }
 
@@ -40,12 +42,21 @@ export const StudentDiaryFormView = ({
   setDiaryFormData,
   handleSubmitDiary,
   handleAwardBadge,
+  userRole,
   setView
 }: StudentDiaryFormViewProps) => {
   const student = users.find(u => u.id === selectedDiaryStudentId);
   const targetClass = classes.find(c => c.id === selectedClassId);
   const isProfessional = targetClass?.type?.includes("Profissional") || targetClass?.type?.includes("Montagem");
   const criteria = isProfessional ? PROFESSIONAL_COURSE_CRITERIA : ADULT_COURSE_CRITERIA;
+
+  const allowedBadges = BADGES.filter(b => {
+    if (b.badgeId === 'presenca-vip' || b.badgeId === 'critico-de-arte') return false;
+    if (userRole !== 'Gestor' && b.badgeId === 'embaixador-da-arte') {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <motion.div
@@ -88,7 +99,7 @@ export const StudentDiaryFormView = ({
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              {BADGES.filter(b => b.badgeId !== 'presenca-vip').map((badge) => (
+              {allowedBadges.map((badge) => (
                 <button
                   key={badge.badgeId}
                   onClick={() => handleAwardBadge(selectedDiaryStudentId!, badge)}

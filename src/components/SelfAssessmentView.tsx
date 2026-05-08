@@ -99,11 +99,21 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                   }}
                   className="flex-1 md:w-40 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:border-pro-teal disabled:opacity-50"
                 >
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <option key={i + 1} value={i + 1}>
-                      {new Date(0, i).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}
-                    </option>
-                  ))}
+                  {Array.from({ length: 12 }, (_, i) => i + 1)
+                    .filter(m => {
+                      const now = new Date();
+                      const currentYear = now.getFullYear();
+                      const currentMonth = now.getMonth() + 1;
+                      if (assessmentYear < currentYear) return true;
+                      if (assessmentYear === currentYear) return m <= currentMonth;
+                      return false;
+                    })
+                    .map((m) => (
+                      <option key={m} value={m}>
+                        {new Date(0, m - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}
+                      </option>
+                    ))
+                  }
                 </select>
                 <select
                   value={assessmentYear}
@@ -112,10 +122,15 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                     setAssessmentYear(val);
                     setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
                     setViewingEvaluation(null);
+
+                    const now = new Date();
+                    if (val === now.getFullYear() && assessmentMonth > now.getMonth() + 1) {
+                      setAssessmentMonth(now.getMonth() + 1);
+                    }
                   }}
                   className="w-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:border-pro-teal disabled:opacity-50"
                 >
-                  {[2023, 2024, 2025, 2026, 2027, 2028].map(y => (
+                  {[2023, 2024, 2025, 2026, 2027, 2028].filter(y => y <= new Date().getFullYear()).map(y => (
                     <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
