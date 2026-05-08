@@ -1977,6 +1977,7 @@ export default function App() {
             diaryFormData={diaryFormData}
             setDiaryFormData={setDiaryFormData}
             handleSubmitDiary={handleDiarySubmit}
+            handleAwardBadge={handleAwardBadge}
             setView={setView}
           />
         ) : view === "manage_diaries" ? (

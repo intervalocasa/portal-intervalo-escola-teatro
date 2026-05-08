@@ -12,6 +12,8 @@ import {
   ADULT_COURSE_CRITERIA, 
   GRADE_LEGEND 
 } from "../constants";
+import { BADGES } from "../constants/badges";
+import { Award, Star } from "lucide-react";
 
 interface StudentDiaryFormViewProps {
   selectedClassId: string | null;
@@ -23,6 +25,7 @@ interface StudentDiaryFormViewProps {
   diaryFormData: any;
   setDiaryFormData: (data: any) => void;
   handleSubmitDiary: (status: "rascunho" | "concluido") => void;
+  handleAwardBadge: (studentId: string, badgeDef: any) => Promise<void>;
   setView: (view: string) => void;
 }
 
@@ -36,6 +39,7 @@ export const StudentDiaryFormView = ({
   diaryFormData,
   setDiaryFormData,
   handleSubmitDiary,
+  handleAwardBadge,
   setView
 }: StudentDiaryFormViewProps) => {
   const student = users.find(u => u.id === selectedDiaryStudentId);
@@ -73,6 +77,38 @@ export const StudentDiaryFormView = ({
 
       <div className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-12 space-y-12 pb-32">
         <div className="max-w-4xl mx-auto w-full space-y-12">
+
+          {/* Section: Badges (Conquistas) */}
+          <div className="bg-white p-8 md:p-12 rounded-[40px] border border-slate-100 shadow-sm space-y-8">
+            <div className="flex items-center gap-4 border-l-4 border-pro-yellow pl-6">
+              <div>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Atribuir Conquista</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Reconheça o esforço e dedicação do aluno neste mês</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              {BADGES.filter(b => b.badgeId !== 'presenca-vip').map((badge) => (
+                <button
+                  key={badge.badgeId}
+                  onClick={() => handleAwardBadge(selectedDiaryStudentId!, badge)}
+                  className="flex flex-col items-center gap-3 p-4 rounded-3xl border border-slate-100 bg-slate-50/50 hover:bg-pro-yellow/10 hover:border-pro-yellow/30 hover:scale-105 transition-all group"
+                >
+                  <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-300 group-hover:text-pro-yellow shadow-inner group-hover:shadow-pro-yellow/20 transition-all">
+                    {badge.icon}
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight leading-none mb-1">{badge.name}</p>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">Atribuir</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="p-4 bg-pro-yellow/5 rounded-2xl border border-dashed border-pro-yellow/20 flex items-center gap-3">
+              <Star size={16} className="text-pro-orange" />
+              <p className="text-[10px] font-black text-pro-orange uppercase tracking-widest">A conquista de "Presença VIP" é atribuída automaticamente para 100% de presença.</p>
+            </div>
+          </div>
           
           {/* Section 1: Frequency */}
           <div className="bg-white p-8 md:p-12 rounded-[40px] border border-slate-100 shadow-sm space-y-8">
