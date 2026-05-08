@@ -20,7 +20,8 @@ import React from 'react';
 import { 
   ADULT_COURSE_CRITERIA, 
   PROFESSIONAL_COURSE_CRITERIA, 
-  GRADE_LEGEND 
+  GRADE_LEGEND,
+  SCALES
 } from '../constants';
 
 interface EvolutionViewProps {
@@ -403,17 +404,37 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                               {PROFESSIONAL_COURSE_CRITERIA.map(c => {
                                 const selfNote = Number(period.selfAssessment?.notes?.[c.id] || 0);
+                                const profNote = Number(period.professorDiary?.grades?.[c.id] || 0);
+                                const compAvg = (selfNote * weightSelf + profNote * weightProf) / 4;
+                                
+                                const selfLabel = SCALES.find(s => Number(selfNote) === Number(s.value))?.label || 
+                                                   SCALES.slice().reverse().find(s => Number(selfNote) >= Number(s.value))?.label || 
+                                                   "Sem avaliação";
+
                                 return (
                                   <div key={c.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between gap-3" onClick={(e) => e.stopPropagation()}>
                                     <div>
                                       <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight line-clamp-1">{c.label}</h4>
                                       <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Competência</p>
                                     </div>
-                                    <div className="flex items-end justify-between border-t border-slate-50 pt-2 gap-4">
-                                      <div className="text-left flex-1">
-                                        <p className="text-[8px] font-black text-pro-teal uppercase opacity-60">Nota dada por mim</p>
-                                        <p className="text-xl font-black text-pro-teal leading-none">{selfNote.toFixed(1)}</p>
+                                    <div className="flex items-end justify-between border-t border-slate-50 pt-2 gap-2">
+                                      <div className="text-left flex-1 min-w-0">
+                                        <p className="text-[7px] font-black text-pro-teal uppercase opacity-60 truncate">Nota dada por mim</p>
+                                        <p className="text-[10px] font-black text-pro-teal leading-none line-clamp-2">{selfLabel}</p>
                                       </div>
+
+                                      {period.professorDiary?.status === "concluido" ? (
+                                        <div className="text-center flex-1 border-x border-slate-50 px-2 min-w-0">
+                                          <p className="text-[7px] font-black text-slate-400 uppercase truncate">Média Final</p>
+                                          <p className="text-lg font-black text-slate-800 leading-none">{compAvg.toFixed(1)}</p>
+                                        </div>
+                                      ) : (
+                                        <div className="text-center flex-1 border-x border-slate-50 px-2">
+                                          <p className="text-[7px] font-black text-slate-400 uppercase">Processo</p>
+                                          <p className="text-lg font-black text-slate-200 leading-none">—</p>
+                                        </div>
+                                      )}
+
                                       <button 
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -424,9 +445,9 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                         }}
                                         className="flex-1 flex flex-col items-end group/mask"
                                       >
-                                        <p className="text-[8px] font-black text-slate-400 uppercase group-hover/mask:text-pro-teal transition-colors text-right">Professor</p>
-                                        <div className="bg-slate-50 p-1.5 rounded-lg text-slate-200 group-hover/mask:bg-pro-teal group-hover/mask:text-white transition-all">
-                                          <Drama size={20} />
+                                        <p className="text-[7px] font-black text-slate-400 uppercase group-hover/mask:text-pro-teal transition-colors text-right">Professor</p>
+                                        <div className="bg-slate-50 p-1 rounded-lg text-slate-200 group-hover/mask:bg-pro-teal group-hover/mask:text-white transition-all">
+                                          <Drama size={16} />
                                         </div>
                                       </button>
                                     </div>
