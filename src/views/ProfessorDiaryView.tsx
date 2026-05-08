@@ -43,6 +43,13 @@ export const ProfessorDiaryView = ({
   const teacherClasses = classes.filter(c => c.teacherId === currentUser?.id);
   const targetClass = classes.find(c => c.id === selectedClassId);
 
+  const classStudents = useMemo(() => {
+    if (!targetClass?.studentIds) return [];
+    return users
+      .filter(u => targetClass.studentIds.includes(u.id))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+  }, [targetClass?.studentIds, users]);
+
   return (
     <motion.div
       key="professor-diary-screen"
@@ -124,8 +131,8 @@ export const ProfessorDiaryView = ({
               </div>
               
               <div className="grid gap-3">
-                {targetClass?.studentIds?.map((sid: string) => {
-                  const student = users.find(u => u.id === sid);
+                {classStudents.map((student: User) => {
+                  const sid = student.id;
                   const diary = diaries.find(d => 
                     d.studentId === sid && 
                     d.classId === selectedClassId && 

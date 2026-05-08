@@ -104,7 +104,7 @@ export const ManageDiariesView = ({
                 <tbody className="divide-y divide-slate-50">
                   {diaries.length > 0 ? (
                     diaries
-                    .sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))
+                    .sort((a, b) => (a.studentName || "").localeCompare(b.studentName || "", 'pt-BR'))
                     .map(d => (
                       <tr key={d.id} className="hover:bg-slate-50/50 transition-colors group">
                          <td className="px-6 py-5">

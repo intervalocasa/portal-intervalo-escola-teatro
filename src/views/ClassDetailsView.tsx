@@ -40,16 +40,22 @@ export const ClassDetailsView = ({
 
   const targetClass = classes.find(c => c.id === selectedClassId);
   const teacher = users.find(u => u.id === targetClass?.teacherId);
-  const classStudents = users.filter(u => targetClass?.studentIds?.includes(u.id));
+  const classStudents = useMemo(() => {
+    return users
+      .filter(u => targetClass?.studentIds?.includes(u.id))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+  }, [users, targetClass?.studentIds]);
 
   const availableStudents = useMemo(() => {
     if (!targetClass) return [];
-    return users.filter(u => 
-      u.role === "Aluno" && 
-      !targetClass.studentIds?.includes(u.id) &&
-      (u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-       u.artisticName?.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+    return users
+      .filter(u => 
+        u.role === "Aluno" && 
+        !targetClass.studentIds?.includes(u.id) &&
+        (u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+         u.artisticName?.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+      .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
   }, [users, targetClass, searchQuery]);
 
   if (!targetClass) return null;

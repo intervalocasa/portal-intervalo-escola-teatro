@@ -679,7 +679,10 @@ export default function App() {
     if (!currentUser) return;
 
     const unsubscribeUsers = onSnapshot(collection(db, "usuarios"), (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const sortedUsers = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+      setUsers(sortedUsers);
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, "usuarios");
     });
@@ -956,7 +959,10 @@ export default function App() {
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [filter, setFilter] = useState<UserRole | "Todos">("Todos");
-  const filteredUsers = filter === "Todos" ? users : users.filter(u => u.role === filter);
+  const filteredUsers = useMemo(() => {
+    const list = filter === "Todos" ? users : users.filter(u => u.role === filter);
+    return [...list].sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+  }, [users, filter]);
 
   // Form State for Registration
   const [formData, setFormData] = useState({

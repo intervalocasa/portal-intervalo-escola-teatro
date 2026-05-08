@@ -30,7 +30,9 @@ export const CreateClassView = ({
   isEditing,
   handleDeleteClass
 }: CreateClassViewProps) => {
-  const teachers = users.filter(u => u.role === "Professor");
+  const teachers = users
+    .filter(u => u.role === "Professor")
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
   const [isDayDropdownOpen, setIsDayDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 

@@ -40,12 +40,14 @@ export const CreateAnnouncementView = ({
   const [isLoading, setIsLoading] = useState(false);
 
   const filteredUsers = useMemo(() => {
-    return users.filter(u => {
-      const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           (u.artisticName?.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesRole = formData.target === "Todos" || u.role === (formData.target === "Alunos" ? "Aluno" : "Professor");
-      return matchesSearch && matchesRole;
-    });
+    return users
+      .filter(u => {
+        const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                             (u.artisticName?.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchesRole = formData.target === "Todos" || u.role === (formData.target === "Alunos" ? "Aluno" : "Professor");
+        return matchesSearch && matchesRole;
+      })
+      .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
   }, [users, searchTerm, formData.target]);
 
   const toggleUserSelection = (userId: string) => {
