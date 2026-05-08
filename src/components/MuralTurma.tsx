@@ -53,8 +53,7 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
 
     const q = query(
       collection(db, "posts"),
-      where("classId", "==", classId),
-      orderBy("timestamp", "desc")
+      where("classId", "==", classId)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -62,11 +61,19 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
         id: doc.id,
         ...doc.data()
       })) as Post[];
+      
+      // Sort client-side to avoid index requirements
+      newPosts.sort((a, b) => {
+        const timeA = a.timestamp?.seconds || 0;
+        const timeB = b.timestamp?.seconds || 0;
+        return timeB - timeA;
+      });
+
       setPosts(newPosts);
       setIsLoading(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `posts (classId: ${classId})`);
       setIsLoading(false);
+      handleFirestoreError(error, OperationType.LIST, `posts (classId: ${classId})`);
     });
 
     return () => unsubscribe();
@@ -107,6 +114,7 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
         content: content.trim(),
         imageUrl,
         likes: [],
+        forces: [],
         timestamp: serverTimestamp()
       });
 

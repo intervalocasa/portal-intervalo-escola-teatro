@@ -4,20 +4,23 @@
  */
 
 import { motion, AnimatePresence } from "motion/react";
-import { Megaphone, X, ChevronRight, Bell, ThumbsUp, Zap } from "lucide-react";
+import { Megaphone, X, ChevronRight, Bell, ThumbsUp, Zap, Share2, Drama } from "lucide-react";
 import { useState, MouseEvent } from "react";
-import { doc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
+import { doc, updateDoc, arrayUnion, arrayRemove, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
-import { User, Announcement } from "../types";
+import { User, Announcement, Class } from "../types";
 
 interface AnnouncementPanelProps {
   announcements: Announcement[];
   currentUser: User | null;
+  studentClasses?: Class[];
 }
 
-export const AnnouncementPanel = ({ announcements, currentUser }: AnnouncementPanelProps) => {
+export const AnnouncementPanel = ({ announcements, currentUser, studentClasses = [] }: AnnouncementPanelProps) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState<string | null>(null); // ID of announcement being shared
+  const [selectedClassId, setSelectedClassId] = useState<string>("");
 
   const toggleLike = async (e: MouseEvent, aviso: Announcement) => {
     e.stopPropagation();
@@ -63,6 +66,27 @@ export const AnnouncementPanel = ({ announcements, currentUser }: AnnouncementPa
     }
   };
 
+  const handleShareToMural = async (aviso: Announcement, classId: string) => {
+    if (!currentUser || !classId) return;
+    
+    try {
+      await addDoc(collection(db, "posts"), {
+        authorId: currentUser.id,
+        authorName: currentUser.artisticName || currentUser.name,
+        classId,
+        content: `🎉 CONQUISTEI UMA NOVA BADGE!\n\n${aviso.title}\n\n${aviso.content}`,
+        likes: [],
+        forces: [],
+        timestamp: serverTimestamp()
+      });
+      setIsSharing(null);
+      setSelectedClassId("");
+      alert("Publicado no mural da turma com sucesso!");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, "posts");
+    }
+  };
+
   if (!announcements || announcements.length === 0) return null;
 
   return (
@@ -75,91 +99,171 @@ export const AnnouncementPanel = ({ announcements, currentUser }: AnnouncementPa
       </div>
       
       <div className="grid gap-3">
-        {announcements.map((aviso, idx) => (
-          <motion.div
-            key={aviso.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            className={`bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300 ${
-              expandedId === aviso.id ? "ring-2 ring-pro-teal/20" : ""
-            }`}
-          >
-            <div 
-              onClick={() => setExpandedId(expandedId === aviso.id ? null : aviso.id)}
-              className="p-5 flex items-center justify-between cursor-pointer group"
+        {announcements.map((aviso, idx) => {
+          const isConquest = aviso.title.includes("CONQUISTA");
+          
+          return (
+            <motion.div
+              key={aviso.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: idx * 0.1 }}
+              className={`bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300 ${
+                expandedId === aviso.id ? "ring-2 ring-pro-teal/20" : ""
+              }`}
             >
-              <div className="flex items-center gap-4 flex-1">
-                <div className={`p-3 rounded-2xl ${
-                  aviso.target === "Todos" ? "bg-blue-50 text-blue-500" :
-                  aviso.target === "Alunos" ? "bg-pro-teal/10 text-pro-teal" :
-                  "bg-purple-50 text-purple-500"
-                }`}>
-                  <Megaphone size={20} />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-0.5">
-                     <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{aviso.target}</span>
-                     {aviso.targetSpecificUsers && (
-                       <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest bg-amber-50 px-1.5 py-0.5 rounded">Direcionado</span>
-                     )}
+              <div 
+                onClick={() => setExpandedId(expandedId === aviso.id ? null : aviso.id)}
+                className="p-5 flex items-center justify-between cursor-pointer group"
+              >
+                <div className="flex items-center gap-4 flex-1">
+                  <div className={`p-3 rounded-2xl ${
+                    aviso.target === "Todos" ? "bg-blue-50 text-blue-500" :
+                    aviso.target === "Alunos" ? "bg-pro-teal/10 text-pro-teal" :
+                    "bg-purple-50 text-purple-500"
+                  }`}>
+                    <Megaphone size={20} />
                   </div>
-                  <h4 className="text-sm font-black text-slate-700 uppercase tracking-tight line-clamp-1">{aviso.title}</h4>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                       <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{aviso.target}</span>
+                       {aviso.targetSpecificUsers && (
+                         <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest bg-amber-50 px-1.5 py-0.5 rounded">Direcionado</span>
+                       )}
+                    </div>
+                    <h4 className="text-sm font-black text-slate-700 uppercase tracking-tight line-clamp-1">{aviso.title}</h4>
+                  </div>
                 </div>
+                
+                <div className="flex items-center gap-2 pr-2">
+                  {isConquest && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (studentClasses.length === 1) {
+                          handleShareToMural(aviso, studentClasses[0].id);
+                        } else {
+                          setIsSharing(aviso.id);
+                        }
+                      }}
+                      className="p-2 bg-slate-50 text-pro-teal hover:bg-pro-teal hover:text-white rounded-xl transition-all flex items-center gap-1 shadow-sm"
+                      title="Postar no Mural da Turma"
+                    >
+                      <Share2 size={14} />
+                      <span className="text-[9px] font-black uppercase tracking-widest hidden md:inline">Compartilhar</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => toggleLike(e, aviso)}
+                    className={`p-2 rounded-xl transition-all flex items-center gap-1 ${
+                      aviso.likes?.includes(currentUser?.id || "") 
+                        ? "bg-pro-teal/10 text-pro-teal" 
+                        : "bg-slate-50 text-slate-400 hover:bg-pro-teal/5"
+                    }`}
+                  >
+                    <ThumbsUp size={14} className={aviso.likes?.includes(currentUser?.id || "") ? "fill-current" : ""} />
+                    <span className="text-[9px] font-black">{aviso.likes?.length || 0}</span>
+                  </button>
+                  <button
+                    onClick={(e) => toggleForce(e, aviso)}
+                    className={`p-2 rounded-xl transition-all flex items-center gap-1 ${
+                      aviso.forces?.includes(currentUser?.id || "") 
+                        ? "bg-pro-orange/10 text-pro-orange" 
+                        : "bg-slate-50 text-slate-400 hover:bg-pro-orange/5"
+                    }`}
+                  >
+                    <Zap size={14} className={aviso.forces?.includes(currentUser?.id || "") ? "fill-current" : ""} />
+                    <span className="text-[9px] font-black">{aviso.forces?.length || 0}</span>
+                  </button>
+                </div>
+
+                <div className={`p-2 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-pro-teal group-hover:text-white transition-all ${
+                  expandedId === aviso.id ? "rotate-90 bg-pro-teal text-white" : ""
+                }`}>
+                  <ChevronRight size={18} />
+                </div>
+              </div>
+
+              <AnimatePresence>
+                {expandedId === aviso.id && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-5 pb-6 pt-0">
+                      <div className="h-px bg-slate-50 mb-4" />
+                      <p className="text-sm font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">
+                        {aviso.content}
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Share Class Selector Modal */}
+      <AnimatePresence>
+        {isSharing && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100"
+            >
+              <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="bg-pro-teal/10 p-2 rounded-xl text-pro-teal">
+                    <Share2 size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Compartilhar</h3>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Escolha a turma para postar</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsSharing(null)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                  <X size={20} />
+                </button>
               </div>
               
-              <div className="flex items-center gap-2 pr-2">
+              <div className="p-6 space-y-3">
+                {studentClasses.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      const aviso = announcements.find(a => a.id === isSharing);
+                      if (aviso) handleShareToMural(aviso, c.id);
+                    }}
+                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4 group hover:bg-pro-teal hover:border-pro-teal transition-all text-left shadow-sm"
+                  >
+                    <div className="bg-white p-2.5 rounded-xl text-pro-teal group-hover:bg-white/20 group-hover:text-white transition-all shadow-sm">
+                      <Drama size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-700 uppercase tracking-tight group-hover:text-white">{c.code}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest group-hover:text-white/70">{c.type}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              
+              <div className="p-6 bg-slate-50 border-t border-slate-100 mt-2">
                 <button
-                  onClick={(e) => toggleLike(e, aviso)}
-                  className={`p-2 rounded-xl transition-all flex items-center gap-1 ${
-                    aviso.likes?.includes(currentUser?.id || "") 
-                      ? "bg-pro-teal/10 text-pro-teal" 
-                      : "bg-slate-50 text-slate-400 hover:bg-pro-teal/5"
-                  }`}
+                  onClick={() => setIsSharing(null)}
+                  className="w-full py-4 bg-white text-slate-500 border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-100 transition-all font-black"
                 >
-                  <ThumbsUp size={14} className={aviso.likes?.includes(currentUser?.id || "") ? "fill-current" : ""} />
-                  <span className="text-[9px] font-black">{aviso.likes?.length || 0}</span>
-                </button>
-                <button
-                  onClick={(e) => toggleForce(e, aviso)}
-                  className={`p-2 rounded-xl transition-all flex items-center gap-1 ${
-                    aviso.forces?.includes(currentUser?.id || "") 
-                      ? "bg-pro-orange/10 text-pro-orange" 
-                      : "bg-slate-50 text-slate-400 hover:bg-pro-orange/5"
-                  }`}
-                >
-                  <Zap size={14} className={aviso.forces?.includes(currentUser?.id || "") ? "fill-current" : ""} />
-                  <span className="text-[9px] font-black">{aviso.forces?.length || 0}</span>
+                  Cancelar
                 </button>
               </div>
-
-              <div className={`p-2 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-pro-teal group-hover:text-white transition-all ${
-                expandedId === aviso.id ? "rotate-90 bg-pro-teal text-white" : ""
-              }`}>
-                <ChevronRight size={18} />
-              </div>
-            </div>
-
-            <AnimatePresence>
-              {expandedId === aviso.id && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="px-5 pb-6 pt-0">
-                    <div className="h-px bg-slate-50 mb-4" />
-                    <p className="text-sm font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">
-                      {aviso.content}
-                    </p>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        ))}
-      </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

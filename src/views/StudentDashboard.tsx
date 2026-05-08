@@ -92,7 +92,7 @@ export const StudentDashboard = ({
               </div>
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Mural Geral</h3>
             </div>
-            <AnnouncementPanel announcements={filteredAnnouncements} currentUser={user} />
+            <AnnouncementPanel announcements={filteredAnnouncements} currentUser={user} studentClasses={studentClasses} />
           </div>
 
           <div className="space-y-6">
