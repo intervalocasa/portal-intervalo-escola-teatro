@@ -115,7 +115,7 @@ export const UserDetailsView = ({
                });
                setPhotoPreview(user.photo || "");
                const linkedClasses = user.role === "Professor" 
-                 ? classes.filter(c => c.teacherId === user.id)
+                 ? classes.filter(c => c.teacherIds?.includes(user.id))
                  : classes.filter(c => c.studentIds?.includes(user.id));
                setSelectedUserClasses(linkedClasses.map(c => c.id));
                
@@ -184,7 +184,7 @@ export const UserDetailsView = ({
               </h4>
                 {(() => {
                   const linkedClasses = user.role === "Professor" 
-                    ? classes.filter(c => c.teacherId === user.id)
+                    ? classes.filter(c => c.teacherIds?.includes(user.id))
                     : classes.filter(c => c.studentIds?.includes(user.id));
 
                   return linkedClasses.length > 0 ? (

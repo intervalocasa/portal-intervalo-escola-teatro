@@ -342,27 +342,27 @@ export default function App() {
 
           // Reference Migration: Update all references to oldDocId with user.uid
           try {
-            // 1. Update Classes (studentIds array and teacherId)
+            // 1. Update Classes (studentIds array and teacherIds array)
             const classesQuery = query(collection(db, "classes"));
             const classesSnap = await getDocs(classesQuery);
             for (const classDoc of classesSnap.docs) {
               const classData = classDoc.data();
               let updated = false;
               let studentIds = classData.studentIds || [];
-              let teacherId = classData.teacherId;
+              let teacherIds = classData.teacherIds || [];
 
               if (studentIds.includes(oldDocId)) {
                 studentIds = studentIds.map((id: string) => id === oldDocId ? user.uid : id);
                 updated = true;
               }
 
-              if (teacherId === oldDocId) {
-                teacherId = user.uid;
+              if (teacherIds.includes(oldDocId)) {
+                teacherIds = teacherIds.map((id: string) => id === oldDocId ? user.uid : id);
                 updated = true;
               }
 
               if (updated) {
-                await updateDoc(doc(db, "classes", classDoc.id), { studentIds, teacherId });
+                await updateDoc(doc(db, "classes", classDoc.id), { studentIds, teacherIds });
               }
             }
 
@@ -1043,12 +1043,13 @@ export default function App() {
       
       // If there's a new comment or a comment changed
       for (const [weekNum, data] of weeklyComments) {
-        const oldData = (existingDiary?.weeklyAttendance || {})[weekNum];
-        if (!oldData || oldData.comment !== data.comment) {
+        const oldData = (existingDiary?.weeklyAttendance || {})[weekNum] as any;
+        const currentData = data as any;
+        if (!oldData || oldData.comment !== currentData.comment) {
           // Trigger notification via Announcement
           await addDoc(collection(db, "avisos"), {
             title: `Novo comentário de frequência - ${selectedClass.code}`,
-            content: `Seu professor comentou na sua frequência da ${weekNum.replace('week', 'Semana ')}: "${data.comment}"`,
+            content: `Seu professor comentou na sua frequência da ${weekNum.replace('week', 'Semana ')}: "${currentData.comment}"`,
             target: "Alunos",
             targetSpecificUsers: true,
             targetUserIds: [selectedDiaryStudentId],
