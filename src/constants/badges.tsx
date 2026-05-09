@@ -57,6 +57,13 @@ export const BADGES: BadgeDefinition[] = [
     defaultMessage: 'Sua visão analítica enriquece nossa escola. Obrigado por compartilhar sua percepção e ajudar a elevar o nível do nosso debate artístico.'
   },
   {
+    badgeId: 'blogueirinho',
+    name: 'Blogueirinho(a)',
+    description: 'Faça mais de 3 posts no mural da turma em um mês para conquistar este selo.',
+    icon: <MessageSquare className="w-8 h-8" />,
+    defaultMessage: 'Você é a voz do nosso mural! Com mais de 3 posts este mês, você ajudou a manter nossa comunidade conectada e inspirada. Continue compartilhando sua jornada!'
+  },
+  {
     badgeId: 'embaixador-da-arte',
     name: 'Embaixador da Arte',
     description: 'Demonstre paixão pela escola e ajude nossa comunidade a crescer com indicações.',

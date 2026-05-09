@@ -48,8 +48,8 @@
       "required": ["code", "type", "isActive"]
     },
     "Evaluation": {
-      "title": "Autoavaliação",
-      "description": "Autoavaliação mensal enviada pelo aluno",
+      "title": "Autoanálise",
+      "description": "Autoanálise mensal enviada pelo aluno",
       "type": "object",
       "properties": {
         "studentId": { "type": "string" },
@@ -275,7 +275,7 @@
     },
     "autoavaliacoes/{evalId}": {
       "schema": "Evaluation",
-      "description": "Coleção de autoavaliações"
+      "description": "Coleção de autoanálises"
     },
     "diarios_classe/{diaryId}": {
       "schema": "Diary",

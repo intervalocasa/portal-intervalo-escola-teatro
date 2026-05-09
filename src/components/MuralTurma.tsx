@@ -11,11 +11,13 @@ import {
   orderBy, 
   onSnapshot, 
   addDoc, 
+  getDocs,
   serverTimestamp, 
   updateDoc, 
   doc, 
   arrayUnion, 
-  arrayRemove 
+  arrayRemove,
+  Timestamp
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../lib/firebase";
@@ -29,27 +31,40 @@ import {
   X, 
   Camera,
   Loader2,
-  ThumbsUp,
-  Zap
+  Share2,
+  Instagram,
+  MessageCircle,
+  Download,
+  Award
 } from "lucide-react";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
+import { Logo } from "./CommonComponents";
+import { toPng } from 'html-to-image';
+import { BADGES } from "../constants/badges";
 
 interface MuralTurmaProps {
   classId: string;
   currentUser: User | null;
+  handleAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string) => Promise<void>;
 }
 
-export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
+export const MuralTurma = ({ classId, currentUser, handleAwardBadge }: MuralTurmaProps) => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [content, setContent] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [sharingPost, setSharingPost] = useState<Post | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const postRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
-    if (!classId) return;
+    if (!classId) {
+      setIsLoading(false);
+      return;
+    }
 
     const q = query(
       collection(db, "posts"),
@@ -93,6 +108,36 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const checkForBlogueirinhoBadge = async (userId: string) => {
+    if (!handleAwardBadge) return;
+
+    try {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+      const postsQuery = query(
+        collection(db, "posts"),
+        where("authorId", "==", userId),
+        where("timestamp", ">=", Timestamp.fromDate(startOfMonth)),
+        where("timestamp", "<=", Timestamp.fromDate(endOfMonth))
+      );
+
+      const snapshot = await getDocs(postsQuery);
+      
+      // If user has more than 3 posts this month (making this the 4th or more)
+      if (snapshot.size > 3) {
+        const badgeDef = BADGES.find(b => b.badgeId === 'blogueirinho');
+        if (badgeDef) {
+          const uniqueKey = `blogueirinho_${now.getMonth() + 1}_${now.getFullYear()}_${userId}`;
+          await handleAwardBadge(userId, badgeDef, undefined, uniqueKey);
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao verificar selo Blogueirinho:", error);
+    }
+  };
+
   const handlePostSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!currentUser || (!content.trim() && !imageFile)) return;
@@ -102,9 +147,16 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
       let imageUrl = "";
 
       if (imageFile) {
-        const storageRef = ref(storage, `posts/${classId}/${Date.now()}_${imageFile.name}`);
-        const uploadResult = await uploadBytes(storageRef, imageFile);
-        imageUrl = await getDownloadURL(uploadResult.ref);
+        try {
+          const storageRef = ref(storage, `posts/${classId}/${Date.now()}_${imageFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`);
+          const uploadResult = await uploadBytes(storageRef, imageFile);
+          imageUrl = await getDownloadURL(uploadResult.ref);
+        } catch (storageError) {
+          console.error("Erro no Firebase Storage:", storageError);
+          alert("Erro ao enviar a imagem. Verifique se o Storage está configurado corretamente.");
+          setIsPosting(false);
+          return;
+        }
       }
 
       await addDoc(collection(db, "posts"), {
@@ -112,7 +164,7 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
         authorName: currentUser.artisticName || currentUser.name,
         classId,
         content: content.trim(),
-        imageUrl,
+        imageUrl: imageUrl || null,
         likes: [],
         forces: [],
         timestamp: serverTimestamp()
@@ -120,7 +172,13 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
 
       setContent("");
       removeImage();
+      alert("Publicado com sucesso!");
+
+      // Check for Blogueirinho badge
+      await checkForBlogueirinhoBadge(currentUser.id);
     } catch (error) {
+      console.error("Erro ao publicar:", error);
+      alert("Erro ao publicar no mural. Tente novamente.");
       handleFirestoreError(error, OperationType.CREATE, "posts");
     } finally {
       setIsPosting(false);
@@ -166,6 +224,70 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `posts/${post.id}`);
+    }
+  };
+
+  const capturePost = async (post: Post, type: 'instagram' | 'whatsapp' | 'download') => {
+    const el = postRefs.current[post.id];
+    if (!el) return;
+
+    setIsCapturing(true);
+    try {
+      // Small delay to ensure any transitions are finished
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const dataUrl = await toPng(el, {
+        cacheBust: true,
+        backgroundColor: '#ffffff',
+        style: {
+          borderRadius: '32px',
+        }
+      });
+
+      if (type === 'download') {
+        const link = document.createElement('a');
+        link.download = `intervalo-post-${post.id}.png`;
+        link.href = dataUrl;
+        link.click();
+      } else {
+        // Try to use Web Share API if available (best for mobile)
+        const blob = await (await fetch(dataUrl)).blob();
+        const file = new File([blob], 'post.png', { type: 'image/png' });
+
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: 'Compartilhar Post - Intervalo',
+              text: 'Confira este post no mural da Intervalo Escola de Teatro!'
+            });
+          } catch (shareError) {
+            // If share fails, fallback to simple link for WhatsApp or alert instructions for Instagram
+            if (type === 'whatsapp') {
+              window.open(`https://wa.me/?text=${encodeURIComponent('Confira este post da Intervalo!')}`, '_blank');
+            } else {
+              alert("Para compartilhar no Instagram, baixe a imagem e faça o upload no seu Stories!");
+            }
+          }
+        } else {
+          // No Web Share API or file sharing not supported
+          if (type === 'whatsapp') {
+            window.open(`https://wa.me/?text=${encodeURIComponent('Confira este post da Intervalo!')}`, '_blank');
+          } else {
+            alert("Sua versão do navegador não suporta compartilhamento direto de arquivos. Facilitamos o download da imagem para você compartilhar manualmente!");
+            const link = document.createElement('a');
+            link.download = `intervalo-post-${post.id}.png`;
+            link.href = dataUrl;
+            link.click();
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao capturar post:", error);
+      alert("Erro ao gerar imagem para compartilhamento.");
+    } finally {
+      setIsCapturing(false);
+      setSharingPost(null);
     }
   };
 
@@ -266,11 +388,30 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
               <motion.div
                 layout
                 key={post.id}
+                ref={(el) => postRefs.current[post.id] = el}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden group hover:shadow-md transition-all"
               >
                 <div className="p-6">
+                  {/* School Header */}
+                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-50">
+                    <div className="flex items-center gap-3">
+                      <Logo className="w-10 h-10 object-contain" />
+                      <span className="text-[11px] font-black text-pro-teal uppercase tracking-widest">
+                        Intervalo Escola de Teatro
+                      </span>
+                    </div>
+                    {/* Share Button in Header */}
+                    <button
+                      onClick={() => setSharingPost(post)}
+                      className="p-2.5 bg-slate-50 text-slate-400 hover:bg-pro-teal hover:text-white rounded-xl transition-all shadow-sm"
+                      title="Compartilhar"
+                    >
+                      <Share2 size={16} />
+                    </button>
+                  </div>
+
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 rounded-xl bg-pro-teal/5 flex items-center justify-center text-pro-teal">
                       <UserIcon size={20} />
@@ -314,10 +455,9 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
                       `}
                     >
                       <div className={`p-2 rounded-xl transition-all ${post.likes?.includes(currentUser?.id || "") ? 'bg-pro-teal/10' : 'bg-slate-50 group-hover:bg-pro-teal/5'}`}>
-                        <ThumbsUp 
-                          size={18} 
-                          className={post.likes?.includes(currentUser?.id || "") ? 'fill-current' : ''} 
-                        />
+                        <span className={`text-[18px] ${post.likes?.includes(currentUser?.id || "") ? '' : 'grayscale opacity-70'}`}>
+                          👏
+                        </span>
                       </div>
                       <span className="text-[10px] font-black uppercase tracking-widest">
                         {post.likes?.length || 0} Aplauso{post.likes?.length !== 1 ? 's' : ''}
@@ -334,13 +474,25 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
                       `}
                     >
                       <div className={`p-2 rounded-xl transition-all ${post.forces?.includes(currentUser?.id || "") ? 'bg-pro-orange/10' : 'bg-slate-50 group-hover:bg-pro-orange/5'}`}>
-                        <Zap 
-                          size={18} 
-                          className={post.forces?.includes(currentUser?.id || "") ? 'fill-current' : ''} 
-                        />
+                        <span className={`text-[18px] ${post.forces?.includes(currentUser?.id || "") ? '' : 'grayscale opacity-70'}`}>
+                          💪
+                        </span>
                       </div>
                       <span className="text-[10px] font-black uppercase tracking-widest">
-                        {post.forces?.length || 0} Força{post.forces?.length !== 1 ? 's' : ''}
+                        {post.forces?.length || 0} Força, ícone!
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => setSharingPost(post)}
+                      className="flex items-center gap-2 text-slate-400 hover:text-pro-teal group transition-all"
+                      title="Compartilhar"
+                    >
+                      <div className="p-2 rounded-xl bg-slate-50 group-hover:bg-pro-teal/5 transition-all">
+                        <Share2 size={18} />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest">
+                        Compartilhar
                       </span>
                     </button>
                   </div>
@@ -350,6 +502,88 @@ export const MuralTurma = ({ classId, currentUser }: MuralTurmaProps) => {
           </div>
         )}
       </div>
+
+      {/* Share Modal */}
+      <AnimatePresence>
+        {sharingPost && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100"
+            >
+              <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="bg-pro-teal/10 p-2 rounded-xl text-pro-teal">
+                    <Share2 size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Compartilhar Post</h3>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Escolha por onde quer brilhar</p>
+                  </div>
+                </div>
+                <button onClick={() => setSharingPost(null)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-3">
+                <button
+                  disabled={isCapturing}
+                  onClick={() => capturePost(sharingPost, 'instagram')}
+                  className="w-full p-5 bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] rounded-2xl flex items-center gap-4 group hover:scale-[1.02] transition-all text-white shadow-lg active:scale-95 disabled:opacity-50 disabled:grayscale"
+                >
+                  <div className="bg-white/20 p-3 rounded-xl shadow-inner">
+                    <Instagram size={24} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-black uppercase tracking-tight">Instagram Stories</p>
+                    <p className="text-[9px] font-bold uppercase tracking-widest opacity-80">Compartilhar sua conquista</p>
+                  </div>
+                  {isCapturing && <Loader2 size={16} className="animate-spin ml-auto" />}
+                </button>
+
+                <button
+                  disabled={isCapturing}
+                  onClick={() => capturePost(sharingPost, 'whatsapp')}
+                  className="w-full p-5 bg-[#25D366] rounded-2xl flex items-center gap-4 group hover:scale-[1.02] transition-all text-white shadow-lg active:scale-95 disabled:opacity-50 disabled:grayscale"
+                >
+                  <div className="bg-black/10 p-3 rounded-xl shadow-inner">
+                    <MessageCircle size={24} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-black uppercase tracking-tight">WhatsApp</p>
+                    <p className="text-[9px] font-bold uppercase tracking-widest opacity-80">Enviar para amigos ou grupo</p>
+                  </div>
+                  {isCapturing && <Loader2 size={16} className="animate-spin ml-auto" />}
+                </button>
+
+                <button
+                  disabled={isCapturing}
+                  onClick={() => capturePost(sharingPost, 'download')}
+                  className="w-full p-5 bg-slate-800 rounded-2xl flex items-center gap-4 group hover:scale-[1.02] transition-all text-white shadow-lg active:scale-95 disabled:opacity-50 disabled:grayscale"
+                >
+                  <div className="bg-white/10 p-3 rounded-xl shadow-inner">
+                    <Download size={24} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-black uppercase tracking-tight">Baixar Imagem</p>
+                    <p className="text-[9px] font-bold uppercase tracking-widest opacity-80">Salvar no seu dispositivo</p>
+                  </div>
+                  {isCapturing && <Loader2 size={16} className="animate-spin ml-auto" />}
+                </button>
+              </div>
+              
+              <div className="p-6 bg-slate-50 border-t border-slate-100 mt-2">
+                <p className="text-[8px] font-black text-slate-400 uppercase text-center tracking-[0.2em] leading-relaxed">
+                  Ao compartilhar, uma imagem do post será gerada <br/> automaticamente para você.
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

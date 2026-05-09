@@ -80,7 +80,7 @@ export const ADULT_OPEN_QUESTIONS = [
 
 export const PROFESSIONAL_OPEN_QUESTIONS = [
   ...ADULT_OPEN_QUESTIONS,
-  { id: "commitment", label: "Como você avalia seu compromisso com a montagem e o elenco?", placeholder: "Reflita sobre sua postura profissional..." }
+  { id: "commitment", label: "Como você analisa seu compromisso com a montagem e o elenco?", placeholder: "Reflita sobre sua postura profissional..." }
 ];
 
 export const SCALES = [

@@ -219,7 +219,7 @@ export const StudentDashboard = ({
                 </div>
               </motion.button>
 
-              {/* Fazer Autoavaliação */}
+              {/* Fazer Autoanálise */}
               <motion.button
                 onClick={() => {
                   setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
@@ -233,7 +233,7 @@ export const StudentDashboard = ({
                   <Calendar size={24} />
                 </div>
                 <div>
-                  <div className="font-bold text-lg leading-none uppercase tracking-tight">Fazer Autoavaliação</div>
+                  <div className="font-bold text-lg leading-none uppercase tracking-tight">Fazer Autoanálise</div>
                   <div className="text-xs opacity-70 mt-1 font-bold">Avalie seu desempenho e metas</div>
                 </div>
               </motion.button>

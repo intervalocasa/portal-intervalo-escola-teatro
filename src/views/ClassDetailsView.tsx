@@ -23,6 +23,7 @@ interface ClassDetailsViewProps {
   setView: (view: string) => void;
   setClassData: (data: any) => void;
   showNotification: (message: string, title?: string, type?: "success" | "warning" | "error") => void;
+  handleAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string) => Promise<void>;
 }
 
 export const ClassDetailsView = ({
@@ -34,7 +35,8 @@ export const ClassDetailsView = ({
   setSelectedUserId,
   setView,
   setClassData,
-  showNotification
+  showNotification,
+  handleAwardBadge
 }: ClassDetailsViewProps) => {
   const [activeTab, setActiveTab] = useState<"elenco" | "mural">("elenco");
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
@@ -232,7 +234,11 @@ export const ClassDetailsView = ({
               ) : (
                 /* Mural View */
                 <div className="animate-in fade-in slide-in-from-bottom-4">
-                  <MuralTurma classId={targetClass.id} currentUser={enrichedUser} />
+                  <MuralTurma 
+                    classId={targetClass.id} 
+                    currentUser={enrichedUser} 
+                    handleAwardBadge={handleAwardBadge}
+                  />
                 </div>
               )}
 

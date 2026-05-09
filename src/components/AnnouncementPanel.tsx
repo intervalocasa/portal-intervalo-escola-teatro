@@ -4,7 +4,7 @@
  */
 
 import { motion, AnimatePresence } from "motion/react";
-import { Megaphone, X, ChevronRight, Bell, ThumbsUp, Zap, Share2, Drama } from "lucide-react";
+import { Megaphone, X, ChevronRight, Bell, Zap, Share2, Drama } from "lucide-react";
 import { useState, MouseEvent } from "react";
 import { doc, updateDoc, arrayUnion, arrayRemove, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -160,9 +160,10 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
                         ? "bg-pro-teal/10 text-pro-teal" 
                         : "bg-slate-50 text-slate-400 hover:bg-pro-teal/5"
                     }`}
+                    title="Aplaudir"
                   >
-                    <ThumbsUp size={14} className={aviso.likes?.includes(currentUser?.id || "") ? "fill-current" : ""} />
-                    <span className="text-[9px] font-black">{aviso.likes?.length || 0}</span>
+                    <span className={`text-[14px] ${aviso.likes?.includes(currentUser?.id || "") ? "" : "grayscale opacity-70"}`}>👏</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{aviso.likes?.length || 0} Aplausos</span>
                   </button>
                   <button
                     onClick={(e) => toggleForce(e, aviso)}
@@ -171,9 +172,10 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
                         ? "bg-pro-orange/10 text-pro-orange" 
                         : "bg-slate-50 text-slate-400 hover:bg-pro-orange/5"
                     }`}
+                    title="Força, ícone!"
                   >
-                    <Zap size={14} className={aviso.forces?.includes(currentUser?.id || "") ? "fill-current" : ""} />
-                    <span className="text-[9px] font-black">{aviso.forces?.length || 0}</span>
+                    <span className={`text-[14px] ${aviso.forces?.includes(currentUser?.id || "") ? "" : "grayscale opacity-70"}`}>💪</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{aviso.forces?.length || 0} Força, ícone!</span>
                   </button>
                 </div>
 

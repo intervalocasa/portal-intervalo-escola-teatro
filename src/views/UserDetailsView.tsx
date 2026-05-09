@@ -398,7 +398,7 @@ export const UserDetailsView = ({
 
           {user.role === "Aluno" && (
             <div className="col-span-full mt-4">
-              <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3 mb-4">Histórico de Autoavaliações</h4>
+              <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3 mb-4">Histórico de Autoanálises</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {evaluations.filter(e => e.studentId === selectedUserId).length > 0 ? (
                   evaluations
@@ -433,7 +433,7 @@ export const UserDetailsView = ({
                     ))
                 ) : (
                   <div className="col-span-full py-6 text-center bg-slate-100/50 rounded-2xl border-2 border-dashed border-slate-200">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nenhuma autoavaliação enviada</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nenhuma autoanálise enviada</p>
                   </div>
                 )}
               </div>

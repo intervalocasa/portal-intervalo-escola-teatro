@@ -1535,13 +1535,13 @@ export default function App() {
 
       if (existingEval) {
         await updateDoc(doc(db, "autoavaliacoes", existingEval.id), evaluationData);
-        showNotification("Autoavaliação atualizada com sucesso!", "Sucesso");
+        showNotification("Autoanálise atualizada com sucesso!", "Sucesso");
       } else {
         await addDoc(collection(db, "autoavaliacoes"), {
           ...evaluationData,
           createdAt: serverTimestamp()
         });
-        showNotification("Autoavaliação enviada com sucesso!", "Sucesso");
+        showNotification("Autoanálise enviada com sucesso!", "Sucesso");
       }
       setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
       setView("dashboard");
@@ -1949,6 +1949,7 @@ export default function App() {
             setView={setView}
             setClassData={setClassData}
             showNotification={showNotification}
+            handleAwardBadge={handleAwardBadge}
           />
         ) : view === "register" || view === "edit_self" || view === "edit_user" ? (
           <RegisterEditUserView 

@@ -27,10 +27,20 @@ export const MyConquests: React.FC<MyConquestsProps> = ({ userBadges }) => {
 
   // Grouping
   const uniqueBadgeIds = ['embaixador-da-arte'];
-  const monthlyBadgeIds = ['presenca-vip', 'rato-de-coxia', 'curinga-cenico', 'escuta-ativa', 'critico-de-arte'];
+  const monthlyBadgeIds = ['presenca-vip', 'rato-de-coxia', 'curinga-cenico', 'escuta-ativa', 'critico-de-arte', 'blogueirinho'];
 
   const getBadgeCount = (badgeId: string) => {
     return userBadges.filter(ub => ub.badgeId === badgeId).length;
+  };
+
+  const getBadgeHistory = (badgeId: string) => {
+    return userBadges
+      .filter(ub => ub.badgeId === badgeId)
+      .sort((a, b) => {
+        const dateA = a.dateReceived?.toDate ? a.dateReceived.toDate() : new Date();
+        const dateB = b.dateReceived?.toDate ? b.dateReceived.toDate() : new Date();
+        return dateB.getTime() - dateA.getTime();
+      });
   };
 
   const getLatestBadgeForId = (badgeId: string, filterByCycle = false) => {
@@ -52,24 +62,30 @@ export const MyConquests: React.FC<MyConquestsProps> = ({ userBadges }) => {
   const renderBadge = (badgeDef: any, section: 'unique' | 'monthly') => {
     const isUnique = uniqueBadgeIds.includes(badgeDef.badgeId);
     const count = getBadgeCount(badgeDef.badgeId);
+    const latestOverall = getLatestBadgeForId(badgeDef.badgeId, false);
     const latestInCycle = getLatestBadgeForId(badgeDef.badgeId, section === 'monthly');
-    const hasLatest = !!latestInCycle;
     
+    // For unique section, we show it if ever earned. For monthly, only if earned in cycle.
+    const hasAny = !!latestOverall;
+    const hasInCycle = !!latestInCycle;
+    const isActive = section === 'monthly' ? hasInCycle : hasAny;
+    const targetBadge = section === 'monthly' ? latestInCycle : latestOverall;
+
     return (
       <button
         key={badgeDef.badgeId}
-        onClick={() => latestInCycle && setSelectedBadge(latestInCycle)}
+        onClick={() => targetBadge && setSelectedBadge(targetBadge)}
         title={`${badgeDef.name}: ${badgeDef.description}`}
         className={`
           p-5 rounded-[32px] border-2 transition-all flex flex-col items-center text-center gap-3 group relative
-          ${hasLatest 
+          ${isActive 
             ? 'bg-white border-slate-100 hover:border-amber-400 hover:shadow-xl hover:-translate-y-1' 
             : 'bg-slate-50/50 border-transparent grayscale opacity-40 cursor-not-allowed'}
         `}
       >
         <div className={`
           w-14 h-14 rounded-2xl flex items-center justify-center transition-all
-          ${hasLatest ? 'bg-gradient-to-br from-amber-50 to-amber-100/50 text-amber-600' : 'bg-slate-200 text-slate-400'}
+          ${isActive ? 'bg-gradient-to-br from-amber-50 to-amber-100/50 text-amber-600' : 'bg-slate-200 text-slate-400'}
         `}>
           {badgeDef.icon}
         </div>
@@ -86,13 +102,13 @@ export const MyConquests: React.FC<MyConquestsProps> = ({ userBadges }) => {
           </p>
         </div>
         
-        {count > 1 && !isUnique && (
+        {count > 0 && !isUnique && (
           <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-[10px] font-black px-2 py-1 rounded-full border-2 border-white shadow-sm">
             {count}
           </div>
         )}
 
-        {hasLatest && isUnique && (
+        {isActive && isUnique && (
           <div className="absolute -top-2 -right-2 w-6 h-6 bg-amber-500 text-white rounded-full flex items-center justify-center border-4 border-white">
             <Award size={10} fill="currentColor" />
           </div>
@@ -175,8 +191,8 @@ export const MyConquests: React.FC<MyConquestsProps> = ({ userBadges }) => {
                     {selectedBadge.name}
                   </h3>
                   <div className="flex items-center justify-center gap-2 text-[10px] font-black text-amber-600 uppercase tracking-[0.2em]">
-                    <Calendar size={12} />
-                    Conquistado em {selectedBadge.dateReceived?.toDate ? selectedBadge.dateReceived.toDate().toLocaleDateString('pt-BR') : 'Recentemente'}
+                    <Award size={12} />
+                    {getBadgeCount(selectedBadge.badgeId)} Conquistas no total
                   </div>
                 </div>
               </div>
@@ -184,12 +200,39 @@ export const MyConquests: React.FC<MyConquestsProps> = ({ userBadges }) => {
               <div className="p-12 pt-0 text-center space-y-8">
                 <div className="bg-slate-50 rounded-[32px] p-8 border border-slate-100 relative">
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white px-4 py-1 rounded-full border border-slate-100">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Reconhecimento</span>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Última Mensagem</span>
                   </div>
                   <p className="text-sm font-bold text-slate-700 italic leading-relaxed">
                     "{selectedBadge.message}"
                   </p>
                 </div>
+
+                {getBadgeCount(selectedBadge.badgeId) > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 px-6">
+                      <div className="h-[2px] flex-1 bg-slate-100"></div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Histórico de Meses</span>
+                      <div className="h-[2px] flex-1 bg-slate-100"></div>
+                    </div>
+                    
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {getBadgeHistory(selectedBadge.badgeId).map((history, idx) => {
+                        const date = history.dateReceived?.toDate ? history.dateReceived.toDate() : new Date();
+                        return (
+                          <div 
+                            key={idx}
+                            className="bg-white border border-slate-100 px-4 py-2 rounded-2xl flex flex-col items-center gap-1 shadow-sm"
+                          >
+                            <span className="text-[10px] font-black text-slate-800 uppercase">
+                              {date.toLocaleString('pt-BR', { month: 'short', year: 'numeric' }).replace('.', '')}
+                            </span>
+                            <div className="w-1 h-1 bg-amber-500 rounded-full"></div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <button
                   onClick={() => setSelectedBadge(null)}

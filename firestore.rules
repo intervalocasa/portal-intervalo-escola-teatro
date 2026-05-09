@@ -31,9 +31,9 @@ service cloud.firestore {
       return data.authorId is string && data.authorId == request.auth.uid
           && data.classId is string && data.classId.size() > 0
           && data.content is string && data.content.size() <= 2000
-          && data.likes is list
-          && (data.forces == null || data.forces is list)
-          && (data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 2048));
+          && data.get('likes', []) is list
+          && (data.get('forces', []) is list)
+          && (data.get('imageUrl', null) == null || (data.imageUrl is string && data.imageUrl.size() <= 5000));
     }
 
     function isValidUser(data) {

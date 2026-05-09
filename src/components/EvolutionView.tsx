@@ -9,7 +9,8 @@ import {
   AlertCircle,
   X,
   ArrowLeft,
-  Calendar
+  Calendar,
+  User as UserIcon
 } from 'lucide-react';
 import { Logo, BackButton } from './CommonComponents';
 import { db } from '../lib/firebase';
@@ -51,6 +52,8 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
   const [meetingModal, setMeetingModal] = React.useState<{ classId: string; className: string } | null>(null);
   const [isScheduling, setIsScheduling] = React.useState(false);
   const [scheduleSuccess, setScheduleSuccess] = React.useState(false);
+
+  const [teacherCommentModal, setTeacherCommentModal] = React.useState<{ text: string; teacherName: string; teacherPhoto?: string } | null>(null);
 
   const studentEvals = evaluations.filter(e => e.studentId === currentUser?.uid);
   
@@ -138,7 +141,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
               </div>
               <div className="space-y-2">
                   <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Ainda não há dados de evolução</h3>
-                  <p className="text-sm text-slate-400 font-bold max-w-xs mx-auto">Realize sua autoavaliação mensal para começar a acompanhar seu progresso.</p>
+                  <p className="text-sm text-slate-400 font-bold max-w-xs mx-auto">Realize sua autoanálise mensal para começar a acompanhar seu progresso.</p>
               </div>
             </div>
           ) : (
@@ -366,39 +369,38 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                       </div>
                                       
                                       {period.professorDiary?.criteriaObs?.[c.id] && (
-                                        <div className="mt-2 p-3 bg-teal-50/50 rounded-xl border border-teal-100/50">
-                                          <p className="text-[7px] font-black text-pro-teal uppercase mb-1 flex items-center gap-1">
-                                            <CheckCircle2 size={8} /> Feedback do Professor
-                                          </p>
-                                          <p className="text-[9px] font-medium text-slate-600 leading-relaxed italic">
-                                            "{period.professorDiary.criteriaObs[c.id]}"
-                                          </p>
-                                        </div>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const teacher = users.find(u => u.id === period.professorDiary.teacherId);
+                                            setTeacherCommentModal({
+                                              text: period.professorDiary.criteriaObs[c.id],
+                                              teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
+                                              teacherPhoto: teacher?.photo
+                                            });
+                                          }}
+                                          className="mt-3 w-full p-2.5 bg-slate-50 hover:bg-pro-teal/5 border border-slate-100 rounded-xl flex items-center justify-center gap-2 group/comment transition-all active:scale-[0.98]"
+                                        >
+                                          {users.find(u => u.id === period.professorDiary.teacherId)?.photo ? (
+                                            <img 
+                                              src={users.find(u => u.id === period.professorDiary.teacherId)?.photo} 
+                                              alt="Professor" 
+                                              className="w-5 h-5 rounded-full object-cover border border-slate-200"
+                                            />
+                                          ) : (
+                                            <div className="w-5 h-5 rounded-full bg-pro-teal/10 flex items-center justify-center text-pro-teal">
+                                              <UserIcon size={10} />
+                                            </div>
+                                          )}
+                                          <span className="text-[9px] font-black text-slate-500 group-hover/comment:text-pro-teal uppercase tracking-widest transition-colors">
+                                            Comentário do professor
+                                          </span>
+                                        </button>
                                       )}
                                     </div>
                                   );
                                 })}
                               </div>
-
-                              {/* Final Pedagogical Report */}
-                              {period.professorDiary?.generalPedagogicalObs && (
-                                <div className="mt-6 p-6 bg-white rounded-3xl border border-slate-100 shadow-sm space-y-3" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-2xl bg-[#016a86]/10 flex items-center justify-center text-[#016a86]">
-                                      <Drama size={20} />
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-black text-[#016a86] uppercase tracking-widest">Parecer Pedagógico Final</p>
-                                      <h4 className="text-xs font-black text-slate-800 uppercase">Considerações do Professor</h4>
-                                    </div>
-                                  </div>
-                                  <div className="p-4 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                                    <p className="text-sm font-medium text-slate-700 leading-relaxed italic whitespace-pre-wrap">
-                                      {period.professorDiary.generalPedagogicalObs}
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
                             </>
                           ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -412,7 +414,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                                    "Sem avaliação";
 
                                 return (
-                                  <div key={c.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between gap-3" onClick={(e) => e.stopPropagation()}>
+                                  <div key={c.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
                                     <div>
                                       <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight line-clamp-1">{c.label}</h4>
                                       <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Competência</p>
@@ -435,29 +437,95 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                         </div>
                                       )}
 
-                                      <button 
+                                      <div className="flex flex-col gap-2">
+                                        <button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMeetingModal({ 
+                                              classId: period.classId, 
+                                              className: classes.find(c => c.id === period.classId)?.code || period.className || "Turma"
+                                            });
+                                          }}
+                                          className="flex flex-col items-end group/mask"
+                                        >
+                                          <p className="text-[7px] font-black text-slate-400 uppercase group-hover/mask:text-pro-teal transition-colors text-right">Professor</p>
+                                          <div className="bg-slate-50 p-1 rounded-lg text-slate-200 group-hover/mask:bg-pro-teal group-hover/mask:text-white transition-all">
+                                            <Drama size={16} />
+                                          </div>
+                                        </button>
+                                      </div>
+                                    </div>
+                                    
+                                    {period.professorDiary?.criteriaObs?.[c.id] && (
+                                      <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setMeetingModal({ 
-                                            classId: period.classId, 
-                                            className: classes.find(c => c.id === period.classId)?.code || period.className || "Turma"
+                                          const teacher = users.find(u => u.id === period.professorDiary.teacherId);
+                                          setTeacherCommentModal({
+                                            text: period.professorDiary.criteriaObs[c.id],
+                                            teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
+                                            teacherPhoto: teacher?.photo
                                           });
                                         }}
-                                        className="flex-1 flex flex-col items-end group/mask"
+                                        className="mt-3 w-full p-2 bg-slate-50 hover:bg-pro-teal/5 border border-slate-100 rounded-xl flex items-center justify-center gap-2 group/comment transition-all active:scale-[0.98]"
                                       >
-                                        <p className="text-[7px] font-black text-slate-400 uppercase group-hover/mask:text-pro-teal transition-colors text-right">Professor</p>
-                                        <div className="bg-slate-50 p-1 rounded-lg text-slate-200 group-hover/mask:bg-pro-teal group-hover/mask:text-white transition-all">
-                                          <Drama size={16} />
-                                        </div>
+                                        {users.find(u => u.id === period.professorDiary.teacherId)?.photo ? (
+                                          <img 
+                                            src={users.find(u => u.id === period.professorDiary.teacherId)?.photo} 
+                                            alt="Professor" 
+                                            className="w-4 h-4 rounded-full object-cover border border-slate-200"
+                                          />
+                                        ) : (
+                                          <div className="w-4 h-4 rounded-full bg-pro-teal/10 flex items-center justify-center text-pro-teal">
+                                            <UserIcon size={9} />
+                                          </div>
+                                        )}
+                                        <span className="text-[8px] font-black text-slate-500 group-hover/comment:text-pro-teal uppercase tracking-widest transition-colors">
+                                          Comentário
+                                        </span>
                                       </button>
-                                    </div>
+                                    )}
                                   </div>
                                 );
                               })}
                             </div>
-                          )}
-                        </div>
-                      )}
+                            )}
+
+                            {/* Final Pedagogical Report - Moved outside conditional to apply to both types */}
+                            {period.professorDiary?.generalPedagogicalObs && (
+                              <div className="mt-8 flex justify-center w-full">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const teacher = users.find(u => u.id === period.professorDiary.teacherId);
+                                    setTeacherCommentModal({
+                                      text: period.professorDiary.generalPedagogicalObs,
+                                      teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
+                                      teacherPhoto: teacher?.photo
+                                    });
+                                  }}
+                                  className="p-6 bg-white rounded-[32px] border border-slate-100 shadow-sm hover:shadow-md transition-all flex items-center gap-4 group/general active:scale-[0.98]"
+                                >
+                                  <div className="w-12 h-12 rounded-2xl bg-[#016a86]/5 flex items-center justify-center text-[#016a86] group-hover/general:bg-[#016a86] group-hover/general:text-white transition-all">
+                                    {users.find(u => u.id === period.professorDiary.teacherId)?.photo ? (
+                                      <img 
+                                        src={users.find(u => u.id === period.professorDiary.teacherId)?.photo} 
+                                        alt="Professor" 
+                                        className="w-full h-full rounded-2xl object-cover"
+                                      />
+                                    ) : (
+                                      <Drama size={24} />
+                                    )}
+                                  </div>
+                                  <div className="text-left">
+                                    <p className="text-[10px] font-black text-[#016a86] uppercase tracking-widest">Parecer Pedagógico Final</p>
+                                    <h4 className="text-sm font-black text-slate-800 uppercase group-hover/general:text-[#016a86] transition-colors">Ver comentário do professor</h4>
+                                  </div>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                       {!finalGrade && (
                         <div className="px-8 pb-8">
@@ -465,7 +533,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                              <AlertCircle size={14} className="text-pro-orange" />
                              <p className="text-[11px] font-bold text-slate-500 italic">
                                {statusText === "Aguardando você" 
-                                 ? "Realize sua autoavaliação para calcular a média final."
+                                 ? "Realize sua autoanálise para calcular a média final."
                                  : "Aguardando avaliação final do professor."}
                              </p>
                           </div>
@@ -598,6 +666,77 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                 >
                   Entendi
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {teacherCommentModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[110] flex items-center justify-center p-6"
+            onClick={() => setTeacherCommentModal(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white rounded-[40px] w-full max-w-lg overflow-hidden shadow-2xl relative"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden">
+                <div className="relative z-10">
+                  <div className="w-24 h-24 rounded-[32px] bg-white p-1 shadow-2xl mx-auto mb-4">
+                    {teacherCommentModal.teacherPhoto ? (
+                      <img 
+                        src={teacherCommentModal.teacherPhoto} 
+                        alt={teacherCommentModal.teacherName} 
+                        className="w-full h-full rounded-[28px] object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full rounded-[28px] bg-slate-50 flex items-center justify-center text-pro-teal">
+                        <UserIcon size={40} />
+                      </div>
+                    )}
+                  </div>
+                  <h3 className="text-white text-2xl font-black uppercase tracking-tight">Comentário do Professor</h3>
+                  <p className="text-teal-100/70 text-[10px] font-black uppercase tracking-widest mt-2">{teacherCommentModal.teacherName}</p>
+                </div>
+                
+                {/* Background Pattern */}
+                <div className="absolute top-0 right-0 p-8 opacity-10 blur-2xl">
+                   <Drama size={200} className="text-white" />
+                </div>
+                
+                <button 
+                  onClick={() => setTeacherCommentModal(null)}
+                  className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="p-10 space-y-8">
+                <div className="relative">
+                  <div className="absolute -left-4 -top-4 text-pro-teal/10">
+                    <Drama size={80} />
+                  </div>
+                  <p className="text-slate-700 font-medium leading-relaxed italic text-lg relative z-10 whitespace-pre-wrap">
+                    "{teacherCommentModal.text}"
+                  </p>
+                </div>
+
+                <button 
+                  onClick={() => setTeacherCommentModal(null)}
+                  className="w-full py-5 bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-3xl font-black uppercase tracking-widest text-xs shadow-xl shadow-slate-900/20 active:scale-[0.98] transition-all"
+                >
+                  Entendi, obrigado!
+                </button>
+              </div>
+              
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-center">
+                 <Logo className="h-6 opacity-30 grayscale" />
               </div>
             </motion.div>
           </motion.div>

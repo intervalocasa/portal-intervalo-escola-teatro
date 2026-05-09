@@ -69,7 +69,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
        </div>
        <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-8 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
          <Logo className="h-10 md:h-16 w-auto mb-1" />
-         <h1 className="text-white text-xl md:text-3xl font-bold uppercase tracking-tight">Autoavaliação Mensal</h1>
+         <h1 className="text-white text-xl md:text-3xl font-bold uppercase tracking-tight">Autoanálise Mensal</h1>
          <p className="text-teal-50/70 text-xs md:text-sm mt-1 uppercase tracking-widest leading-none font-bold">Acompanhe seu desempenho</p>
       </div>
 
@@ -83,7 +83,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                   <Calendar size={24} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Período de Avaliação</h3>
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Período de Análise</h3>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selecione o mês de referência</p>
                 </div>
               </div>
@@ -143,7 +143,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
             <div className="space-y-6">
               <div className="text-center space-y-2 mb-8">
                 <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Selecione sua Turma</h2>
-                <p className="text-slate-500 font-bold">Para qual destas turmas deseja realizar a autoavaliação de {new Date(0, assessmentMonth - 1).toLocaleString('pt-BR', { month: 'long' })}?</p>
+                <p className="text-slate-500 font-bold">Para qual destas turmas deseja realizar a autoanálise de {new Date(0, assessmentMonth - 1).toLocaleString('pt-BR', { month: 'long' })}?</p>
               </div>
               
               <div className="grid gap-4">
@@ -178,7 +178,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                         </div>
                         {hasSubmitted ? (
                           <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-full text-[10px] font-black uppercase tracking-widest">
-                            <Eye size={12} /> Ver Enviada
+                            <Eye size={12} /> Ver Análise Enviada
                           </div>
                         ) : (
                           <ChevronDown size={20} className="text-slate-300 -rotate-90" />
@@ -207,7 +207,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                   <CheckCircle2 size={24} />
                 </div>
                 <div>
-                  <p className="text-green-800 font-black uppercase tracking-tight">Avaliação enviada com sucesso</p>
+                  <p className="text-green-800 font-black uppercase tracking-tight">Análise enviada com sucesso</p>
                   <p className="text-green-700/70 text-[10px] font-black uppercase tracking-widest">Referente a {new Date(0, viewingEvaluation.month - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()} / {viewingEvaluation.year}</p>
                 </div>
                 <button 
@@ -223,7 +223,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                   }}
                   className="px-4 py-2 bg-white border border-green-200 text-green-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-100 transition-all ml-auto"
                 >
-                  Editar
+                  Editar Análise
                 </button>
                 <button 
                   onClick={() => setViewingEvaluation(null)}
@@ -364,7 +364,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                 <div className="relative z-10">
                   <div className="flex items-center gap-3 mb-2">
                     <Drama size={24} className="text-pro-yellow" />
-                    <h2 className="text-xl font-black uppercase tracking-tight">Autoavaliação ({new Date(0, assessmentMonth - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()} / {assessmentYear})</h2>
+                    <h2 className="text-xl font-black uppercase tracking-tight">Autoanálise ({new Date(0, assessmentMonth - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()} / {assessmentYear})</h2>
                   </div>
                   <p className="text-teal-50/70 text-sm font-bold max-w-lg">
                     Turma: {classes.find(c => c.id === assessmentForm.classId)?.code} - {classes.find(c => c.id === assessmentForm.classId)?.type}
@@ -459,7 +459,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                   }
                   className="flex-[2] py-5 bg-pro-teal text-white font-black rounded-2xl shadow-xl shadow-teal-900/20 hover:brightness-110 active:scale-[0.98] transition-all uppercase tracking-widest text-[10px] disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
                 >
-                  Enviar Autoavaliação
+                  Enviar Autoanálise
                 </button>
               </div>
             </form>
