@@ -77,14 +77,14 @@ export const MyConquests: React.FC<MyConquestsProps> = ({ userBadges }) => {
         onClick={() => targetBadge && setSelectedBadge(targetBadge)}
         title={`${badgeDef.name}: ${badgeDef.description}`}
         className={`
-          p-5 rounded-[32px] border-2 transition-all flex flex-col items-center text-center gap-3 group relative
+          p-3 sm:p-5 rounded-[24px] sm:rounded-[32px] border-2 transition-all flex flex-col items-center text-center gap-2 sm:gap-3 group relative
           ${isActive 
             ? 'bg-white border-slate-100 hover:border-amber-400 hover:shadow-xl hover:-translate-y-1' 
             : 'bg-slate-50/50 border-transparent grayscale opacity-40 cursor-not-allowed'}
         `}
       >
         <div className={`
-          w-14 h-14 rounded-2xl flex items-center justify-center transition-all
+          w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all
           ${isActive ? 'bg-gradient-to-br from-amber-50 to-amber-100/50 text-amber-600' : 'bg-slate-200 text-slate-400'}
         `}>
           {badgeDef.icon}
@@ -133,7 +133,7 @@ export const MyConquests: React.FC<MyConquestsProps> = ({ userBadges }) => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
           {BADGES.filter(b => monthlyBadgeIds.includes(b.badgeId)).map(b => renderBadge(b, 'monthly'))}
         </div>
       </div>

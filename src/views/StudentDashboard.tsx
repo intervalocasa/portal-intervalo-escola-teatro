@@ -63,7 +63,7 @@ export const StudentDashboard = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-[480px] bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col md:flex-row"
+      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-full bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col md:flex-row"
     >
       <div className={`bg-gradient-to-br from-[#016a86] to-[#004e63] p-8 text-center relative overflow-hidden flex flex-col items-center justify-center gap-2 md:w-[350px] md:p-12 shrink-0 md:min-h-screen`}>
         <Logo className="h-16 md:h-32 w-auto mb-4" />
@@ -150,19 +150,19 @@ export const StudentDashboard = ({
               onClick={() => setIsFeedbackOpen(true)}
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
-              className="w-full p-8 bg-gradient-to-br from-[#016a86] to-slate-800 rounded-[32px] flex items-center justify-between text-white shadow-xl shadow-teal-900/10 transition-all border-b-8 border-black/20 text-left relative overflow-hidden group mb-4"
+              className="w-full p-6 md:p-8 bg-gradient-to-br from-[#016a86] to-slate-800 rounded-[28px] md:rounded-[32px] flex items-center justify-between text-white shadow-xl shadow-teal-900/10 transition-all border-b-8 border-black/20 text-left relative overflow-hidden group mb-4"
             >
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-white/10 transition-all" />
-              <div className="flex items-center gap-6 relative z-10">
-                <div className="bg-white/10 p-4 rounded-3xl shadow-lg ring-1 ring-white/20 backdrop-blur-sm">
-                  <Sparkles size={32} className="text-[#ffbc00] animate-pulse" />
+              <div className="flex items-center gap-4 md:gap-6 relative z-10">
+                <div className="bg-white/10 p-3 md:p-4 rounded-2xl md:rounded-3xl shadow-lg ring-1 ring-white/20 backdrop-blur-sm shrink-0">
+                  <Sparkles size={24} className="md:w-8 md:h-8 text-[#ffbc00] animate-pulse" />
                 </div>
-                <div>
-                  <div className="font-black text-2xl uppercase tracking-tighter leading-none">Como foi sua aula?</div>
-                  <div className="text-[10px] font-black uppercase tracking-widest opacity-60 mt-2">Dê sua percepção em 10 segundos</div>
+                <div className="min-w-0">
+                  <div className="font-black text-lg md:text-2xl uppercase tracking-tighter leading-none break-words">Como foi sua aula?</div>
+                  <div className="text-[8px] md:text-[10px] font-black uppercase tracking-widest opacity-60 mt-1 md:mt-2">Dê sua percepção agora</div>
                 </div>
               </div>
-              <ChevronRight size={32} className="opacity-30 group-hover:translate-x-2 transition-transform hidden md:block" />
+              <ChevronRight size={32} className="opacity-30 group-hover:translate-x-2 transition-transform hidden lg:block" />
             </motion.button>
 
             {/* Atualizar Cadastro */}

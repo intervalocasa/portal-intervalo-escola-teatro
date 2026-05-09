@@ -216,8 +216,8 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                         return next;
                       });
                     }}>
-                      <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 relative">
-                        <div className="flex items-center gap-6">
+                      <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 relative">
+                        <div className="flex items-center gap-4 md:gap-6">
                           <div className="w-16 h-16 bg-slate-50 rounded-[24px] flex flex-col items-center justify-center text-pro-teal border border-slate-100 shadow-inner group-hover:bg-pro-teal group-hover:text-white transition-colors">
                             <span className="text-[9px] font-black uppercase tracking-widest opacity-40">{period.year}</span>
                             <span className="text-xl font-black leading-none">{new Date(0, period.month - 1).toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}</span>
@@ -315,7 +315,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                 </div>
                               </div>
                               
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {ADULT_COURSE_CRITERIA.map(c => {
                                   const selfNote = Number(period.selfAssessment?.notes?.[c.id] || 0);
                                   const profNote = Number(period.professorDiary?.grades?.[c.id] || 0);
@@ -328,7 +328,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                                    GRADE_LEGEND[4];
 
                                   return (
-                                    <div key={c.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between gap-3" onClick={(e) => e.stopPropagation()}>
+                                    <div key={c.id} className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between gap-4" onClick={(e) => e.stopPropagation()}>
                                       <div>
                                         <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight line-clamp-1">{c.label}</h4>
                                         <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Competência</p>
@@ -379,21 +379,21 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                               teacherPhoto: teacher?.photo
                                             });
                                           }}
-                                          className="mt-3 w-full p-2.5 bg-slate-50 hover:bg-pro-teal/5 border border-slate-100 rounded-xl flex items-center justify-center gap-2 group/comment transition-all active:scale-[0.98]"
+                                          className="mt-3 w-full p-2.5 bg-white hover:bg-pro-teal/5 border border-slate-100 rounded-xl flex items-center justify-center gap-2 group/comment transition-all active:scale-[0.98] shadow-sm hover:shadow-md"
                                         >
                                           {users.find(u => u.id === period.professorDiary.teacherId)?.photo ? (
                                             <img 
                                               src={users.find(u => u.id === period.professorDiary.teacherId)?.photo} 
                                               alt="Professor" 
-                                              className="w-5 h-5 rounded-full object-cover border border-slate-200"
+                                              className="w-6 h-6 rounded-full object-cover border-2 border-white shadow-sm ring-1 ring-slate-100"
                                             />
                                           ) : (
-                                            <div className="w-5 h-5 rounded-full bg-pro-teal/10 flex items-center justify-center text-pro-teal">
-                                              <UserIcon size={10} />
+                                            <div className="w-6 h-6 rounded-full bg-pro-teal/10 flex items-center justify-center text-pro-teal shadow-sm">
+                                              <UserIcon size={12} />
                                             </div>
                                           )}
-                                          <span className="text-[9px] font-black text-slate-500 group-hover/comment:text-pro-teal uppercase tracking-widest transition-colors">
-                                            Comentário do professor
+                                          <span className="text-[9px] font-black text-slate-600 group-hover/comment:text-pro-teal uppercase tracking-widest transition-colors">
+                                            Comentário do Professor
                                           </span>
                                         </button>
                                       )}
@@ -419,42 +419,43 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                       <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight line-clamp-1">{c.label}</h4>
                                       <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Competência</p>
                                     </div>
-                                    <div className="flex items-end justify-between border-t border-slate-50 pt-2 gap-2">
-                                      <div className="text-left flex-1 min-w-0">
-                                        <p className="text-[7px] font-black text-pro-teal uppercase opacity-60 truncate">Nota dada por mim</p>
-                                        <p className="text-[10px] font-black text-pro-teal leading-none line-clamp-2">{selfLabel}</p>
-                                      </div>
-
-                                      {period.professorDiary?.status === "concluido" ? (
-                                        <div className="text-center flex-1 border-x border-slate-50 px-2 min-w-0">
-                                          <p className="text-[7px] font-black text-slate-400 uppercase truncate">Média Final</p>
-                                          <p className="text-lg font-black text-slate-800 leading-none">{compAvg.toFixed(1)}</p>
+                                      <div className="flex flex-col sm:flex-row items-stretch sm:items-end justify-between border-t border-slate-50 pt-2 gap-3 sm:gap-2">
+                                        <div className="text-left flex-1 min-w-0">
+                                          <p className="text-[7px] font-black text-pro-teal uppercase opacity-60 truncate">Nota dada por mim</p>
+                                          <p className="text-[10px] font-black text-pro-teal leading-none line-clamp-2">{selfLabel}</p>
                                         </div>
-                                      ) : (
-                                        <div className="text-center flex-1 border-x border-slate-50 px-2">
-                                          <p className="text-[7px] font-black text-slate-400 uppercase">Processo</p>
-                                          <p className="text-lg font-black text-slate-200 leading-none">—</p>
-                                        </div>
-                                      )}
-
-                                      <div className="flex flex-col gap-2">
-                                        <button 
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setMeetingModal({ 
-                                              classId: period.classId, 
-                                              className: classes.find(c => c.id === period.classId)?.code || period.className || "Turma"
-                                            });
-                                          }}
-                                          className="flex flex-col items-end group/mask"
-                                        >
-                                          <p className="text-[7px] font-black text-slate-400 uppercase group-hover/mask:text-pro-teal transition-colors text-right">Professor</p>
-                                          <div className="bg-slate-50 p-1 rounded-lg text-slate-200 group-hover/mask:bg-pro-teal group-hover/mask:text-white transition-all">
-                                            <Drama size={16} />
+  
+                                        {period.professorDiary?.status === "concluido" ? (
+                                          <div className="text-center flex-1 border-x border-slate-50 px-2 min-w-0">
+                                            <p className="text-[7px] font-black text-slate-400 uppercase truncate">Média Final</p>
+                                            <p className="text-lg font-black text-slate-800 leading-none">{compAvg.toFixed(1)}</p>
                                           </div>
-                                        </button>
+                                        ) : (
+                                          <div className="text-center flex-1 border-x border-slate-50 px-2">
+                                            <p className="text-[7px] font-black text-slate-400 uppercase">Processo</p>
+                                            <p className="text-lg font-black text-slate-200 leading-none">—</p>
+                                          </div>
+                                        )}
+  
+                                        <div className="flex flex-row sm:flex-col gap-2 justify-end sm:justify-center">
+                                          <button 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setMeetingModal({ 
+                                                classId: period.classId, 
+                                                className: classes.find(c => c.id === period.classId)?.code || period.className || "Turma"
+                                              });
+                                            }}
+                                            className="flex flex-row sm:flex-col items-center sm:items-end gap-2 sm:gap-0 group/mask"
+                                          >
+                                            <p className="text-[7px] font-black text-slate-400 uppercase group-hover/mask:text-pro-teal transition-colors text-right hidden sm:block">Professor</p>
+                                            <div className="bg-slate-50 p-1 rounded-lg text-slate-200 group-hover/mask:bg-pro-teal group-hover/mask:text-white transition-all">
+                                              <Drama size={16} />
+                                            </div>
+                                            <p className="text-[7px] font-black text-slate-400 uppercase sm:hidden">Notas</p>
+                                          </button>
+                                        </div>
                                       </div>
-                                    </div>
                                     
                                     {period.professorDiary?.criteriaObs?.[c.id] && (
                                       <button
@@ -493,33 +494,34 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
 
                             {/* Final Pedagogical Report - Moved outside conditional to apply to both types */}
                             {period.professorDiary?.generalPedagogicalObs && (
-                              <div className="mt-8 flex justify-center w-full">
+                              <div className="mt-8 flex justify-center w-full px-6 md:px-0">
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const teacher = users.find(u => u.id === period.professorDiary.teacherId);
+                                    const teacherId = period.professorDiary?.teacherId;
+                                    const teacher = users.find(u => u.id === teacherId);
                                     setTeacherCommentModal({
                                       text: period.professorDiary.generalPedagogicalObs,
                                       teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
                                       teacherPhoto: teacher?.photo
                                     });
                                   }}
-                                  className="p-6 bg-white rounded-[32px] border border-slate-100 shadow-sm hover:shadow-md transition-all flex items-center gap-4 group/general active:scale-[0.98]"
+                                  className="w-full md:w-auto px-6 md:px-10 py-5 bg-white rounded-[28px] border border-slate-100 shadow-sm hover:shadow-xl transition-all flex items-center justify-center gap-4 group/general active:scale-[0.98]"
                                 >
-                                  <div className="w-12 h-12 rounded-2xl bg-[#016a86]/5 flex items-center justify-center text-[#016a86] group-hover/general:bg-[#016a86] group-hover/general:text-white transition-all">
+                                  <div className="w-10 h-10 shrink-0 rounded-2xl bg-pro-teal/10 flex items-center justify-center text-pro-teal group-hover/general:bg-pro-teal group-hover/general:text-white transition-all ring-1 ring-pro-teal/20 overflow-hidden">
                                     {users.find(u => u.id === period.professorDiary.teacherId)?.photo ? (
                                       <img 
                                         src={users.find(u => u.id === period.professorDiary.teacherId)?.photo} 
                                         alt="Professor" 
-                                        className="w-full h-full rounded-2xl object-cover"
+                                        className="w-full h-full object-cover"
                                       />
                                     ) : (
-                                      <Drama size={24} />
+                                      <Drama size={22} />
                                     )}
                                   </div>
                                   <div className="text-left">
-                                    <p className="text-[10px] font-black text-[#016a86] uppercase tracking-widest">Parecer Pedagógico Final</p>
-                                    <h4 className="text-sm font-black text-slate-800 uppercase group-hover/general:text-[#016a86] transition-colors">Ver comentário do professor</h4>
+                                    <p className="text-[9px] font-black text-pro-teal uppercase tracking-widest leading-none mb-1.5 opacity-60">Parecer Pedagógico Final</p>
+                                    <h4 className="text-xs font-black text-slate-800 uppercase group-hover/general:text-pro-teal transition-colors tracking-tight">Comentário do Professor</h4>
                                   </div>
                                 </button>
                               </div>

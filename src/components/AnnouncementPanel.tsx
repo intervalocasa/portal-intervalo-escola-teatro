@@ -114,75 +114,84 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
             >
               <div 
                 onClick={() => setExpandedId(expandedId === aviso.id ? null : aviso.id)}
-                className="p-5 flex items-center justify-between cursor-pointer group"
+                className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between cursor-pointer group gap-4"
               >
-                <div className="flex items-center gap-4 flex-1">
-                  <div className={`p-3 rounded-2xl ${
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                  <div className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shrink-0 ${
                     aviso.target === "Todos" ? "bg-blue-50 text-blue-500" :
                     aviso.target === "Alunos" ? "bg-pro-teal/10 text-pro-teal" :
                     "bg-purple-50 text-purple-500"
                   }`}>
-                    <Megaphone size={20} />
+                    <Megaphone size={18} className="sm:w-5 sm:h-5" />
                   </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                       <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{aviso.target}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                       <span className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-widest">{aviso.target}</span>
                        {aviso.targetSpecificUsers && (
-                         <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest bg-amber-50 px-1.5 py-0.5 rounded">Direcionado</span>
+                         <span className="text-[7px] sm:text-[8px] font-black text-amber-500 uppercase tracking-widest bg-amber-50 px-1.5 py-0.5 rounded">Direcionado</span>
                        )}
                     </div>
-                    <h4 className="text-sm font-black text-slate-700 uppercase tracking-tight line-clamp-1">{aviso.title}</h4>
+                    <h4 className="text-xs sm:text-sm font-black text-slate-700 uppercase tracking-tight truncate pr-8 sm:pr-0">{aviso.title}</h4>
+                  </div>
+                  
+                  {/* Chevron for mobile, positioned absolutely or at end of first row */}
+                  <div className={`sm:hidden absolute top-4 right-4 p-1.5 rounded-lg bg-slate-50 text-slate-400 transition-all ${
+                    expandedId === aviso.id ? "rotate-90 bg-pro-teal text-white" : ""
+                  }`}>
+                    <ChevronRight size={14} />
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2 pr-2">
-                  {isConquest && (
+                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    {isConquest && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (studentClasses.length === 1) {
+                            handleShareToMural(aviso, studentClasses[0].id);
+                          } else {
+                            setIsSharing(aviso.id);
+                          }
+                        }}
+                        className="p-1.5 sm:p-2 bg-slate-50 text-pro-teal hover:bg-pro-teal hover:text-white rounded-xl transition-all flex items-center gap-1 shadow-sm shrink-0 border border-slate-100"
+                        title="Postar no Mural da Turma"
+                      >
+                        <Share2 size={12} className="sm:w-[14px] sm:h-[14px]" />
+                        <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest leading-none">Comp.</span>
+                      </button>
+                    )}
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (studentClasses.length === 1) {
-                          handleShareToMural(aviso, studentClasses[0].id);
-                        } else {
-                          setIsSharing(aviso.id);
-                        }
-                      }}
-                      className="p-2 bg-slate-50 text-pro-teal hover:bg-pro-teal hover:text-white rounded-xl transition-all flex items-center gap-1 shadow-sm"
-                      title="Postar no Mural da Turma"
+                      onClick={(e) => toggleLike(e, aviso)}
+                      className={`p-1.5 sm:p-2 rounded-xl transition-all flex items-center gap-1 shrink-0 border ${
+                        aviso.likes?.includes(currentUser?.id || "") 
+                          ? "bg-pro-teal/10 text-pro-teal border-pro-teal/20" 
+                          : "bg-slate-50 text-slate-400 border-slate-100 hover:bg-pro-teal/5"
+                      }`}
+                      title="Aplaudir"
                     >
-                      <Share2 size={14} />
-                      <span className="text-[9px] font-black uppercase tracking-widest hidden md:inline">Compartilhar</span>
+                      <span className="text-[12px] sm:text-[14px]">👏</span>
+                      <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest leading-none">{aviso.likes?.length || 0} <span className="hidden xs:inline sm:inline">Aplausos</span></span>
                     </button>
-                  )}
-                  <button
-                    onClick={(e) => toggleLike(e, aviso)}
-                    className={`p-2 rounded-xl transition-all flex items-center gap-1 ${
-                      aviso.likes?.includes(currentUser?.id || "") 
-                        ? "bg-pro-teal/10 text-pro-teal" 
-                        : "bg-slate-50 text-slate-400 hover:bg-pro-teal/5"
-                    }`}
-                    title="Aplaudir"
-                  >
-                    <span className={`text-[14px] ${aviso.likes?.includes(currentUser?.id || "") ? "" : "grayscale opacity-70"}`}>👏</span>
-                    <span className="text-[9px] font-black uppercase tracking-widest">{aviso.likes?.length || 0} Aplausos</span>
-                  </button>
-                  <button
-                    onClick={(e) => toggleForce(e, aviso)}
-                    className={`p-2 rounded-xl transition-all flex items-center gap-1 ${
-                      aviso.forces?.includes(currentUser?.id || "") 
-                        ? "bg-pro-orange/10 text-pro-orange" 
-                        : "bg-slate-50 text-slate-400 hover:bg-pro-orange/5"
-                    }`}
-                    title="Força, ícone!"
-                  >
-                    <span className={`text-[14px] ${aviso.forces?.includes(currentUser?.id || "") ? "" : "grayscale opacity-70"}`}>💪</span>
-                    <span className="text-[9px] font-black uppercase tracking-widest">{aviso.forces?.length || 0} Força, ícone!</span>
-                  </button>
-                </div>
+                    <button
+                      onClick={(e) => toggleForce(e, aviso)}
+                      className={`p-1.5 sm:p-2 rounded-xl transition-all flex items-center gap-1 shrink-0 border ${
+                        aviso.forces?.includes(currentUser?.id || "") 
+                          ? "bg-pro-orange/10 text-pro-orange border-pro-orange/20" 
+                          : "bg-slate-50 text-slate-400 border-slate-100 hover:bg-pro-orange/5"
+                      }`}
+                      title="Força, ícone!"
+                    >
+                      <span className="text-[12px] sm:text-[14px]">💪</span>
+                      <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest leading-none">{aviso.forces?.length || 0} <span className="hidden xs:inline sm:inline">Força</span></span>
+                    </button>
+                  </div>
 
-                <div className={`p-2 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-pro-teal group-hover:text-white transition-all ${
-                  expandedId === aviso.id ? "rotate-90 bg-pro-teal text-white" : ""
-                }`}>
-                  <ChevronRight size={18} />
+                  <div className={`hidden sm:flex p-2 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-pro-teal group-hover:text-white transition-all ${
+                    expandedId === aviso.id ? "rotate-90 bg-pro-teal text-white" : ""
+                  }`}>
+                    <ChevronRight size={18} />
+                  </div>
                 </div>
               </div>
 
