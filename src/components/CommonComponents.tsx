@@ -70,7 +70,7 @@ export const LoadingScreen = () => (
             repeat: Infinity,
             ease: "easeInOut",
           }}
-          className={`absolute inset-0 bg-${THEME.colors.primary}/20 blur-3xl rounded-full`}
+          className="absolute inset-0 bg-[#016a86]/20 blur-3xl rounded-full"
         />
         <Logo className="h-32 w-auto relative z-10" />
       </div>
@@ -85,7 +85,7 @@ export const LoadingScreen = () => (
           <motion.div 
             animate={{ x: ["-100%", "100%"] }}
             transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-            className={`w-full h-full bg-${THEME.colors.primary}`}
+            className="w-full h-full bg-[#016a86]"
           />
         </motion.div>
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-[0.3em]">

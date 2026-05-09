@@ -151,6 +151,14 @@ export default function App() {
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
+  // Safety timeout for isAppLoading
+  useEffect(() => {
+    if (isAppLoading) {
+      const timer = setTimeout(() => setIsAppLoading(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAppLoading]);
+
   useEffect(() => {
     const handler = (e: any) => {
       e.preventDefault();
@@ -239,14 +247,14 @@ export default function App() {
 
   // Custom setView with loading transition
   const setView = useCallback((newView: any) => {
+    if (newView === _view) return;
     setIsAppLoading(true);
+    // Move to next view immediately in memory, but show loading overlay
+    _setView(newView);
     setTimeout(() => {
-      _setView(newView);
-      setTimeout(() => {
-        setIsAppLoading(false);
-      }, 600);
-    }, 1000);
-  }, []);
+      setIsAppLoading(false);
+    }, 400);
+  }, [_view]);
 
   const view = _view;
   const [role, setRole] = useState<UserRole | null>(null);
@@ -262,6 +270,14 @@ export default function App() {
   const [selectedUserBadges, setSelectedUserBadges] = useState<UserBadge[]>([]);
   const [loading, setLoading] = useState(true);
   const [gestorError, setGestorError] = useState<string | null>(null);
+
+  // Safety timeout for initial loading
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => setLoading(false), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   // Diary States
   const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(new Set());
@@ -1719,10 +1735,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center md:items-stretch md:p-0 p-4 bg-[#f0f2f5] font-sans">
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {/* Public Views */}
         {view === "login" ? (
           <LoginView 
+            key="login-view"
             login={login} setLogin={setLogin}
             password={password} setPassword={setPassword}
             error={error} gestorError={gestorError} loading={loading}
@@ -1734,6 +1751,7 @@ export default function App() {
           />
         ) : view === "first_password_setup" ? (
           <motion.div
+            key="first-password-setup-view"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="w-full max-w-[480px] bg-white rounded-[40px] shadow-theater overflow-hidden border-4 border-white flex flex-col relative"
@@ -1800,6 +1818,7 @@ export default function App() {
           </motion.div>
         ) : view === "register" && !currentUser ? (
           <RegisterEditUserView 
+            key="register-public-view"
             view={view}
             formData={formData}
             setFormData={setFormData}
