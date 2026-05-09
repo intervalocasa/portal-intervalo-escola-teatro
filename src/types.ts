@@ -24,6 +24,7 @@ export interface Announcement {
   targetUserIds?: string[];
   likes?: string[];
   forces?: string[];
+  lido?: boolean;
   createdBy: string;
   createdAt: any;
 }

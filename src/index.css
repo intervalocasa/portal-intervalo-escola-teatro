@@ -19,3 +19,27 @@
     @apply bg-[#f0f2f5] text-slate-800 antialiased;
   }
 }
+
+/* Custom Scrollbar for Announcements */
+.announcements-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #016a86 #ffffff;
+}
+
+.announcements-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.announcements-scroll::-webkit-scrollbar-track {
+  background: #ffffff;
+  border-radius: 10px;
+}
+
+.announcements-scroll::-webkit-scrollbar-thumb {
+  background: #016a86;
+  border-radius: 10px;
+}
+
+.announcements-scroll::-webkit-scrollbar-thumb:hover {
+  background: #ffbc00;
+}

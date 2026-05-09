@@ -927,7 +927,8 @@ export default function App() {
           targetSpecificUsers: true,
           targetUserIds: [studentId],
           createdBy: currentUser?.uid || "System",
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp(),
+          lido: false
         };
         
         // Use a predictable ID for automated badges to avoid duplicate announcements if re-awarded
@@ -1071,7 +1072,8 @@ export default function App() {
             targetUserIds: [selectedDiaryStudentId],
             createdBy: currentUser.uid,
             createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
+            updatedAt: serverTimestamp(),
+            lido: false
           });
         }
       }
@@ -1504,7 +1506,8 @@ export default function App() {
         await addDoc(collection(db, "avisos"), {
           ...data,
           createdBy: currentUser.uid,
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp(),
+          lido: false
         });
         showNotification("Aviso publicado com sucesso!", "Sucesso");
       }

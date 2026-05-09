@@ -22,6 +22,19 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
   const [isSharing, setIsSharing] = useState<string | null>(null); // ID of announcement being shared
   const [selectedClassId, setSelectedClassId] = useState<string>("");
 
+  const markAsRead = async (aviso: Announcement) => {
+    if (aviso.lido) return;
+    
+    try {
+      const avisoRef = doc(db, "avisos", aviso.id);
+      await updateDoc(avisoRef, {
+        lido: true
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `avisos/${aviso.id}`);
+    }
+  };
+
   const toggleLike = async (e: MouseEvent, aviso: Announcement) => {
     e.stopPropagation();
     if (!currentUser) return;
@@ -98,24 +111,32 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Painel de Avisos</h3>
       </div>
       
-      <div className="grid gap-3">
-        {announcements.map((aviso, idx) => {
-          const isConquest = aviso.title.includes("CONQUISTA");
-          
-          return (
-            <motion.div
-              key={aviso.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              className={`bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300 ${
-                expandedId === aviso.id ? "ring-2 ring-pro-teal/20" : ""
-              }`}
-            >
-              <div 
-                onClick={() => setExpandedId(expandedId === aviso.id ? null : aviso.id)}
-                className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between cursor-pointer group gap-4"
+      <div className="max-h-[500px] overflow-y-auto announcements-scroll pr-2 -mr-2">
+        <div className="grid gap-3">
+          {announcements.map((aviso, idx) => {
+            const isConquest = aviso.title.includes("CONQUISTA");
+            const isUnread = aviso.lido === false;
+            
+            return (
+              <motion.div
+                key={aviso.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.1 }}
+                className={`bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300 relative ${
+                  expandedId === aviso.id ? "ring-2 ring-pro-teal/20" : ""
+                } ${isUnread ? "bg-amber-50/30 border-amber-100/50" : ""}`}
               >
+                {isUnread && (
+                  <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-[#ff7c00] rounded-full border-2 border-white shadow-sm z-10 animate-pulse" />
+                )}
+                <div 
+                  onClick={() => {
+                    setExpandedId(expandedId === aviso.id ? null : aviso.id);
+                    if (isUnread) markAsRead(aviso);
+                  }}
+                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between cursor-pointer group gap-4"
+                >
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                   <div className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shrink-0 ${
                     aviso.target === "Todos" ? "bg-blue-50 text-blue-500" :
@@ -216,6 +237,7 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
           );
         })}
       </div>
+    </div>
 
       {/* Share Class Selector Modal */}
       <AnimatePresence>
