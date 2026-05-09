@@ -1739,7 +1739,6 @@ export default function App() {
         {/* Public Views */}
         {view === "login" ? (
           <LoginView 
-            key="login-view"
             login={login} setLogin={setLogin}
             password={password} setPassword={setPassword}
             error={error} gestorError={gestorError} loading={loading}
@@ -1751,7 +1750,6 @@ export default function App() {
           />
         ) : view === "first_password_setup" ? (
           <motion.div
-            key="first-password-setup-view"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="w-full max-w-[480px] bg-white rounded-[40px] shadow-theater overflow-hidden border-4 border-white flex flex-col relative"
@@ -1818,7 +1816,6 @@ export default function App() {
           </motion.div>
         ) : view === "register" && !currentUser ? (
           <RegisterEditUserView 
-            key="register-public-view"
             view={view}
             formData={formData}
             setFormData={setFormData}

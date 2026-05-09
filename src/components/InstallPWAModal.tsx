@@ -109,17 +109,59 @@ export const InstallPWAModal = ({ isOpen, onClose, deferredPrompt, onInstallSucc
                   </div>
                 </div>
               </div>
-            ) : deviceType === "android" && deferredPrompt ? (
-              <div className="space-y-6 text-center">
-                <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 italic text-slate-500 text-sm">
-                  "Clique no botão abaixo para instalar o app diretamente no seu dispositivo Android e aproveitar a melhor experiência."
+            ) : deviceType === "android" ? (
+              <div className="space-y-6">
+                {deferredPrompt ? (
+                  <div className="space-y-6 text-center">
+                    <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 italic text-slate-500 text-sm">
+                      "Clique no botão abaixo para instalar o app diretamente no seu dispositivo Android e aproveitar a melhor experiência."
+                    </div>
+                    <button
+                      onClick={handleInstallClick}
+                      className="w-full py-5 bg-pro-teal text-white rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-[#014e63] transition-all shadow-xl shadow-teal-900/10 active:scale-95"
+                    >
+                      Instalar agora
+                    </button>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ou faça manualmente:</div>
+                  </div>
+                ) : null}
+
+                <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-pro-teal/10 flex items-center justify-center text-pro-teal shrink-0">
+                    <div className="flex flex-col gap-0.5 items-center">
+                      <div className="w-1 h-1 rounded-full bg-current" />
+                      <div className="w-1 h-1 rounded-full bg-current" />
+                      <div className="w-1 h-1 rounded-full bg-current" />
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Passo 1</h4>
+                    <p className="text-[11px] font-medium text-slate-500 leading-tight mt-1">
+                      Toque nos <span className="font-bold">três pontos (⋮)</span> no canto superior direito do Chrome.
+                    </p>
+                  </div>
                 </div>
-                <button
-                  onClick={handleInstallClick}
-                  className="w-full py-5 bg-pro-teal text-white rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-[#014e63] transition-all shadow-xl shadow-teal-900/10 active:scale-95"
-                >
-                  Instalar agora
-                </button>
+
+                <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-pro-teal/10 flex items-center justify-center text-pro-teal shrink-0">
+                    <PlusSquare size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Passo 2</h4>
+                    <p className="text-[11px] font-medium text-slate-500 leading-tight mt-1">
+                      Toque em <span className="font-bold">"Instalar aplicativo"</span> ou <span className="font-bold">"Adicionar à tela inicial"</span>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100 flex gap-3">
+                  <div className="text-orange-500 shrink-0">
+                    <Smartphone size={16} />
+                  </div>
+                  <p className="text-[10px] font-bold text-orange-700 leading-tight">
+                    Isso cria um ícone na sua área de trabalho que funciona exatamente como um aplicativo nativo.
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="space-y-6">
