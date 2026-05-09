@@ -297,62 +297,78 @@ export const CreateAnnouncementView = ({
             <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Avisos Recentes</h4>
           </div>
 
-          <div className="space-y-4">
-            {announcements.length === 0 ? (
-              <div className="p-12 text-center bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200">
-                <Megaphone size={40} className="mx-auto text-slate-300 mb-4 opacity-50" />
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Nenhum aviso cadastrado ainda</p>
-              </div>
-            ) : (
-              announcements.map((aviso) => (
-                <div key={aviso.id} className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-                  <div className="flex justify-between items-start gap-4">
-                    <div className="space-y-2 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
-                          aviso.target === "Todos" ? "bg-blue-50 text-blue-500" :
-                          aviso.target === "Alunos" ? "bg-pro-teal/10 text-pro-teal" :
-                          "bg-purple-50 text-purple-500"
-                        }`}>
-                          {aviso.target}
-                        </span>
-                        {aviso.scheduledFor && (
-                          <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
-                            <Clock size={10} />
-                            Agendado
-                          </span>
-                        )}
-                        {aviso.targetSpecificUsers && (
-                          <span className="px-2 py-0.5 bg-slate-50 text-slate-500 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
-                            <Users size={10} />
-                            {aviso.targetUserIds?.length || 0} Específicos
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="text-base font-black text-slate-800 uppercase leading-tight">{aviso.title}</h3>
-                      <p className="text-sm text-slate-500 leading-relaxed font-medium line-clamp-3">{aviso.content}</p>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => handleEditClick(aviso)}
-                        className="p-3 bg-amber-50 text-amber-500 rounded-2xl hover:bg-amber-500 hover:text-white transition-all active:scale-90"
-                        title="Editar Aviso"
-                      >
-                        <Edit2 size={20} />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteAnnouncement(aviso.id)}
-                        className="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition-all active:scale-90"
-                        title="Excluir Aviso"
-                      >
-                        <Trash2 size={20} />
-                      </button>
-                    </div>
-                  </div>
+          <div className="max-h-[600px] overflow-y-auto announcements-scroll pr-2 -mr-2 bg-slate-50/20 rounded-[32px] p-2">
+            <div className="grid gap-4">
+              {announcements.length === 0 ? (
+                <div className="p-12 text-center bg-white rounded-[28px] border-2 border-dashed border-slate-200">
+                  <Megaphone size={40} className="mx-auto text-slate-300 mb-4 opacity-50" />
+                  <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Nenhum aviso cadastrado ainda</p>
                 </div>
-              ))
-            )}
+              ) : (
+                announcements.map((aviso) => {
+                  const isUnread = aviso.lido === false;
+                  return (
+                    <div 
+                      key={aviso.id} 
+                      className={`bg-white p-5 rounded-[28px] border shadow-sm transition-all group relative ${
+                        isUnread ? "bg-amber-50/50 border-amber-200 ring-1 ring-amber-200/50" : "border-slate-100"
+                      }`}
+                    >
+                      {isUnread && (
+                        <div className="absolute top-4 right-20 w-2 h-2 bg-[#ff7c00] rounded-full animate-pulse" title="Não visualizado" />
+                      )}
+                      
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
+                              aviso.target === "Todos" ? "bg-blue-50 text-blue-500" :
+                              aviso.target === "Alunos" ? "bg-pro-teal/10 text-pro-teal" :
+                              "bg-purple-50 text-purple-500"
+                            }`}>
+                              {aviso.target}
+                            </span>
+                            {aviso.scheduledFor && (
+                              <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
+                                <Clock size={10} />
+                                Agendado
+                              </span>
+                            )}
+                            {aviso.targetSpecificUsers && (
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
+                                <Users size={10} />
+                                {aviso.targetUserIds?.length || 0} Específicos
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-sm font-black text-slate-800 uppercase leading-tight truncate">{aviso.title}</h3>
+                          <p className="text-[11px] text-slate-500 leading-relaxed font-medium line-clamp-1">{aviso.content}</p>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                          <button 
+                            onClick={() => handleEditClick(aviso)}
+                            className="flex-1 md:flex-none p-2.5 bg-amber-50 text-amber-500 rounded-xl hover:bg-amber-500 hover:text-white transition-all active:scale-90 flex items-center justify-center gap-2"
+                            title="Editar Aviso"
+                          >
+                            <Edit2 size={16} />
+                            <span className="md:hidden text-[9px] font-black uppercase">Editar</span>
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteAnnouncement(aviso.id)}
+                            className="flex-1 md:flex-none p-2.5 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all active:scale-90 flex items-center justify-center gap-2"
+                            title="Excluir Aviso"
+                          >
+                            <Trash2 size={16} />
+                            <span className="md:hidden text-[9px] font-black uppercase">Excluir</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </section>
       </div>

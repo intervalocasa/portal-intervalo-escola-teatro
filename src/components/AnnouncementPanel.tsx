@@ -111,7 +111,7 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Painel de Avisos</h3>
       </div>
       
-      <div className="max-h-[400px] overflow-y-auto announcements-scroll pr-2 -mr-2">
+      <div className="max-h-[400px] md:max-h-[500px] overflow-y-auto announcements-scroll pr-2 -mr-2 bg-slate-50/20 rounded-[24px] p-1">
         <div className="grid gap-3">
           {announcements.map((aviso, idx) => {
             const isConquest = aviso.title.includes("CONQUISTA");
@@ -123,7 +123,7 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: idx * 0.1 }}
-                className={`bg-white rounded-[24px] border shadow-sm overflow-hidden transition-all duration-300 relative ${
+                className={`bg-white rounded-[24px] border shadow-sm overflow-hidden transition-all duration-300 relative group/card ${
                   expandedId === aviso.id ? "ring-2 ring-pro-teal/20" : ""
                 } ${isUnread ? "bg-amber-50/50 border-amber-200 ring-1 ring-amber-200/50" : "border-slate-100"}`}
               >
@@ -135,7 +135,7 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
                     setExpandedId(expandedId === aviso.id ? null : aviso.id);
                     if (isUnread) markAsRead(aviso);
                   }}
-                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between cursor-pointer group gap-4"
+                  className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between cursor-pointer group gap-4"
                 >
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                   <div className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shrink-0 ${
@@ -152,18 +152,18 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
                          <span className="text-[7px] sm:text-[8px] font-black text-amber-500 uppercase tracking-widest bg-amber-50 px-1.5 py-0.5 rounded">Direcionado</span>
                        )}
                     </div>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-700 uppercase tracking-tight truncate pr-8 sm:pr-0">{aviso.title}</h4>
+                    <h4 className="text-xs sm:text-sm md:text-base font-black text-slate-700 uppercase tracking-tight truncate pr-8 sm:pr-0">{aviso.title}</h4>
                   </div>
                   
-                  {/* Chevron for mobile, positioned absolutely or at end of first row */}
-                  <div className={`sm:hidden absolute top-4 right-4 p-1.5 rounded-lg bg-slate-50 text-slate-400 transition-all ${
+                  {/* Chevron for mobile/tablet, positioned absolutely or at end of first row */}
+                  <div className={`md:hidden absolute top-4 right-4 p-1.5 rounded-lg bg-slate-50 text-slate-400 transition-all ${
                     expandedId === aviso.id ? "rotate-90 bg-pro-teal text-white" : ""
                   }`}>
                     <ChevronRight size={14} />
                   </div>
                 </div>
                 
-                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
+                <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto">
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     {isConquest && (
                       <button
@@ -208,7 +208,7 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
                     </button>
                   </div>
 
-                  <div className={`hidden sm:flex p-2 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-pro-teal group-hover:text-white transition-all ${
+                  <div className={`hidden md:flex p-2 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-pro-teal group-hover:text-white transition-all ${
                     expandedId === aviso.id ? "rotate-90 bg-pro-teal text-white" : ""
                   }`}>
                     <ChevronRight size={18} />
