@@ -116,7 +116,7 @@ export interface Class {
   startDate: string;
   isActive: boolean;
   inactivationReason?: string;
-  teacherId: string | null;
+  teacherIds: string[];
   studentIds: string[];
   enrollmentDates?: Record<string, string>;
   year: string;
@@ -188,7 +188,7 @@ export interface ClassData {
   id?: string;
   code: string;
   type: string;
-  teacherId: string | null;
+  teacherIds: string[];
   studentIds: string[];
   isActive: boolean;
   inactivationReason: string;

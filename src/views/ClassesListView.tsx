@@ -32,10 +32,10 @@ export const ClassesListView = ({
 
   const filteredClasses = classes.filter(c => {
     // If professor, only show their classes by default or match search
-    const isTeacher = role === "Professor" && c.teacherId === currentUser?.uid;
+    const isTeacher = role === "Professor" && c.teacherIds?.includes(currentUser?.uid);
     const matchesSearch = c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (users.find(u => u.id === c.teacherId)?.name || "").toLowerCase().includes(searchTerm.toLowerCase());
+      c.teacherIds?.some(tid => (users.find(u => u.id === tid)?.name || "").toLowerCase().includes(searchTerm.toLowerCase()));
 
     if (role === "Professor") {
       return isTeacher && matchesSearch;
@@ -116,8 +116,12 @@ export const ClassesListView = ({
                     </div>
                     <div className="flex items-center gap-2 sm:gap-6">
                       <div className="text-right hidden sm:block">
-                        <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Professor</p>
-                        <p className="text-[11px] font-bold text-slate-500 uppercase">{users.find(u => u.id === c.teacherId)?.name || "..."}</p>
+                        <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Professor(es)</p>
+                        <p className="text-[11px] font-bold text-slate-500 uppercase">
+                          {c.teacherIds && c.teacherIds.length > 0 
+                            ? c.teacherIds.map(tid => users.find(u => u.id === tid)?.artisticName || users.find(u => u.id === tid)?.name || "Professor").join(", ")
+                            : "Nenhum vinculado"}
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         {role === "Gestor" && (
@@ -129,7 +133,7 @@ export const ClassesListView = ({
                                 id: c.id,
                                 code: c.code,
                                 type: c.type,
-                                teacherId: c.teacherId,
+                                teacherIds: c.teacherIds || [],
                                 studentIds: c.studentIds || [],
                                 isActive: c.isActive,
                                 inactivationReason: c.inactivationReason || "",

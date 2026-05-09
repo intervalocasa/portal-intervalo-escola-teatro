@@ -34,7 +34,9 @@ export const CreateClassView = ({
     .filter(u => u.role === "Professor")
     .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
   const [isDayDropdownOpen, setIsDayDropdownOpen] = useState(false);
+  const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const teacherDropdownRef = useRef<HTMLDivElement>(null);
 
   const WEEKDAYS = [
     "Segunda-feira",
@@ -47,6 +49,7 @@ export const CreateClassView = ({
   ];
 
   const selectedDays = classData.weekday ? classData.weekday.split(", ") : [];
+  const selectedTeacherIds = classData.teacherIds || [];
 
   const toggleDay = (day: string) => {
     let newDays;
@@ -59,10 +62,23 @@ export const CreateClassView = ({
     setClassData((prev: any) => ({ ...prev, weekday: newDays.join(", ") }));
   };
 
+  const toggleTeacher = (teacherId: string) => {
+    let newIds;
+    if (selectedTeacherIds.includes(teacherId)) {
+      newIds = selectedTeacherIds.filter(id => id !== teacherId);
+    } else {
+      newIds = [...selectedTeacherIds, teacherId];
+    }
+    setClassData((prev: any) => ({ ...prev, teacherIds: newIds }));
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsDayDropdownOpen(false);
+      }
+      if (teacherDropdownRef.current && !teacherDropdownRef.current.contains(event.target as Node)) {
+        setIsTeacherDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -128,9 +144,9 @@ export const CreateClassView = ({
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Dias da Semana</label>
             <div 
               onClick={() => setIsDayDropdownOpen(!isDayDropdownOpen)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all cursor-pointer flex items-center justify-between hover:border-pro-teal"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all cursor-pointer flex items-center justify-between hover:border-pro-teal shadow-sm"
             >
-              <span className={`truncate ${selectedDays.length === 0 ? "text-slate-400" : "text-slate-800 font-medium"}`}>
+              <span className={`truncate ${selectedDays.length === 0 ? "text-slate-400 text-sm" : "text-slate-800 font-medium text-sm"}`}>
                 {selectedDays.length === 0 ? "Selecione os dias" : selectedDays.join(", ")}
               </span>
               <ChevronDown size={18} className={`text-slate-400 transition-transform ${isDayDropdownOpen ? "rotate-180" : ""}`} />
@@ -166,22 +182,45 @@ export const CreateClassView = ({
               value={classData.time || ""}
               onChange={(e) => setClassData(prev => ({ ...prev, time: e.target.value }))}
               placeholder="Ex: 19:00 às 21:30"
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal shadow-sm"
             />
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Professor Responsável</label>
-            <select
-              value={classData.teacherId || ""}
-              onChange={(e) => setClassData(prev => ({ ...prev, teacherId: e.target.value }))}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+          <div className="space-y-1 relative" ref={teacherDropdownRef}>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Professor(es) Responsável(is)</label>
+            <div 
+              onClick={() => setIsTeacherDropdownOpen(!isTeacherDropdownOpen)}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all cursor-pointer flex items-center justify-between hover:border-pro-teal shadow-sm"
             >
-              <option value="">Selecione um professor</option>
-              {teachers.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
+              <span className={`truncate ${selectedTeacherIds.length === 0 ? "text-slate-400 text-sm" : "text-slate-800 font-medium text-sm"}`}>
+                {selectedTeacherIds.length === 0 
+                  ? "Selecione o(s) professor(es)" 
+                  : selectedTeacherIds.map(id => teachers.find(t => t.id === id)?.name).filter(Boolean).join(", ")}
+              </span>
+              <ChevronDown size={18} className={`text-slate-400 transition-transform ${isTeacherDropdownOpen ? "rotate-180" : ""}`} />
+            </div>
+
+            {isTeacherDropdownOpen && (
+              <div className="absolute z-50 w-full mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl overflow-y-auto max-h-60 animate-in fade-in zoom-in duration-200">
+                <div className="p-2 space-y-1">
+                  {teachers.map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => toggleTeacher(t.id)}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all ${
+                        selectedTeacherIds.includes(t.id) 
+                        ? "bg-pro-teal/10 text-pro-teal font-bold" 
+                        : "text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {t.name}
+                      {selectedTeacherIds.includes(t.id) && <Check size={16} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1">

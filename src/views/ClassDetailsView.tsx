@@ -45,7 +45,9 @@ export const ClassDetailsView = ({
   const [enrollmentProcess, setEnrollmentProcess] = useState<{ studentId: string; date: string } | null>(null);
 
   const targetClass = classes.find(c => c.id === selectedClassId);
-  const teacher = users.find(u => u.id === targetClass?.teacherId);
+  const classTeachers = useMemo(() => {
+    return users.filter(u => targetClass?.teacherIds?.includes(u.id));
+  }, [users, targetClass?.teacherIds]);
   const enrichedUser = users.find(u => u.id === currentUser?.uid) || null;
   const classStudents = useMemo(() => {
     return users
@@ -174,7 +176,7 @@ export const ClassDetailsView = ({
                                 id: targetClass.id,
                                 code: targetClass.code,
                                 type: targetClass.type,
-                                teacherId: targetClass.teacherId,
+                                teacherIds: targetClass.teacherIds || [],
                                 studentIds: targetClass.studentIds || [],
                                 isActive: targetClass.isActive,
                                 inactivationReason: targetClass.inactivationReason || "",
@@ -256,16 +258,20 @@ export const ClassDetailsView = ({
             <div className="space-y-10">
               {/* Teacher Info */}
               <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm space-y-6">
-                <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-widest border-b border-slate-50 pb-4">Professor Titular</h4>
-                {teacher ? (
-                  <div className="flex flex-col items-center text-center gap-4 p-4 rounded-3xl bg-slate-50/50 border border-slate-100">
-                    <div className="w-24 h-24 rounded-[32px] bg-white overflow-hidden flex items-center justify-center text-slate-200 border-4 border-white shadow-xl">
-                      <Avatar src={teacher.photo} fallbackSize={48} className="w-full h-full rounded-none" />
-                    </div>
-                    <div>
-                      <h5 className="font-black text-slate-800 uppercase tracking-tight text-lg">{teacher.name}</h5>
-                      <p className="text-[10px] font-black text-pro-teal uppercase tracking-widest mt-1 bg-pro-teal/5 px-3 py-1 rounded-full">{teacher.artisticName || "Professor"}</p>
-                    </div>
+                <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-widest border-b border-slate-50 pb-4">Professor(es) Responsável(eis)</h4>
+                {classTeachers.length > 0 ? (
+                  <div className="space-y-4">
+                    {classTeachers.map(teacher => (
+                      <div key={teacher.id} className="flex flex-col items-center text-center gap-4 p-4 rounded-3xl bg-slate-50/50 border border-slate-100">
+                        <div className="w-20 h-20 rounded-[28px] bg-white overflow-hidden flex items-center justify-center text-slate-200 border-4 border-white shadow-lg">
+                          <Avatar src={teacher.photo} fallbackSize={40} className="w-full h-full rounded-none" />
+                        </div>
+                        <div>
+                          <h5 className="font-black text-slate-800 uppercase tracking-tight text-sm">{teacher.name}</h5>
+                          <p className="text-[9px] font-black text-pro-teal uppercase tracking-widest mt-1 bg-pro-teal/5 px-3 py-1 rounded-full">{teacher.artisticName || "Professor"}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 font-bold italic text-center py-4">Nenhum professor vinculado</p>

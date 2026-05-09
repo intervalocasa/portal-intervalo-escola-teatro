@@ -39,7 +39,7 @@
         "year": { "type": "string" },
         "isActive": { "type": "boolean" },
         "inactivationReason": { "type": "string" },
-        "teacherId": { "type": "string" },
+        "teacherIds": { "type": "array", "items": { "type": "string" } },
         "studentIds": { "type": "array", "items": { "type": "string" } },
         "enrollmentDates": { "type": "object", "additionalProperties": { "type": "string" } },
         "createdAt": { "type": "object" },

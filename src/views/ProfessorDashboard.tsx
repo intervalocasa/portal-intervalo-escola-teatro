@@ -107,7 +107,7 @@ export const ProfessorDashboard = ({
                     cnpj: user.cnpj || ""
                   });
                   setPhotoPreview(user.photo || null);
-                  const userClasses = classes.filter(c => c.teacherId === user.id).map(c => c.id);
+                  const userClasses = classes.filter(c => c.teacherIds?.includes(user.id)).map(c => c.id);
                   setSelectedUserClasses(userClasses);
                 }
                 setView("edit_self");

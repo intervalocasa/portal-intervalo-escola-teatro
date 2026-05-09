@@ -1110,7 +1110,7 @@ export default function App() {
     year: "",
     isActive: true,
     inactivationReason: "",
-    teacherId: ""
+    teacherIds: [] as string[]
   });
 
   const [showInactivationPopup, setShowInactivationPopup] = useState(false);
@@ -1222,18 +1222,18 @@ export default function App() {
               const classData = classDoc.data();
               let updated = false;
               let studentIds = classData.studentIds || [];
-              let teacherId = classData.teacherId;
+              let teacherIds = classData.teacherIds || [];
 
               if (studentIds.includes(oldDocId)) {
                 studentIds = studentIds.map((id: string) => id === oldDocId ? user.uid : id);
                 updated = true;
               }
-              if (teacherId === oldDocId) {
-                teacherId = user.uid;
+              if (teacherIds.includes(oldDocId)) {
+                teacherIds = teacherIds.map((id: string) => id === oldDocId ? user.uid : id);
                 updated = true;
               }
               if (updated) {
-                await updateDoc(doc(db, "classes", classDoc.id), { studentIds, teacherId });
+                await updateDoc(doc(db, "classes", classDoc.id), { studentIds, teacherIds });
               }
             }
 
@@ -1333,6 +1333,17 @@ export default function App() {
       cnpj: "",
       initialPassword: ""
     });
+    setClassData({
+      type: "Curso Livre Adultos",
+      code: "",
+      weekday: "Segunda-feira",
+      time: "19:00",
+      startDate: "",
+      year: "",
+      isActive: true,
+      inactivationReason: "",
+      teacherIds: []
+    });
     _setView("login");
     setIsAppLoading(false);
   };
@@ -1392,10 +1403,19 @@ export default function App() {
         const userType = view === "register" ? regType : users.find(u => u.id === studentId)?.role;
         for (const c of classes) {
           if (userType === "Professor") {
-            if (selectedUserClasses.includes(c.id) && c.teacherId !== studentId) {
-              await updateDoc(doc(db, "classes", c.id), { teacherId: studentId });
-            } else if (!selectedUserClasses.includes(c.id) && c.teacherId === studentId) {
-              await updateDoc(doc(db, "classes", c.id), { teacherId: null });
+            const isCurrentlyLinked = c.teacherIds?.includes(studentId);
+            const shouldBeLinked = selectedUserClasses.includes(c.id);
+
+            if (shouldBeLinked && !isCurrentlyLinked) {
+              await updateDoc(doc(db, "classes", c.id), { 
+                teacherIds: [...(c.teacherIds || []), studentId],
+                updatedAt: serverTimestamp()
+              });
+            } else if (!shouldBeLinked && isCurrentlyLinked) {
+              await updateDoc(doc(db, "classes", c.id), { 
+                teacherIds: c.teacherIds.filter((id: string) => id !== studentId),
+                updatedAt: serverTimestamp()
+              });
             }
           } else {
             const isCurrentlyLinked = c.studentIds?.includes(studentId);
