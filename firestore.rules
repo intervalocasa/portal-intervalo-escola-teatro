@@ -98,7 +98,7 @@ service cloud.firestore {
     match /avisos/{avisoId} {
       allow read: if isSignedIn();
       allow create: if isGestor();
-      allow update: if isGestor() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'forces']));
+      allow update: if isGestor() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'forces', 'lido']));
       allow delete: if isGestor();
     }
 

@@ -111,7 +111,7 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Painel de Avisos</h3>
       </div>
       
-      <div className="max-h-[500px] overflow-y-auto announcements-scroll pr-2 -mr-2">
+      <div className="max-h-[400px] overflow-y-auto announcements-scroll pr-2 -mr-2">
         <div className="grid gap-3">
           {announcements.map((aviso, idx) => {
             const isConquest = aviso.title.includes("CONQUISTA");
@@ -123,12 +123,12 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: idx * 0.1 }}
-                className={`bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden transition-all duration-300 relative ${
+                className={`bg-white rounded-[24px] border shadow-sm overflow-hidden transition-all duration-300 relative ${
                   expandedId === aviso.id ? "ring-2 ring-pro-teal/20" : ""
-                } ${isUnread ? "bg-amber-50/30 border-amber-100/50" : ""}`}
+                } ${isUnread ? "bg-amber-50/50 border-amber-200 ring-1 ring-amber-200/50" : "border-slate-100"}`}
               >
                 {isUnread && (
-                  <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-[#ff7c00] rounded-full border-2 border-white shadow-sm z-10 animate-pulse" />
+                  <div className="absolute top-4 right-4 w-3 h-3 bg-[#ff7c00] rounded-full border-2 border-white shadow-md z-10 animate-pulse" />
                 )}
                 <div 
                   onClick={() => {
