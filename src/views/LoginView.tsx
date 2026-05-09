@@ -4,7 +4,7 @@
  */
 
 import { motion } from "motion/react";
-import { LogIn, Lock, AlertCircle, AlertTriangle } from "lucide-react";
+import { LogIn, Lock, AlertCircle, AlertTriangle, Smartphone } from "lucide-react";
 import { FormEvent } from "react";
 import { Logo } from "../components/CommonComponents";
 
@@ -20,6 +20,7 @@ interface LoginViewProps {
   handleGoogleLogin: () => void;
   handleForgotPassword: () => void;
   setView: (view: any) => void;
+  onShowInstall: () => void;
 }
 
 export const LoginView = ({
@@ -29,7 +30,8 @@ export const LoginView = ({
   handleLogin,
   handleGoogleLogin,
   handleForgotPassword,
-  setView
+  setView,
+  onShowInstall
 }: LoginViewProps) => {
   return (
     <motion.div
@@ -168,7 +170,15 @@ export const LoginView = ({
           </button>
         </div>
 
-
+        <div className="pt-2 text-center">
+          <button
+            onClick={onShowInstall}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl text-[9px] font-black text-pro-teal uppercase tracking-[0.2em] hover:bg-pro-teal/5 transition-all group"
+          >
+            <Smartphone size={14} className="group-hover:scale-110 transition-transform" />
+            Instalar App no Celular
+          </button>
+        </div>
       </div>
     </motion.div>
   );

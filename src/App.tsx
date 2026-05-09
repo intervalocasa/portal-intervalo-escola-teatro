@@ -73,6 +73,7 @@ import { handleFirestoreError, OperationType } from "./lib/firestoreErrorHandler
 import { analyzePedagogicalFeedback } from "./services/geminiService";
 import { THEME } from "./theme";
 import { BADGES } from "./constants/badges";
+import { InstallPWAModal } from "./components/InstallPWAModal";
 import { UserRole, User, Class, Diary, Evaluation, UserBadge } from "./types";
 import { Logo, LoadingScreen, DetailItem, BackButton } from "./components/CommonComponents";
 import { LoginView } from "./views/LoginView";
@@ -147,6 +148,17 @@ export default function App() {
   }, []);
 
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
   const [_view, _setView] = useState<"login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup" | "school_agenda">("login");
   
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -1717,6 +1729,7 @@ export default function App() {
             handleGoogleLogin={handleGoogleLogin}
             handleForgotPassword={() => handleForgotPassword(login)}
             setView={setView}
+            onShowInstall={() => setShowInstallModal(true)}
           />
         ) : view === "first_password_setup" ? (
           <motion.div
@@ -2136,6 +2149,12 @@ export default function App() {
       </AnimatePresence>
 
       {/* Password Change Modal */}
+      <InstallPWAModal 
+        isOpen={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        deferredPrompt={deferredPrompt}
+        onInstallSuccess={() => setDeferredPrompt(null)}
+      />
       <AnimatePresence>
         {showPasswordModal && (
           <motion.div
