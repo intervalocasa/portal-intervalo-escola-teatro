@@ -150,6 +150,7 @@ export const ProfessorDiaryView = ({
                             presences: diary.presences || 0,
                             absences: diary.absences || 0,
                             frequencyObs: diary.frequencyObs || "",
+                            weeklyAttendance: diary.weeklyAttendance || {},
                             grades: diary.grades || {},
                             criteriaObs: diary.criteriaObs || {},
                             generalPedagogicalObs: diary.generalPedagogicalObs || ""
@@ -159,6 +160,7 @@ export const ProfessorDiaryView = ({
                             presences: 0,
                             absences: 0,
                             frequencyObs: "",
+                            weeklyAttendance: {},
                             grades: {},
                             criteriaObs: {},
                             generalPedagogicalObs: ""

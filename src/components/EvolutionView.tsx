@@ -492,6 +492,36 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                             </div>
                             )}
 
+                            {/* Weekly Attendance Comments */}
+                            {period.professorDiary?.weeklyAttendance && Object.values(period.professorDiary.weeklyAttendance).some((v: any) => v.comment?.trim()) && (
+                              <div className="mt-8 space-y-4">
+                                <div className="flex items-center gap-3 border-l-4 border-pro-teal pl-4">
+                                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Comentários de Frequência</h4>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-6 md:px-0">
+                                  {Object.entries(period.professorDiary.weeklyAttendance)
+                                    .filter(([_, v]: any) => v.comment?.trim())
+                                    .map(([weekKey, data]: any) => (
+                                      <div key={weekKey} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
+                                        <div className="w-10 h-10 shrink-0 rounded-xl bg-pro-teal/10 flex flex-col items-center justify-center text-pro-teal font-black">
+                                          <span className="text-[8px] opacity-40 uppercase leading-none mb-1">Sem</span>
+                                          <span className="text-xs leading-none">{weekKey.replace('week', '')}</span>
+                                        </div>
+                                        <div className="flex-1">
+                                          <p className="text-xs font-medium text-slate-600 italic">"{data.comment}"</p>
+                                          <div className="mt-2 flex items-center gap-1.5">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${data.status === 'presente' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                                              {data.status === 'presente' ? 'Presente' : 'Falta'}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+
                             {/* Final Pedagogical Report - Moved outside conditional to apply to both types */}
                             {period.professorDiary?.generalPedagogicalObs && (
                               <div className="mt-8 flex justify-center w-full px-6 md:px-0">

@@ -108,6 +108,17 @@
         "presences": { "type": "number" },
         "absences": { "type": "number" },
         "frequencyObs": { "type": "string" },
+        "weeklyAttendance": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string", "enum": ["presente", "falta"] },
+              "comment": { "type": "string" },
+              "date": { "type": "string" }
+            }
+          }
+        },
         "grades": { "type": "object" },
         "criteriaObs": { "type": "object" },
         "generalPedagogicalObs": { "type": "string" },

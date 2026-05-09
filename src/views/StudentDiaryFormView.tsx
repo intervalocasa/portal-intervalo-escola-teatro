@@ -126,34 +126,123 @@ export const StudentDiaryFormView = ({
              <div className="flex items-center gap-4 border-l-4 border-pro-teal pl-6">
                 <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Frequência e Assiduidade</h3>
              </div>
+
+             <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-6">
+               <div className="flex items-center justify-between">
+                 <div>
+                   <h4 className="text-sm font-black text-slate-700 uppercase tracking-tight">Registro semanal</h4>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Marque a presença e adicione comentários específicos por aula</p>
+                 </div>
+               </div>
+
+               <div className="space-y-4">
+                 {[1, 2, 3, 4, 5].map((week) => {
+                   const weekData = diaryFormData.weeklyAttendance?.[`week${week}`] || { status: "", comment: "" };
+                   return (
+                     <div key={week} className="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-4 items-start md:items-center">
+                       <div className="flex items-center gap-4 shrink-0 min-w-[120px]">
+                         <div className="w-10 h-10 rounded-xl bg-pro-teal/10 flex items-center justify-center text-pro-teal font-black text-xs">
+                           S{week}
+                         </div>
+                         <div className="flex gap-1">
+                           <button
+                             onClick={() => {
+                               const newAttendance = { ...diaryFormData.weeklyAttendance || {} };
+                               newAttendance[`week${week}`] = { ...weekData, status: weekData.status === "presente" ? "" : "presente" };
+                               
+                               // Calculate total presences/absences
+                               let presences = 0;
+                               let absences = 0;
+                               Object.values(newAttendance).forEach((v: any) => {
+                                 if (v.status === "presente") presences++;
+                                 if (v.status === "falta") absences++;
+                               });
+
+                               setDiaryFormData({ 
+                                 ...diaryFormData, 
+                                 weeklyAttendance: newAttendance,
+                                 presences,
+                                 absences
+                               });
+                             }}
+                             className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all ${
+                               weekData.status === "presente" ? "bg-green-500 text-white shadow-lg shadow-green-500/20" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                             }`}
+                           >
+                             P
+                           </button>
+                           <button
+                             onClick={() => {
+                               const newAttendance = { ...diaryFormData.weeklyAttendance || {} };
+                               newAttendance[`week${week}`] = { ...weekData, status: weekData.status === "falta" ? "" : "falta" };
+                               
+                               // Calculate total presences/absences
+                               let presences = 0;
+                               let absences = 0;
+                               Object.values(newAttendance).forEach((v: any) => {
+                                 if (v.status === "presente") presences++;
+                                 if (v.status === "falta") absences++;
+                               });
+
+                               setDiaryFormData({ 
+                                 ...diaryFormData, 
+                                 weeklyAttendance: newAttendance,
+                                 presences,
+                                 absences
+                               });
+                             }}
+                             className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all ${
+                               weekData.status === "falta" ? "bg-red-500 text-white shadow-lg shadow-red-500/20" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                             }`}
+                           >
+                             F
+                           </button>
+                         </div>
+                       </div>
+                       <input 
+                         type="text"
+                         placeholder="Comentário sobre a frequência da semana..."
+                         value={weekData.comment}
+                         onChange={(e) => {
+                           const newAttendance = { ...diaryFormData.weeklyAttendance || {} };
+                           newAttendance[`week${week}`] = { ...weekData, comment: e.target.value };
+                           setDiaryFormData({ ...diaryFormData, weeklyAttendance: newAttendance });
+                         }}
+                         className="flex-1 w-full px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-pro-teal"
+                       />
+                     </div>
+                   );
+                 })}
+               </div>
+             </div>
              
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Presenças</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Total de Presenças</label>
                     <input 
                       type="number"
+                      readOnly
                       required
                       min="0"
                       value={diaryFormData.presences}
-                      onChange={(e) => setDiaryFormData({ ...diaryFormData, presences: Number(e.target.value) })}
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-lg font-black text-slate-800 focus:outline-none focus:border-pro-teal transition-all"
+                      className="w-full px-6 py-4 bg-slate-100 border border-slate-100 rounded-2xl text-lg font-black text-slate-400 cursor-not-allowed"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Faltas</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Total de Faltas</label>
                     <input 
                       type="number"
+                      readOnly
                       required
                       min="0"
                       value={diaryFormData.absences}
-                      onChange={(e) => setDiaryFormData({ ...diaryFormData, absences: Number(e.target.value) })}
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-lg font-black text-slate-800 focus:outline-none focus:border-red-400 transition-all"
+                      className="w-full px-6 py-4 bg-slate-100 border border-slate-100 rounded-2xl text-lg font-black text-slate-400 cursor-not-allowed"
                     />
                   </div>
                 </div>
                 <div className="space-y-1">
-                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Observações de Frequência</label>
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Observações Gerais de Frequência</label>
                    <textarea
                      placeholder="Atrasos, saídas antecipadas, etc..."
                      value={diaryFormData.frequencyObs}

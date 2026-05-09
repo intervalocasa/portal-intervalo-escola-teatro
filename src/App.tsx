@@ -260,6 +260,7 @@ export default function App() {
     presences: 0,
     absences: 0,
     frequencyObs: "",
+    weeklyAttendance: {} as Record<string, any>,
     grades: {} as Record<string, number>,
     criteriaObs: {} as Record<string, string>,
     generalPedagogicalObs: ""
@@ -1006,6 +1007,7 @@ export default function App() {
         presences: Number(diaryFormData.presences || 0),
         absences: Number(diaryFormData.absences || 0),
         frequencyObs: diaryFormData.frequencyObs || "",
+        weeklyAttendance: diaryFormData.weeklyAttendance || {},
         grades: diaryFormData.grades,
         criteriaObs: diaryFormData.criteriaObs || {},
         generalPedagogicalObs: diaryFormData.generalPedagogicalObs || "",
@@ -1021,6 +1023,28 @@ export default function App() {
           ...diaryData,
           createdAt: serverTimestamp()
         });
+      }
+
+      // Check for weekly comments to trigger notifications
+      const weeklyComments = Object.entries(diaryFormData.weeklyAttendance || {}).filter(([_, v]: any) => v.comment?.trim());
+      const oldWeeklyComments = Object.entries(existingDiary?.weeklyAttendance || {}).filter(([_, v]: any) => v.comment?.trim());
+      
+      // If there's a new comment or a comment changed
+      for (const [weekNum, data] of weeklyComments) {
+        const oldData = (existingDiary?.weeklyAttendance || {})[weekNum];
+        if (!oldData || oldData.comment !== data.comment) {
+          // Trigger notification via Announcement
+          await addDoc(collection(db, "avisos"), {
+            title: `Novo comentário de frequência - ${selectedClass.code}`,
+            content: `Seu professor comentou na sua frequência da ${weekNum.replace('week', 'Semana ')}: "${data.comment}"`,
+            target: "Alunos",
+            targetSpecificUsers: true,
+            targetUserIds: [selectedDiaryStudentId],
+            createdBy: currentUser.uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        }
       }
 
       showNotification(status === "concluido" ? "Diário de Classe concluído com sucesso." : "Diário de Classe salvo com sucesso.", "Sucesso");
