@@ -10,14 +10,16 @@ import { doc, updateDoc, arrayUnion, arrayRemove, addDoc, collection, serverTime
 import { db } from "../lib/firebase";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
 import { User, Announcement, Class } from "../types";
+import { checkForBlogueirinhoBadge } from "../lib/badgeUtils";
 
 interface AnnouncementPanelProps {
   announcements: Announcement[];
   currentUser: User | null;
   studentClasses?: Class[];
+  onAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
 }
 
-export const AnnouncementPanel = ({ announcements, currentUser, studentClasses = [] }: AnnouncementPanelProps) => {
+export const AnnouncementPanel = ({ announcements, currentUser, studentClasses = [], onAwardBadge }: AnnouncementPanelProps) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState<string | null>(null); // ID of announcement being shared
   const [selectedClassId, setSelectedClassId] = useState<string>("");
@@ -95,6 +97,11 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
       setIsSharing(null);
       setSelectedClassId("");
       alert("Publicado no mural da turma com sucesso!");
+
+      // Check for Blogueirinho badge
+      if (onAwardBadge) {
+        await checkForBlogueirinhoBadge(currentUser.id, classId, onAwardBadge);
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, "posts");
     }

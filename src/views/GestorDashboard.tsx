@@ -27,6 +27,7 @@ interface GestorDashboardProps {
   setView: (view: any) => void;
   handleResetUserForm: () => void;
   filteredAnnouncements: any[];
+  onAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
 }
 
 export const GestorDashboard = ({
@@ -35,7 +36,8 @@ export const GestorDashboard = ({
   handleLogout,
   setView,
   handleResetUserForm,
-  filteredAnnouncements
+  filteredAnnouncements,
+  onAwardBadge
 }: GestorDashboardProps) => {
   const user = users.find(u => u.id === currentUser?.uid);
   
@@ -68,7 +70,11 @@ export const GestorDashboard = ({
             <p className="text-slate-400 font-bold mt-2">Selecione uma área para gerenciar a escola de forma estratégica.</p>
           </div>
 
-          <AnnouncementPanel announcements={filteredAnnouncements} currentUser={user || null} />
+          <AnnouncementPanel 
+            announcements={filteredAnnouncements} 
+            currentUser={user || null} 
+            onAwardBadge={onAwardBadge}
+          />
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Gerenciar Turmas */}

@@ -15,6 +15,7 @@ import {
   serverTimestamp, 
   updateDoc, 
   doc, 
+  deleteDoc,
   arrayUnion, 
   arrayRemove,
   Timestamp
@@ -41,6 +42,7 @@ import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandle
 import { Logo } from "./CommonComponents";
 import { toPng } from 'html-to-image';
 import { BADGES } from "../constants/badges";
+import { checkForBlogueirinhoBadge } from "../lib/badgeUtils";
 
 interface MuralTurmaProps {
   classId: string;
@@ -108,36 +110,6 @@ export const MuralTurma = ({ classId, currentUser, handleAwardBadge }: MuralTurm
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const checkForBlogueirinhoBadge = async (userId: string) => {
-    if (!handleAwardBadge) return;
-
-    try {
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
-      const postsQuery = query(
-        collection(db, "posts"),
-        where("authorId", "==", userId),
-        where("timestamp", ">=", Timestamp.fromDate(startOfMonth)),
-        where("timestamp", "<=", Timestamp.fromDate(endOfMonth))
-      );
-
-      const snapshot = await getDocs(postsQuery);
-      
-      // If user has more than 3 posts this month (making this the 4th or more)
-      if (snapshot.size > 3) {
-        const badgeDef = BADGES.find(b => b.badgeId === 'blogueirinho');
-        if (badgeDef) {
-          const uniqueKey = `blogueirinho_${now.getMonth() + 1}_${now.getFullYear()}_${userId}`;
-          await handleAwardBadge(userId, badgeDef, undefined, uniqueKey, classId);
-        }
-      }
-    } catch (error) {
-      console.error("Erro ao verificar selo Blogueirinho:", error);
-    }
-  };
-
   const handlePostSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!currentUser || (!content.trim() && !imageFile)) return;
@@ -175,13 +147,34 @@ export const MuralTurma = ({ classId, currentUser, handleAwardBadge }: MuralTurm
       alert("Publicado com sucesso!");
 
       // Check for Blogueirinho badge
-      await checkForBlogueirinhoBadge(currentUser.id);
+      if (handleAwardBadge) {
+        await checkForBlogueirinhoBadge(currentUser.id, classId, handleAwardBadge);
+      }
     } catch (error) {
       console.error("Erro ao publicar:", error);
       alert("Erro ao publicar no mural. Tente novamente.");
       handleFirestoreError(error, OperationType.CREATE, "posts");
     } finally {
       setIsPosting(false);
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (!window.confirm("Deseja realmente excluir esta postagem?")) return;
+    try {
+      await deleteDoc(doc(db, "posts", postId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `posts/${postId}`);
+    }
+  };
+
+  const handleClearMural = async () => {
+    if (!window.confirm("Deseja realmente excluir TODAS as postagens deste mural?")) return;
+    try {
+      const deletePromises = posts.map(p => deleteDoc(doc(db, "posts", p.id)));
+      await Promise.all(deletePromises);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, "posts");
     }
   };
 
@@ -372,6 +365,18 @@ export const MuralTurma = ({ classId, currentUser, handleAwardBadge }: MuralTurm
 
       {/* Feed */}
       <div className="space-y-6">
+        {currentUser?.role === "Gestor" && posts.length > 0 && (
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={handleClearMural}
+              className="flex items-center gap-2 px-4 py-1.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all text-[9px] font-black uppercase tracking-widest border border-red-100"
+            >
+              <X size={14} />
+              Limpar Mural
+            </button>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-4">
             <Loader2 size={32} className="animate-spin text-pro-teal" />
@@ -412,23 +417,32 @@ export const MuralTurma = ({ classId, currentUser, handleAwardBadge }: MuralTurm
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-pro-teal/5 flex items-center justify-center text-pro-teal">
-                      <UserIcon size={20} />
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-pro-teal/5 flex items-center justify-center text-pro-teal">
+                        <UserIcon size={20} />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-black text-slate-800 tracking-tight">{post.authorName}</h4>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                          {post.timestamp?.toDate() ? new Intl.DateTimeFormat('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          }).format(post.timestamp.toDate()) : 'Recentemente'}
+                        </p>
+                      </div>
+                      {currentUser?.role === "Gestor" && (
+                        <button
+                          onClick={() => handleDeletePost(post.id)}
+                          className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          title="Excluir Postagem"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
                     </div>
-                    <div>
-                      <h4 className="text-sm font-black text-slate-800 tracking-tight">{post.authorName}</h4>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                        {post.timestamp?.toDate() ? new Intl.DateTimeFormat('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        }).format(post.timestamp.toDate()) : 'Recentemente'}
-                      </p>
-                    </div>
-                  </div>
 
                   <p className="text-slate-600 font-medium leading-relaxed mb-4 whitespace-pre-wrap">
                     {post.content}

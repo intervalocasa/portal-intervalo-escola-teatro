@@ -1538,6 +1538,27 @@ export default function App() {
     }
   };
 
+  const handleClearAllAnnouncements = async () => {
+    if (!window.confirm("Deseja realmente excluir TODOS os avisos do mural e postagens sociais? Esta ação não pode ser desfeita e limpará mensagens particulares e gerais.")) return;
+    
+    setIsAppLoading(true);
+    try {
+      // Clear Announcements (Avisos)
+      const avisoPromises = announcements.map(aviso => deleteDoc(doc(db, "avisos", aviso.id)));
+      
+      // Clear Social Mural Posts
+      const postsSnapshot = await getDocs(collection(db, "posts"));
+      const postPromises = postsSnapshot.docs.map(p => deleteDoc(p.ref));
+      
+      await Promise.all([...avisoPromises, ...postPromises]);
+      showNotification("Murais limpos com sucesso!", "Sucesso");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, "avisos/posts");
+    } finally {
+      setIsAppLoading(false);
+    }
+  };
+
   const handleFirstLoginSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsAppLoading(true);
@@ -1932,6 +1953,7 @@ export default function App() {
               setView={setView}
               handleResetUserForm={handleResetUserForm}
               filteredAnnouncements={filteredAnnouncements}
+              onAwardBadge={handleAwardBadge}
             />
           ) : role === "Professor" ? (
             <ProfessorDashboard 
@@ -1944,6 +1966,7 @@ export default function App() {
               setSelectedUserClasses={setSelectedUserClasses}
               classes={classes}
               filteredAnnouncements={filteredAnnouncements}
+              onAwardBadge={handleAwardBadge}
             />
           ) : (
             <StudentDashboard 
@@ -1959,6 +1982,7 @@ export default function App() {
               classes={classes}
               filteredAnnouncements={filteredAnnouncements}
               userBadges={currentUserBadges}
+              onAwardBadge={handleAwardBadge}
             />
           )
         ) : view === "users_list" ? (
@@ -2167,6 +2191,7 @@ export default function App() {
             setView={setView}
             announcements={announcements}
             handleDeleteAnnouncement={handleDeleteAnnouncement}
+            handleClearAllAnnouncements={handleClearAllAnnouncements}
             users={users}
           />
         ) : view === "lesson_ratings" ? (

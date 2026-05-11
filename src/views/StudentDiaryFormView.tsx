@@ -51,7 +51,10 @@ export const StudentDiaryFormView = ({
   const criteria = isProfessional ? PROFESSIONAL_COURSE_CRITERIA : ADULT_COURSE_CRITERIA;
 
   const allowedBadges = BADGES.filter(b => {
+    // Automatic badges
     if (b.badgeId === 'presenca-vip' || b.badgeId === 'critico-de-arte') return false;
+    
+    // Gestor-only manual badges
     if (userRole !== 'Gestor' && (b.badgeId === 'embaixador-da-arte' || b.badgeId === 'blogueirinho')) {
       return false;
     }

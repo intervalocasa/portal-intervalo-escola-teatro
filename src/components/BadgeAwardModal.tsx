@@ -34,8 +34,12 @@ export const BadgeAwardModal: React.FC<BadgeAwardModalProps> = ({
   };
 
   const filteredBadges = BADGES.filter(b => {
-    if (b.badgeId === 'presenca-vip') return false;
-    if (userRole === "Professor" && b.badgeId === "blogueirinho") return false;
+    // Automatic badges that should not be manual
+    if (b.badgeId === 'presenca-vip' || b.badgeId === 'critico-de-arte') return false;
+    
+    // Manual attribute restrictions
+    if (userRole === "Professor" && (b.badgeId === "blogueirinho" || b.badgeId === "embaixador-da-arte")) return false;
+    
     return true;
   });
 

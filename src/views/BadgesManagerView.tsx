@@ -19,6 +19,7 @@ import { collectionGroup, query, where, getDocs, orderBy, Timestamp, deleteDoc, 
 import { db } from "../lib/firebase";
 import { UserBadge, Class, User } from "../types";
 import { Avatar } from "../components/CommonComponents";
+import { BADGES } from "../constants/badges";
 
 interface BadgesManagerViewProps {
   onBack: () => void;
@@ -134,14 +135,8 @@ export const BadgesManagerView: React.FC<BadgesManagerViewProps> = ({ onBack, cl
   };
 
   const getBadgeIcon = (id: string) => {
-    switch(id) {
-      case 'presenca-vip': return "✨";
-      case 'critico-de-arte': return "🎨";
-      case 'embaixador-da-arte': return "🤝";
-      case 'perseveranca': return "🔥";
-      case 'primeira-conquista': return "🎖️";
-      default: return "🏆";
-    }
+    const badge = BADGES.find(b => b.badgeId === id);
+    return badge ? badge.icon : "🏆";
   };
 
   return (

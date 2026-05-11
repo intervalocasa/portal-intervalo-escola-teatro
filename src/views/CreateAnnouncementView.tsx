@@ -14,6 +14,7 @@ interface CreateAnnouncementViewProps {
   setView: (view: string) => void;
   announcements: any[];
   handleDeleteAnnouncement: (id: string) => Promise<void>;
+  handleClearAllAnnouncements: () => Promise<void>;
   users: any[];
 }
 
@@ -22,6 +23,7 @@ export const CreateAnnouncementView = ({
   setView,
   announcements,
   handleDeleteAnnouncement,
+  handleClearAllAnnouncements,
   users
 }: CreateAnnouncementViewProps) => {
   const INITIAL_STATE = {
@@ -293,8 +295,17 @@ export const CreateAnnouncementView = ({
 
         {/* List Section */}
         <section className="space-y-6">
-          <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
             <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Avisos Recentes</h4>
+            {announcements.length > 0 && (
+              <button 
+                onClick={handleClearAllAnnouncements}
+                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest border border-red-100"
+              >
+                <Trash2 size={14} />
+                Limpar Mural
+              </button>
+            )}
           </div>
 
           <div className="max-h-[600px] overflow-y-auto announcements-scroll pr-2 -mr-2 bg-slate-50/20 rounded-[32px] p-2">

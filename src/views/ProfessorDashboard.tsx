@@ -26,6 +26,7 @@ interface ProfessorDashboardProps {
   setSelectedUserClasses: (classes: string[]) => void;
   classes: any[];
   filteredAnnouncements: any[];
+  onAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
 }
 
 export const ProfessorDashboard = ({
@@ -37,7 +38,8 @@ export const ProfessorDashboard = ({
   setPhotoPreview,
   setSelectedUserClasses,
   classes,
-  filteredAnnouncements
+  filteredAnnouncements,
+  onAwardBadge
 }: ProfessorDashboardProps) => {
   const user = users.find(u => u.id === currentUser?.uid);
   
@@ -70,7 +72,11 @@ export const ProfessorDashboard = ({
             <p className="text-slate-400 font-bold mt-2">Pronto para inspirar seus alunos hoje?</p>
           </div>
 
-          <AnnouncementPanel announcements={filteredAnnouncements} currentUser={user} />
+          <AnnouncementPanel 
+            announcements={filteredAnnouncements} 
+            currentUser={user} 
+            onAwardBadge={onAwardBadge}
+          />
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Minhas Turmas */}

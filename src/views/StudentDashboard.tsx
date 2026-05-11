@@ -34,6 +34,7 @@ interface StudentDashboardProps {
   classes: any[];
   filteredAnnouncements: any[];
   userBadges: UserBadge[];
+  onAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
 }
 
 export const StudentDashboard = ({
@@ -48,7 +49,8 @@ export const StudentDashboard = ({
   setSelectedClassId,
   classes,
   filteredAnnouncements,
-  userBadges
+  userBadges,
+  onAwardBadge
 }: StudentDashboardProps) => {
   const user = users.find(u => u.id === currentUser?.uid);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
@@ -92,7 +94,12 @@ export const StudentDashboard = ({
               </div>
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Mural Geral</h3>
             </div>
-            <AnnouncementPanel announcements={filteredAnnouncements} currentUser={user} studentClasses={studentClasses} />
+            <AnnouncementPanel 
+              announcements={filteredAnnouncements} 
+              currentUser={user} 
+              studentClasses={studentClasses} 
+              onAwardBadge={onAwardBadge}
+            />
           </div>
 
           <div className="space-y-6">
