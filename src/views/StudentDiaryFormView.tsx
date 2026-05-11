@@ -52,7 +52,7 @@ export const StudentDiaryFormView = ({
 
   const allowedBadges = BADGES.filter(b => {
     if (b.badgeId === 'presenca-vip' || b.badgeId === 'critico-de-arte') return false;
-    if (userRole !== 'Gestor' && b.badgeId === 'embaixador-da-arte') {
+    if (userRole !== 'Gestor' && (b.badgeId === 'embaixador-da-arte' || b.badgeId === 'blogueirinho')) {
       return false;
     }
     return true;

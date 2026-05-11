@@ -902,6 +902,7 @@ export default function App() {
 
   const handleAwardBadge = async (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => {
     try {
+      const requester = users.find(u => u.id === currentUser?.uid);
       const badgeData = {
         badgeId: badgeDef.badgeId,
         name: badgeDef.name,
@@ -909,7 +910,9 @@ export default function App() {
         description: badgeDef.description,
         dateReceived: serverTimestamp(),
         message: customMessage || badgeDef.defaultMessage,
-        classId: classId || null
+        classId: classId || null,
+        awardedById: currentUser?.uid || null,
+        awardedByName: requester?.name || requester?.artisticName || currentUser?.displayName || "Sistema"
       };
       
       // Embaixador da Arte is strictly unique (one doc per student)
@@ -2177,6 +2180,7 @@ export default function App() {
             onBack={() => setView("dashboard")}
             classes={classes}
             users={users}
+            onRemoveBadge={handleRemoveBadge}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-20 bg-white rounded-3xl border border-white/50">

@@ -326,6 +326,7 @@ export const UserDetailsView = ({
             onClose={() => setIsBadgeModalOpen(false)}
             onAward={(badge, msg) => user && onAwardBadge(user.id, badge, msg)}
             studentName={user.name}
+            userRole={currentUserRole}
           />
 
           {/* Manage Badge Instances Modal */}
@@ -361,11 +362,18 @@ export const UserDetailsView = ({
                       <div key={ub.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between group">
                         <div className="space-y-1">
                           <p className="text-xs font-bold text-slate-600 leading-tight">"{ub.message}"</p>
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                            {ub.dateReceived?.seconds 
-                              ? new Date(ub.dateReceived.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                              : "Automático"}
-                          </p>
+                          <div className="flex flex-col gap-1">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                              {ub.dateReceived?.seconds 
+                                ? new Date(ub.dateReceived.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                : "Automático"}
+                            </p>
+                            {(ub as any).awardedByName && (
+                              <p className="text-[9px] font-bold text-pro-teal uppercase">
+                                Por: {(ub as any).awardedByName}
+                              </p>
+                            )}
+                          </div>
                         </div>
                         <button
                           onClick={async () => {

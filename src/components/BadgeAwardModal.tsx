@@ -8,13 +8,15 @@ interface BadgeAwardModalProps {
   onClose: () => void;
   onAward: (badge: BadgeDefinition, customMessage: string) => void;
   studentName: string;
+  userRole?: string;
 }
 
 export const BadgeAwardModal: React.FC<BadgeAwardModalProps> = ({ 
   isOpen, 
   onClose, 
   onAward, 
-  studentName 
+  studentName,
+  userRole
 }) => {
   const [selectedBadge, setSelectedBadge] = useState<BadgeDefinition | null>(null);
   const [message, setMessage] = useState('');
@@ -30,6 +32,12 @@ export const BadgeAwardModal: React.FC<BadgeAwardModalProps> = ({
       setMessage('');
     }
   };
+
+  const filteredBadges = BADGES.filter(b => {
+    if (b.badgeId === 'presenca-vip') return false;
+    if (userRole === "Professor" && b.badgeId === "blogueirinho") return false;
+    return true;
+  });
 
   return (
     <AnimatePresence>
@@ -59,7 +67,7 @@ export const BadgeAwardModal: React.FC<BadgeAwardModalProps> = ({
                 Selecione a Conquista
               </label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {BADGES.filter(b => b.badgeId !== 'presenca-vip').map((badge) => (
+                {filteredBadges.map((badge) => (
                   <button
                     key={badge.badgeId}
                     type="button"
