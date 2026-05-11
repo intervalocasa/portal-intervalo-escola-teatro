@@ -12,7 +12,9 @@ import {
   BookOpen, 
   LogOut, 
   Trash2,
-  Calendar
+  Calendar,
+  Star,
+  Award
 } from "lucide-react";
 import { Logo, Avatar } from "../components/CommonComponents";
 import { AnnouncementPanel } from "../components/AnnouncementPanel";
@@ -175,6 +177,36 @@ export const GestorDashboard = ({
               <div>
                 <div className="font-bold text-lg leading-none">Agenda da Escola</div>
                 <div className="text-xs opacity-70 mt-1">Ensaios, Peças e Workshops</div>
+              </div>
+            </motion.button>
+
+            <motion.button
+              onClick={() => setView("lesson_ratings")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className={`w-full p-6 bg-white border-2 border-amber-100 rounded-2xl flex items-center gap-5 text-amber-600 shadow-xl shadow-amber-900/5 transition-all text-left group`}
+            >
+              <div className="bg-amber-100 p-3 rounded-xl group-hover:scale-110 transition-transform text-amber-600">
+                <Star size={24} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-none">Avaliações de Aulas</div>
+                <div className="text-xs opacity-70 mt-1">Ver feedbacks dos alunos</div>
+              </div>
+            </motion.button>
+
+            <motion.button
+              onClick={() => setView("badges_manager")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className={`w-full p-6 bg-white border-2 border-pro-teal/10 rounded-2xl flex items-center gap-5 text-pro-teal shadow-xl shadow-teal-900/5 transition-all text-left group`}
+            >
+              <div className="bg-pro-teal p-3 rounded-xl group-hover:scale-110 transition-transform text-white">
+                <Award size={24} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-none">Gerenciador de Selos</div>
+                <div className="text-xs opacity-70 mt-1">Conquistas dos alunos</div>
               </div>
             </motion.button>
 

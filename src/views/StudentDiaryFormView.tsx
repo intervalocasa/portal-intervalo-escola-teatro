@@ -26,7 +26,7 @@ interface StudentDiaryFormViewProps {
   diaryFormData: any;
   setDiaryFormData: (data: any) => void;
   handleSubmitDiary: (status: "rascunho" | "concluido") => void;
-  handleAwardBadge: (studentId: string, badgeDef: any) => Promise<void>;
+  handleAwardBadge: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
   userRole?: UserRole | null;
   setView: (view: string) => void;
 }
@@ -102,7 +102,7 @@ export const StudentDiaryFormView = ({
               {allowedBadges.map((badge) => (
                 <button
                   key={badge.badgeId}
-                  onClick={() => handleAwardBadge(selectedDiaryStudentId!, badge)}
+                  onClick={() => handleAwardBadge(selectedDiaryStudentId!, badge, undefined, undefined, selectedClassId || undefined)}
                   className="flex flex-col items-center gap-3 p-4 rounded-3xl border border-slate-100 bg-slate-50/50 hover:bg-pro-yellow/10 hover:border-pro-yellow/30 hover:scale-105 transition-all group"
                 >
                   <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-300 group-hover:text-pro-yellow shadow-inner group-hover:shadow-pro-yellow/20 transition-all">

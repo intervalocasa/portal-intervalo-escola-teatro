@@ -48,6 +48,7 @@ export interface UserBadge {
   description: string;
   dateReceived: any;
   message: string;
+  classId?: string;
 }
 
 export interface SchoolEvent {

@@ -25,7 +25,7 @@ interface UserDetailsViewProps {
   setSelectedClassId: (id: string | null) => void;
   onResetPassword: (email: string) => void;
   onUpdateEnrollmentDate: (classId: string, studentId: string, newDate: string) => Promise<void>;
-  onAwardBadge: (studentId: string, badgeDef: any, customMessage?: string) => Promise<void>;
+  onAwardBadge: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
   onRemoveBadge: (studentId: string, badgeId: string) => Promise<void>;
   selectedUserBadges: UserBadge[];
   currentUserRole?: string;

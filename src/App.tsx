@@ -94,6 +94,8 @@ import { ProfessorDiaryView } from "./views/ProfessorDiaryView";
 import { StudentDiaryFormView } from "./views/StudentDiaryFormView";
 import { ManageDiariesView } from "./views/ManageDiariesView";
 import { AgendaEventos } from "./components/AgendaEventos";
+import { LessonRatingsView } from "./views/LessonRatingsView";
+import { BadgesManagerView } from "./views/BadgesManagerView";
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
@@ -167,7 +169,7 @@ export default function App() {
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
-  const [_view, _setView] = useState<"login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup" | "school_agenda">("login");
+  const [_view, _setView] = useState<"login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup" | "school_agenda" | "lesson_ratings" | "badges_manager">("login");
   
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -898,7 +900,7 @@ export default function App() {
     return unsub;
   }, [selectedUserId]);
 
-  const handleAwardBadge = async (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string) => {
+  const handleAwardBadge = async (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => {
     try {
       const badgeData = {
         badgeId: badgeDef.badgeId,
@@ -906,7 +908,8 @@ export default function App() {
         icon: badgeDef.badgeId, 
         description: badgeDef.description,
         dateReceived: serverTimestamp(),
-        message: customMessage || badgeDef.defaultMessage
+        message: customMessage || badgeDef.defaultMessage,
+        classId: classId || null
       };
       
       // Embaixador da Arte is strictly unique (one doc per student)
@@ -1087,7 +1090,7 @@ export default function App() {
         if (Number(diaryFormData.absences || 0) === 0 && Number(diaryFormData.presences || 0) > 0) {
           const vipBadge = BADGES.find(b => b.badgeId === 'presenca-vip');
           if (vipBadge) {
-            await handleAwardBadge(selectedDiaryStudentId, vipBadge, undefined, `presenca-vip${uniqueCycleKey}`);
+            await handleAwardBadge(selectedDiaryStudentId, vipBadge, undefined, `presenca-vip${uniqueCycleKey}`, selectedClassId);
           }
         }
 
@@ -1110,7 +1113,7 @@ export default function App() {
         if (feedbackCount >= Number(diaryFormData.presences || 0) && Number(diaryFormData.presences || 0) > 0) {
           const criticoBadge = BADGES.find(b => b.badgeId === 'critico-de-arte');
           if (criticoBadge) {
-            await handleAwardBadge(selectedDiaryStudentId, criticoBadge, undefined, `critico-de-arte${uniqueCycleKey}`);
+            await handleAwardBadge(selectedDiaryStudentId, criticoBadge, undefined, `critico-de-arte${uniqueCycleKey}`, selectedClassId);
           }
         }
       }
@@ -2159,6 +2162,18 @@ export default function App() {
             setView={setView}
             announcements={announcements}
             handleDeleteAnnouncement={handleDeleteAnnouncement}
+            users={users}
+          />
+        ) : view === "lesson_ratings" ? (
+          <LessonRatingsView 
+            onBack={() => setView("dashboard")}
+            classes={classes}
+            users={users}
+          />
+        ) : view === "badges_manager" ? (
+          <BadgesManagerView 
+            onBack={() => setView("dashboard")}
+            classes={classes}
             users={users}
           />
         ) : (

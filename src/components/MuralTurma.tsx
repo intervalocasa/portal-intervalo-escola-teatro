@@ -45,7 +45,7 @@ import { BADGES } from "../constants/badges";
 interface MuralTurmaProps {
   classId: string;
   currentUser: User | null;
-  handleAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string) => Promise<void>;
+  handleAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
 }
 
 export const MuralTurma = ({ classId, currentUser, handleAwardBadge }: MuralTurmaProps) => {
@@ -130,7 +130,7 @@ export const MuralTurma = ({ classId, currentUser, handleAwardBadge }: MuralTurm
         const badgeDef = BADGES.find(b => b.badgeId === 'blogueirinho');
         if (badgeDef) {
           const uniqueKey = `blogueirinho_${now.getMonth() + 1}_${now.getFullYear()}_${userId}`;
-          await handleAwardBadge(userId, badgeDef, undefined, uniqueKey);
+          await handleAwardBadge(userId, badgeDef, undefined, uniqueKey, classId);
         }
       }
     } catch (error) {

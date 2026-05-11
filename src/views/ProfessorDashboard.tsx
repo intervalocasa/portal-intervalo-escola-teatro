@@ -9,7 +9,8 @@ import {
   BookOpen, 
   LogOut, 
   UserCircle,
-  Calendar
+  Calendar,
+  Award
 } from "lucide-react";
 import { THEME } from "../theme";
 import { Logo, Avatar } from "../components/CommonComponents";
@@ -154,6 +155,22 @@ export const ProfessorDashboard = ({
               <div>
                 <div className="font-bold text-lg leading-none uppercase tracking-tight">Agenda da Escola</div>
                 <div className="text-xs opacity-70 mt-1 font-bold">Eventos e Ensaios</div>
+              </div>
+            </motion.button>
+
+            {/* Gerenciador de Selos */}
+            <motion.button
+              onClick={() => setView("badges_manager")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full p-6 bg-white border-2 border-pro-teal/10 rounded-2xl flex items-center gap-5 text-pro-teal shadow-xl shadow-teal-900/5 transition-all text-left group"
+            >
+              <div className="bg-pro-teal p-3 rounded-xl text-white group-hover:scale-110 transition-transform">
+                <Award size={24} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-none uppercase tracking-tight">Gerenciador de Selos</div>
+                <div className="text-xs text-slate-400 mt-1 font-bold">Conquistas dos alunos</div>
               </div>
             </motion.button>
 

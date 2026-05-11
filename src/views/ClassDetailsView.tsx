@@ -23,7 +23,7 @@ interface ClassDetailsViewProps {
   setView: (view: string) => void;
   setClassData: (data: any) => void;
   showNotification: (message: string, title?: string, type?: "success" | "warning" | "error") => void;
-  handleAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string) => Promise<void>;
+  handleAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
 }
 
 export const ClassDetailsView = ({
