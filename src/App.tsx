@@ -920,6 +920,8 @@ export default function App() {
 
       await setDoc(doc(db, "usuarios", studentId, "userBadges", docId), badgeData);
 
+      showNotification(`Selo ${badgeDef.name} atribuído com sucesso!`, "Sucesso");
+
       // Create an announcement for the badge award
       const studentData = users.find(u => u.id === studentId);
       if (studentData) {

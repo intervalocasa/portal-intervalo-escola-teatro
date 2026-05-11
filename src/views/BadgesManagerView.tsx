@@ -50,7 +50,6 @@ export const BadgesManagerView: React.FC<BadgesManagerViewProps> = ({ onBack, cl
 
       let q;
       // Note: collectionGroup query might require an index for composite filters.
-      // If it fails, we fall back to a simpler approach or fetch more and filter in memory.
       if (selectedClassId === "all") {
         q = query(
           collectionGroup(db, "userBadges"),
@@ -70,10 +69,8 @@ export const BadgesManagerView: React.FC<BadgesManagerViewProps> = ({ onBack, cl
 
       const snapshot = await getDocs(q);
       const fetched = snapshot.docs.map(doc => {
-        // Extract userId from path: usuarios/USER_ID/userBadges/DOC_ID
         const pathSegments = doc.ref.path.split('/');
         const userId = pathSegments[1];
-        
         return {
           id: doc.id,
           userId,
@@ -82,29 +79,48 @@ export const BadgesManagerView: React.FC<BadgesManagerViewProps> = ({ onBack, cl
       });
       
       setAwardedBadges(fetched);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching awarded badges:", error);
-      // Fallback: If index is missing or error occurs, try without class filter and filter client-side
+      
+      // Check if it's an index error
+      const isIndexError = error?.message?.includes("index");
+
+      // Robust Fallback: Fetch all badges and filter client-side
       try {
         const startOfMonth = new Date(selectedYear, selectedMonth - 1, 1);
         const endOfMonth = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
-        const fallbackQ = query(
-          collectionGroup(db, "userBadges"),
-          where("dateReceived", ">=", Timestamp.fromDate(startOfMonth)),
-          where("dateReceived", "<=", Timestamp.fromDate(endOfMonth)),
-          orderBy("dateReceived", "desc")
-        );
+        
+        // Use the most basic query possible which usually doesn't require complex indices
+        const fallbackQ = query(collectionGroup(db, "userBadges"));
         const snapshot = await getDocs(fallbackQ);
         const fetched = snapshot.docs.map(doc => {
           const pathSegments = doc.ref.path.split('/');
           return { id: doc.id, userId: pathSegments[1], ...doc.data() } as (UserBadge & { userId: string });
         });
         
-        const filtered = selectedClassId === "all" 
-          ? fetched 
-          : fetched.filter(b => b.classId === selectedClassId);
+        // Client-side filtering and sorting
+        const filtered = fetched.filter(b => {
+          const date = b.dateReceived?.toDate ? b.dateReceived.toDate() : null;
+          if (!date) return false;
+          
+          const isInMonth = date >= startOfMonth && date <= endOfMonth;
+          const matchesClass = selectedClassId === "all" || b.classId === selectedClassId;
+          
+          return isInMonth && matchesClass;
+        });
+        
+        // Sort by date desc
+        filtered.sort((a, b) => {
+          const dateA = a.dateReceived?.toMillis ? a.dateReceived.toMillis() : 0;
+          const dateB = b.dateReceived?.toMillis ? b.dateReceived.toMillis() : 0;
+          return dateB - dateA;
+        });
           
         setAwardedBadges(filtered);
+        
+        if (isIndexError) {
+          console.warn("Used client-side fallback due to missing index. Please create the required index for better performance.");
+        }
       } catch (fallbackError) {
         console.error("Fallback fetching failed:", fallbackError);
       }

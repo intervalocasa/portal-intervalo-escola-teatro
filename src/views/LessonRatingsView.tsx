@@ -74,8 +74,43 @@ export const LessonRatingsView: React.FC<LessonRatingsViewProps> = ({ onBack, cl
       })) as ClassFeedback[];
       
       setFeedbacks(fetchedFeedbacks);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching feedbacks:", error);
+      
+      // Fallback: Fetch broadly and filter in memory if index is missing
+      try {
+        const startOfMonth = new Date(selectedYear, selectedMonth - 1, 1);
+        const endOfMonth = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
+        
+        // Simpler query that usually doesn't need composite index
+        const fallbackQ = query(collection(db, "feedbacks-aulas"));
+        const snapshot = await getDocs(fallbackQ);
+        
+        const fetched = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as ClassFeedback[];
+        
+        const filtered = fetched.filter(f => {
+          const date = f.timestamp?.toDate ? f.timestamp.toDate() : null;
+          if (!date) return false;
+          
+          const isInMonth = date >= startOfMonth && date <= endOfMonth;
+          const matchesClass = selectedClassId === "all" || f.classId === selectedClassId;
+          
+          return isInMonth && matchesClass;
+        });
+        
+        filtered.sort((a, b) => {
+          const dateA = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0;
+          const dateB = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0;
+          return dateB - dateA;
+        });
+        
+        setFeedbacks(filtered);
+      } catch (fallbackError) {
+        console.error("Fallback fetching failed:", fallbackError);
+      }
     } finally {
       setIsLoading(false);
     }
