@@ -73,6 +73,10 @@ export interface ClassFeedback {
   className?: string;
   date: any;
   rating: number;
+  npsRating?: number;
+  expressionScore?: number;
+  qualityScore?: number;
+  challengeScore?: number;
   comment: string;
   timestamp: any;
 }

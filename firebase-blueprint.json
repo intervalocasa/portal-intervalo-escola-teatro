@@ -233,6 +233,10 @@
         "className": { "type": "string" },
         "date": { "type": "object" },
         "rating": { "type": "number", "minimum": 1, "maximum": 5 },
+        "npsRating": { "type": "number", "minimum": 0, "maximum": 10 },
+        "expressionScore": { "type": "number", "minimum": 1, "maximum": 5 },
+        "qualityScore": { "type": "number", "minimum": 1, "maximum": 5 },
+        "challengeScore": { "type": "number", "minimum": 1, "maximum": 5 },
         "comment": { "type": "string" },
         "timestamp": { "type": "object" }
       },

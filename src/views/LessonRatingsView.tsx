@@ -70,7 +70,7 @@ export const LessonRatingsView: React.FC<LessonRatingsViewProps> = ({ onBack, cl
       const snapshot = await getDocs(q);
       const fetchedFeedbacks = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...(doc.data() as any)
       })) as ClassFeedback[];
       
       setFeedbacks(fetchedFeedbacks);
@@ -88,7 +88,7 @@ export const LessonRatingsView: React.FC<LessonRatingsViewProps> = ({ onBack, cl
         
         const fetched = snapshot.docs.map(doc => ({
           id: doc.id,
-          ...doc.data()
+          ...(doc.data() as any)
         })) as ClassFeedback[];
         
         const filtered = fetched.filter(f => {
@@ -236,7 +236,7 @@ export const LessonRatingsView: React.FC<LessonRatingsViewProps> = ({ onBack, cl
                   >
                     <div className="p-6 flex flex-col md:flex-row gap-6">
                       <div className="flex items-center gap-4 shrink-0">
-                        <Avatar src={student?.photo} size={56} fallbackSize={24} />
+                        <Avatar src={student?.photo} className="w-14 h-14 rounded-full" fallbackSize={24} />
                         <div>
                           <h4 className="text-slate-800 font-black uppercase text-sm leading-tight">{student?.name || item.studentName}</h4>
                           <p className="text-[10px] font-bold text-pro-teal uppercase tracking-widest mt-0.5">{classItem?.type || "Turma não encontrada"}</p>
@@ -250,21 +250,61 @@ export const LessonRatingsView: React.FC<LessonRatingsViewProps> = ({ onBack, cl
                       </div>
 
                       <div className="flex-1 flex flex-col justify-center">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black tracking-tight ${getRatingColor(item.rating)}`}>
-                            <Star size={14} fill="currentColor" />
-                            {item.rating.toFixed(1)}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                          <div className="space-y-1">
+                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Média (1-5)</p>
+                             <div className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black tracking-tight w-fit ${getRatingColor(item.rating)}`}>
+                                <Star size={12} fill="currentColor" />
+                                {item.rating.toFixed(1)}
+                             </div>
                           </div>
+
+                          {item.npsRating !== undefined && (
+                            <div className="space-y-1">
+                               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">NPS (0-10)</p>
+                               <div className="text-sm font-black text-slate-700 bg-slate-100 px-3 py-1 rounded-xl w-fit">
+                                 {item.npsRating}
+                               </div>
+                            </div>
+                          )}
+
+                          {item.expressionScore && (
+                            <div className="space-y-1">
+                               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight">Espaço/Escuta</p>
+                               <div className="text-xs font-black text-slate-600 bg-slate-50 px-3 py-1 rounded-xl w-fit">
+                                 {item.expressionScore}/5
+                               </div>
+                            </div>
+                          )}
+
+                          {item.qualityScore && (
+                            <div className="space-y-1">
+                               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight">Clareza/Qualidade</p>
+                               <div className="text-xs font-black text-slate-600 bg-slate-50 px-3 py-1 rounded-xl w-fit">
+                                 {item.qualityScore}/5
+                               </div>
+                            </div>
+                          )}
                         </div>
+
+                        {item.challengeScore && (
+                          <div className="mb-4">
+                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight mb-1">Desafio/Evolução</p>
+                             <div className="text-xs font-black text-slate-600 bg-slate-50 px-3 py-1 rounded-xl w-fit">
+                               {item.challengeScore}/5
+                             </div>
+                          </div>
+                        )}
+
                         {item.comment ? (
-                          <div className="bg-slate-50 p-4 rounded-2xl relative">
-                            <MessageSquare size={14} className="absolute -top-1.5 -left-1.5 text-slate-200" />
+                          <div className="bg-slate-50 p-4 rounded-2xl relative border border-slate-100">
+                            <MessageSquare size={14} className="absolute -top-1.5 -left-1.5 text-pro-teal/20" />
                             <p className="text-sm text-slate-600 font-medium italic leading-relaxed">
                               "{item.comment}"
                             </p>
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-300 font-bold uppercase tracking-widest italic mt-2">Sem comentário</p>
+                          <p className="text-xs text-slate-300 font-bold uppercase tracking-widest italic mt-2">Sem comentário adicional</p>
                         )}
                       </div>
                     </div>

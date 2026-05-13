@@ -77,7 +77,7 @@ export const BadgesManagerView: React.FC<BadgesManagerViewProps> = ({ onBack, cl
         return {
           id: doc.id,
           userId,
-          ...doc.data()
+          ...(doc.data() as any)
         } as (UserBadge & { userId: string });
       });
       
@@ -94,7 +94,7 @@ export const BadgesManagerView: React.FC<BadgesManagerViewProps> = ({ onBack, cl
         const snapshot = await getDocs(fallbackQ);
         const fetched = snapshot.docs.map(doc => {
           const pathSegments = doc.ref.path.split('/');
-          return { id: doc.id, userId: pathSegments[1], ...doc.data() } as (UserBadge & { userId: string });
+          return { id: doc.id, userId: pathSegments[1], ...(doc.data() as any) } as (UserBadge & { userId: string });
         });
         
         const filtered = fetched.filter(b => {
@@ -259,8 +259,8 @@ export const BadgesManagerView: React.FC<BadgesManagerViewProps> = ({ onBack, cl
                   >
                     <div className="flex flex-col lg:flex-row items-center gap-4">
                       {/* Aluno Column */}
-                      <div className="flex items-center gap-3 w-full lg:w-1/4 shrink-0">
-                        <Avatar src={student?.photo} size={40} fallbackSize={16} />
+                      <div className="flex items-center gap-3 w-full lg:w-1/4 shrink-0 min-w-0">
+                        <Avatar src={student?.photo} className="w-10 h-10 rounded-full" fallbackSize={16} />
                         <div className="min-w-0">
                           <h4 className="text-slate-800 font-black uppercase text-[11px] leading-tight truncate">{student?.name || "Aluno(a)"}</h4>
                           <p className="text-[9px] font-bold text-pro-teal uppercase tracking-tight truncate mt-0.5">{classItem?.type || "Turma Geral"}</p>

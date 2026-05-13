@@ -30,8 +30,10 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   studentClasses,
   onSuccess
 }) => {
-  const [rating, setRating] = useState(0);
-  const [hoverRating, setHoverRating] = useState(0);
+  const [npsRating, setNpsRating] = useState<number | null>(null);
+  const [expressionScore, setExpressionScore] = useState<number | null>(null);
+  const [qualityScore, setQualityScore] = useState<number | null>(null);
+  const [challengeScore, setChallengeScore] = useState<number | null>(null);
   const [comment, setComment] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -86,7 +88,15 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser || !selectedClassId || rating === 0 || !selectedDate) return;
+    if (
+      !currentUser || 
+      !selectedClassId || 
+      npsRating === null || 
+      expressionScore === null || 
+      qualityScore === null || 
+      challengeScore === null || 
+      !selectedDate
+    ) return;
 
     setIsSubmitting(true);
     try {
@@ -94,13 +104,20 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       // Set to midday to avoid timezone issues shifting the day
       feedbackDate.setHours(12, 0, 0, 0);
 
+      // Main rating is the average of expression, quality and challenge (1-5 scaled)
+      const avgRating = (expressionScore + qualityScore + challengeScore) / 3;
+
       await addDoc(collection(db, "feedbacks-aulas"), {
         studentId: currentUser.id,
         studentName: currentUser.name,
         classId: selectedClassId,
         className: selectedClass?.code || 'Turma não identificada',
         date: Timestamp.fromDate(feedbackDate),
-        rating,
+        rating: avgRating,
+        npsRating,
+        expressionScore,
+        qualityScore,
+        challengeScore,
         comment,
         timestamp: serverTimestamp()
       });
@@ -111,7 +128,10 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         onClose();
         onSuccess();
         // Reset form
-        setRating(0);
+        setNpsRating(null);
+        setExpressionScore(null);
+        setQualityScore(null);
+        setChallengeScore(null);
         setComment('');
         setSelectedDate('');
       }, 2000);
@@ -124,8 +144,13 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
   if (!isOpen) return null;
 
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
+  const isFormValid = 
+    selectedClassId && 
+    selectedDate && 
+    npsRating !== null && 
+    expressionScore !== null && 
+    qualityScore !== null && 
+    challengeScore !== null;
 
   return (
     <AnimatePresence>
@@ -134,7 +159,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="bg-white rounded-[48px] shadow-2xl w-full max-w-lg overflow-hidden relative overflow-y-auto max-h-[90vh]"
+          className="bg-white rounded-[48px] shadow-2xl w-full max-w-2xl overflow-hidden relative overflow-y-auto max-h-[90vh]"
         >
           {isSuccess ? (
             <div className="p-12 text-center space-y-6">
@@ -171,155 +196,176 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-10 space-y-6">
-                {/* Row 1: Turma and Year */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
-                      <Calendar size={12} /> Turma
-                    </label>
-                    <select
-                      required
-                      value={selectedClassId}
-                      onChange={(e) => {
-                        setSelectedClassId(e.target.value);
-                        setSelectedDate('');
-                      }}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-xs font-black text-slate-700 outline-none focus:border-pro-teal focus:bg-white transition-all appearance-none"
-                    >
-                      <option value="">Selecione</option>
-                      {studentClasses.map(c => (
-                        <option key={c.id} value={c.id}>{c.code}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
-                       Ano
-                    </label>
-                    <select
-                      value={selectedYear}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setSelectedYear(val);
-                        setSelectedDate('');
-                        
-                        const now = new Date();
-                        if (val === now.getFullYear() && selectedMonth > now.getMonth() + 1) {
-                          setSelectedMonth(now.getMonth() + 1);
-                        }
-                      }}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-xs font-black text-slate-700 outline-none focus:border-pro-teal focus:bg-white transition-all appearance-none"
-                    >
-                      {[2024, 2025, 2026, 2027, 2028].filter(y => y <= new Date().getFullYear()).map(y => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Row 2: Month and Day */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
-                       Mês
-                    </label>
-                    <select
-                      value={selectedMonth}
-                      onChange={(e) => {
-                        setSelectedMonth(Number(e.target.value));
-                        setSelectedDate('');
-                      }}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-xs font-black text-slate-700 outline-none focus:border-pro-teal focus:bg-white transition-all appearance-none"
-                    >
-                      {Array.from({ length: 12 }, (_, i) => i + 1)
-                        .filter(m => {
-                          const now = new Date();
-                          const curYear = now.getFullYear();
-                          const curMonth = now.getMonth() + 1;
-                          if (selectedYear < curYear) return true;
-                          if (selectedYear === curYear) return m <= curMonth;
-                          return false;
-                        })
-                        .map(m => (
-                          <option key={m} value={m}>
-                            {new Date(0, m - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}
-                          </option>
-                        ))
-                      }
-                    </select>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
-                      Data da Aula
-                    </label>
-                    <select
-                      required
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      disabled={!selectedClassId}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-xs font-black text-slate-700 outline-none focus:border-pro-teal focus:bg-white transition-all appearance-none disabled:opacity-50"
-                    >
-                      <option value="">Selecione o dia</option>
-                      {availableDays.map(d => (
-                        <option key={d.toISOString()} value={d.toISOString()}>
-                          {d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }).toUpperCase()}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-4 text-center bg-slate-50/50 p-6 rounded-[32px] border border-slate-100">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block">
-                    Sua Satisfação
-                  </label>
-                  <div className="flex justify-center gap-3">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onMouseEnter={() => setHoverRating(star)}
-                        onMouseLeave={() => setHoverRating(0)}
-                        onClick={() => setRating(star)}
-                        className="transition-all transform hover:scale-125"
+              <form onSubmit={handleSubmit} className="p-10 space-y-8">
+                {/* Turma and Date Selection */}
+                <div className="bg-slate-50 p-6 rounded-[32px] space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
+                        <Calendar size={12} /> Turma
+                      </label>
+                      <select
+                        required
+                        value={selectedClassId}
+                        onChange={(e) => {
+                          setSelectedClassId(e.target.value);
+                          setSelectedDate('');
+                        }}
+                        className="w-full bg-white border-2 border-slate-100 rounded-2xl p-4 text-xs font-black text-slate-700 outline-none focus:border-pro-teal transition-all appearance-none"
                       >
-                        <Star 
-                          size={32} 
-                          fill={star <= (hoverRating || rating) ? "#ffbc00" : "none"} 
-                          className={star <= (hoverRating || rating) ? "text-pro-yellow" : "text-slate-200"}
-                        />
+                        <option value="">Selecione</option>
+                        {studentClasses.map(c => (
+                          <option key={c.id} value={c.id}>{c.code}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
+                        Data da Aula
+                      </label>
+                      <select
+                        required
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        disabled={!selectedClassId}
+                        className="w-full bg-white border-2 border-slate-100 rounded-2xl p-4 text-xs font-black text-slate-700 outline-none focus:border-pro-teal transition-all appearance-none disabled:opacity-50"
+                      >
+                        <option value="">Selecione o dia</option>
+                        {availableDays.map(d => (
+                          <option key={d.toISOString()} value={d.toISOString()}>
+                            {d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }).toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Question 1: NPS (0-10) */}
+                <div className="space-y-4">
+                  <label className="text-sm font-black text-slate-800 leading-tight">
+                    1. O quanto você recomendaria esta aula para um amigo ou colega de teatro?
+                  </label>
+                  <div className="flex flex-wrap justify-between gap-1">
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setNpsRating(val)}
+                        className={`w-9 h-9 md:w-10 md:h-10 rounded-lg text-xs font-black transition-all ${
+                          npsRating === val 
+                            ? 'bg-pro-teal text-white shadow-lg shadow-pro-teal/20' 
+                            : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                        }`}
+                      >
+                        {val}
                       </button>
                     ))}
                   </div>
-                  <div className="h-4">
-                    <p className="text-[9px] font-black uppercase text-pro-teal tracking-widest italic">
-                      {rating === 1 && "Poderia ser melhor"}
-                      {rating === 2 && "Regular"}
-                      {rating === 3 && "Boa!"}
-                      {rating === 4 && "Muito boa!"}
-                      {rating === 5 && "Incrível! 🎭"}
-                    </p>
+                  <div className="flex justify-between px-1">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Não recomendaria</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Recomendaria muito</span>
                   </div>
                 </div>
 
+                {/* Question 2: expressionScore (1-5) */}
+                <div className="space-y-4">
+                  <label className="text-sm font-black text-slate-800 leading-tight">
+                    2. Em que medida você sentiu que teve espaço para se expressar e ser ouvido(a) pelo professor hoje?
+                  </label>
+                  <div className="flex justify-between gap-2">
+                    {[1, 2, 3, 4, 5].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setExpressionScore(val)}
+                        className={`flex-1 py-3 rounded-xl text-xs font-black transition-all border-2 ${
+                          expressionScore === val 
+                            ? 'bg-pro-teal border-pro-teal text-white' 
+                            : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-between px-1">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Não me senti ouvido</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Senti total abertura</span>
+                  </div>
+                </div>
+
+                {/* Question 3: qualityScore (1-5) */}
+                <div className="space-y-4">
+                  <label className="text-sm font-black text-slate-800 leading-tight">
+                    3. Como você avalia a clareza e a qualidade dos exercícios propostos?
+                  </label>
+                  <div className="flex justify-between gap-2">
+                    {[1, 2, 3, 4, 5].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setQualityScore(val)}
+                        className={`flex-1 py-3 rounded-xl text-xs font-black transition-all border-2 ${
+                          qualityScore === val 
+                            ? 'bg-pro-teal border-pro-teal text-white' 
+                            : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-between px-1">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Confusos/Pouco produtivos</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Muito claros/Excelente prática</span>
+                  </div>
+                </div>
+
+                {/* Question 4: challengeScore (1-5) */}
+                <div className="space-y-4">
+                  <label className="text-sm font-black text-slate-800 leading-tight">
+                    4. O quanto o conteúdo de hoje desafiou suas habilidades artísticas de forma positiva?
+                  </label>
+                  <div className="flex justify-between gap-2">
+                    {[1, 2, 3, 4, 5].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setChallengeScore(val)}
+                        className={`flex-1 py-3 rounded-xl text-xs font-black transition-all border-2 ${
+                          challengeScore === val 
+                            ? 'bg-pro-teal border-pro-teal text-white' 
+                            : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-between px-1">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Senti que não evoluí</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Senti um grande progresso</span>
+                  </div>
+                </div>
+
+                {/* Question 5: Comments */}
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
-                    <MessageSquare size={12} /> Comentário
+                  <label className="text-sm font-black text-slate-800 leading-tight block">
+                    5. Espaço Aberto: O que foi o ponto alto da aula ou o que poderíamos melhorar?
                   </label>
                   <textarea
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-[24px] p-5 text-sm font-bold text-slate-700 outline-none focus:border-pro-teal focus:bg-white transition-all min-h-[100px] resize-none"
-                    placeholder="O que você mais gostou na aula?"
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-[24px] p-5 text-sm font-bold text-slate-700 outline-none focus:border-pro-teal focus:bg-white transition-all min-h-[120px] resize-none"
+                    placeholder="Sua resposta aqui..."
                   />
                 </div>
 
                 <button
                   type="submit"
-                  disabled={isSubmitting || rating === 0 || !selectedClassId || !selectedDate}
+                  disabled={isSubmitting || !isFormValid}
                   className="w-full bg-pro-teal text-white py-5 rounded-[24px] font-black uppercase tracking-widest shadow-xl shadow-pro-teal/20 hover:bg-slate-800 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
                 >
                   {isSubmitting ? (
