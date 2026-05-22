@@ -67,7 +67,9 @@ import {
   getDocs,
   getDocFromServer,
   orderBy,
-  Timestamp
+  Timestamp,
+  arrayRemove,
+  deleteField
 } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "./lib/firestoreErrorHandler";
 import { analyzePedagogicalFeedback } from "./services/geminiService";
@@ -797,6 +799,7 @@ export default function App() {
   const [enrollmentModalDate, setEnrollmentModalDate] = useState("");
 
   const [editEnrollmentInfo, setEditEnrollmentInfo] = useState<{classId: string, studentId: string, date: string} | null>(null);
+  const [showEnrollmentDeleteConfirm, setShowEnrollmentDeleteConfirm] = useState(false);
 
   const handleUpdateEnrollmentDate = async (classId: string, studentId: string, newDate: string) => {
     setIsAppLoading(true);
@@ -814,6 +817,22 @@ export default function App() {
       showNotification("Data de matrícula atualizada!", "Sucesso");
     } catch (err: any) {
       showNotification("Erro ao atualizar data: " + err.message, "Erro");
+    } finally {
+      setIsAppLoading(false);
+    }
+  };
+
+  const handleDeleteEnrollment = async (classId: string, studentId: string) => {
+    setIsAppLoading(true);
+    try {
+      await updateDoc(doc(db, "classes", classId), {
+        studentIds: arrayRemove(studentId),
+        [`enrollmentDates.${studentId}`]: deleteField()
+      });
+      showNotification("Matrícula excluída com sucesso!", "Sucesso");
+      setEditEnrollmentInfo(null);
+    } catch (err: any) {
+      showNotification("Erro ao excluir matrícula: " + err.message, "Erro");
     } finally {
       setIsAppLoading(false);
     }
@@ -2331,7 +2350,7 @@ export default function App() {
                 <p className="text-orange-50/70 text-[10px] mt-1 uppercase tracking-widest font-bold">Turma: {classes.find(c => c.id === editEnrollmentInfo.classId)?.code}</p>
               </div>
 
-              <div className="p-8 space-y-6">
+               <div className="p-8 space-y-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nova Data de Matrícula</label>
                   <input
@@ -2345,7 +2364,10 @@ export default function App() {
 
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setEditEnrollmentInfo(null)}
+                    onClick={() => {
+                      setEditEnrollmentInfo(null);
+                      setShowEnrollmentDeleteConfirm(false);
+                    }}
                     className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
                   >
                     CANCELAR
@@ -2356,12 +2378,52 @@ export default function App() {
                         handleUpdateEnrollmentDate(editEnrollmentInfo.classId, editEnrollmentInfo.studentId, editEnrollmentInfo.date);
                       }
                       setEditEnrollmentInfo(null);
+                      setShowEnrollmentDeleteConfirm(false);
                     }}
                     className="flex-1 py-4 bg-pro-orange text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg"
                   >
                     SALVAR
                   </button>
                 </div>
+
+                {showEnrollmentDeleteConfirm ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-red-50 border border-red-100 rounded-[24px] space-y-3 animate-in fade-in duration-200"
+                  >
+                    <p className="text-[10px] font-black text-red-800 uppercase tracking-wider">Confirmar exclusão desta matrícula?</p>
+                    <p className="text-[9px] text-red-600 font-bold leading-normal">
+                      O aluno será totalmente removido desta turma. Esta ação é irreversível.
+                    </p>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => setShowEnrollmentDeleteConfirm(false)}
+                        className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-500 rounded-xl font-black text-[9px] uppercase tracking-wider hover:bg-slate-50 transition-all"
+                      >
+                        Cancelar
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          await handleDeleteEnrollment(editEnrollmentInfo.classId, editEnrollmentInfo.studentId);
+                          setShowEnrollmentDeleteConfirm(false);
+                        }}
+                        className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-black text-[9px] uppercase tracking-wider hover:bg-red-700 transition-all"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <div className="pt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => setShowEnrollmentDeleteConfirm(true)}
+                      className="w-full py-3 bg-red-50 hover:bg-red-100/70 text-red-600 rounded-2xl font-black uppercase tracking-widest text-[9px] transition-all flex items-center justify-center gap-2"
+                    >
+                      Excluir Matrícula
+                    </button>
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>
