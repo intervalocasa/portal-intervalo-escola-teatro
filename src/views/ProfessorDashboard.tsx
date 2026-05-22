@@ -20,7 +20,7 @@ interface ProfessorDashboardProps {
   currentUser: any;
   users: any[];
   handleLogout: () => void;
-  setView: (view: "login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup" | "school_agenda") => void;
+  setView: (view: any) => void;
   setFormData: (data: any) => void;
   setPhotoPreview: (photo: string | null) => void;
   setSelectedUserClasses: (classes: string[]) => void;

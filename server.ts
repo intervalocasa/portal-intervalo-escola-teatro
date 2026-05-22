@@ -117,8 +117,30 @@ async function startServer() {
     console.log("[SERVER] Starting in production mode (serving dist/)");
     const distPath = path.join(process.cwd(), "dist");
     if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath));
+      // Configura cache-control específico para evitar que index.html ou service-worker permaneçam em cache
+      app.use(express.static(distPath, {
+        setHeaders: (res, filePath) => {
+          const fileName = path.basename(filePath);
+          if (fileName === "service-worker.js" || fileName === "manifest.json" || filePath.endsWith(".json")) {
+            res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+            res.setHeader("Pragma", "no-cache");
+            res.setHeader("Expires", "0");
+          } else if (filePath.endsWith(".html")) {
+            res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+            res.setHeader("Pragma", "no-cache");
+            res.setHeader("Expires", "0");
+          } else if (filePath.includes("/assets/") || filePath.includes("\\assets\\")) {
+            // Arquivos gerados pelo Vite com hash são seguros de cachear perpetuamente
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          } else {
+            res.setHeader("Cache-Control", "no-cache");
+          }
+        }
+      }));
       app.get("*", (req, res) => {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
         res.sendFile(path.join(distPath, "index.html"));
       });
     } else {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'intervalo-v1';
+const CACHE_NAME = 'intervalo-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -30,9 +30,24 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only handle GET requests
+  if (event.request.method !== 'GET') return;
+
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        // If successful, cache it (only for same-origin resources, e.g. type 'basic')
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        // Fall back to cache on network failure
+        return caches.match(event.request);
+      })
   );
 });
