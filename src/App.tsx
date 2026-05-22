@@ -133,16 +133,18 @@ export default function App() {
                                  errMessage.toLowerCase().includes('permission') ||
                                  errMessage.toLowerCase().includes('insufficient');
 
-        if (error.message?.includes('offline') || error.code === 'unavailable' || error.code === 'failed-precondition') {
-          setConnectionError("Aguardando conexão com o Firebase... (Verifique se o Firestore está ativo no Console do Firebase)");
+        if (error.message?.includes('offline') || error.code === 'unavailable' || error.code === 'failed-precondition' || error.code === 'deadline-exceeded') {
+          console.warn("Firebase offline or unreachable. Proceeding with offline client-side database capabilities.");
+          setConnectionError(null);
         } else if (isPermissionError) {
           // Permissions are fine for connection verification - it means we reached the server
           console.log("Firebase connection verified (permission denied on test path - this is OK)");
           setConnectionError(null);
         } else if (error.message?.includes('internal')) {
-          setConnectionError("O Firebase está inicializando. Tente recarregar a página em alguns instantes.");
+          console.warn("Firebase is initializing. Proceeding with offline/cached capabilities.");
+          setConnectionError(null);
         } else {
-          setConnectionError(`Erro de Conexão: ${error.message || error.code}`);
+          setConnectionError(`Erro de Configuração do Banco de Dados: ${error.message || error.code}`);
         }
       }
     }

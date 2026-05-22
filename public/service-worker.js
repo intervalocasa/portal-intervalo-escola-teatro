@@ -1,4 +1,4 @@
-const CACHE_NAME = 'intervalo-v2';
+const CACHE_NAME = 'intervalo-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -32,6 +32,14 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
+
+  const requestUrl = new URL(event.request.url);
+  
+  // Do not intercept cross-origin requests (such as Firebase API calls)
+  if (requestUrl.origin !== self.location.origin) return;
+
+  // Do not intercept backend API routes
+  if (requestUrl.pathname.startsWith('/api/')) return;
 
   event.respondWith(
     fetch(event.request)

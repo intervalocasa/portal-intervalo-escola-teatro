@@ -42,46 +42,72 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // Default to first class if available
-  useState(() => {
-    if (studentClasses.length > 0) {
-      setSelectedClassId(studentClasses[0].id);
+  // Set default class when modal opens or classes list changes
+  React.useEffect(() => {
+    if (isOpen && studentClasses.length > 0) {
+      if (!selectedClassId || !studentClasses.some(c => c.id === selectedClassId)) {
+        setSelectedClassId(studentClasses[0].id);
+        setSelectedDate('');
+      }
     }
-  });
+  }, [isOpen, studentClasses, selectedClassId]);
 
   const weekdayMap: Record<string, number> = {
-    'Domingo': 0,
-    'Segunda-feira': 1,
-    'Terça-feira': 2,
-    'Quarta-feira': 3,
-    'Quinta-feira': 4,
-    'Sexta-feira': 5,
-    'Sábado': 6
+    'domingo': 0,
+    'segunda-feira': 1,
+    'terça-feira': 2,
+    'quarta-feira': 3,
+    'quinta-feira': 4,
+    'sexta-feira': 5,
+    'sábado': 6,
+    'segunda': 1,
+    'terça': 2,
+    'quarta': 3,
+    'quinta': 4,
+    'sexta': 5
   };
 
   const selectedClass = studentClasses.find(c => c.id === selectedClassId);
   
-  // Calculate available days for the selected month and class
+  // Calculate available days for the selected class (looking back 45 days)
   const getAvailableDays = () => {
     if (!selectedClass) return [];
     
-    const days = [];
-    const targetDay = weekdayMap[selectedClass.weekday];
-    if (targetDay === undefined) return [];
+    // Split days in case of multiple weekdays (e.g. "Segunda-feira, Quarta-feira")
+    const weekdaysTextList = selectedClass.weekday 
+      ? selectedClass.weekday.split(',').map(s => s.trim().toLowerCase()) 
+      : [];
+    
+    const targetDays: number[] = [];
+    weekdaysTextList.forEach(wText => {
+      const dayNum = weekdayMap[wText];
+      if (dayNum !== undefined) {
+        targetDays.push(dayNum);
+      }
+    });
 
-    const date = new Date(selectedYear, selectedMonth - 1, 1);
+    const days: Date[] = [];
     const now = new Date();
     
-    while (date.getMonth() === selectedMonth - 1) {
-      if (date.getDay() === targetDay) {
-        // Don't allow future dates
-        if (date <= now) {
-          days.push(new Date(date));
-        }
+    // If no weekdays configuration is present, return all last 30 days
+    if (targetDays.length === 0) {
+      for (let i = 0; i < 30; i++) {
+        const d = new Date();
+        d.setDate(now.getDate() - i);
+        days.push(d);
       }
-      date.setDate(date.getDate() + 1);
+      return days;
     }
-    return days.sort((a, b) => b.getTime() - a.getTime()); // Most recent first
+
+    // Go back 45 days in history and find matching weekdays
+    for (let i = 0; i < 45; i++) {
+      const d = new Date();
+      d.setDate(now.getDate() - i);
+      if (targetDays.includes(d.getDay())) {
+        days.push(d);
+      }
+    }
+    return days; // Already ordered from most recent to oldest (since i starts at 0 and increments)
   };
 
   const availableDays = getAvailableDays();

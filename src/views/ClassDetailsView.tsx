@@ -10,7 +10,7 @@ import { Class, User, UserRole } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { MuralTurma } from "../components/MuralTurma";
 import { db } from "../lib/firebase";
-import { doc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, updateDoc, arrayUnion, arrayRemove, deleteField } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
 
 interface ClassDetailsViewProps {
@@ -43,6 +43,11 @@ export const ClassDetailsView = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enrollmentProcess, setEnrollmentProcess] = useState<{ studentId: string; date: string } | null>(null);
+  
+  // States for manager enrollment deletion/management
+  const [selectedStudentForManagement, setSelectedStudentForManagement] = useState<User | null>(null);
+  const [isExcluding, setIsExcluding] = useState(false);
+  const [showConfirmExclude, setShowConfirmExclude] = useState(false);
 
   const targetClass = classes.find(c => c.id === selectedClassId);
   const classTeachers = useMemo(() => {
@@ -98,6 +103,25 @@ export const ClassDetailsView = ({
     setIsEnrollModalOpen(false);
     setSearchQuery("");
     setEnrollmentProcess(null);
+  };
+
+  const handleExcludeEnrollment = async (studentId: string) => {
+    if (!selectedClassId) return;
+    setIsExcluding(true);
+    try {
+      const classRef = doc(db, "classes", selectedClassId);
+      await updateDoc(classRef, {
+        studentIds: arrayRemove(studentId),
+        [`enrollmentDates.${studentId}`]: deleteField()
+      });
+      showNotification("Matrícula excluída com sucesso!", "Sucesso", "success");
+      setSelectedStudentForManagement(null);
+      setShowConfirmExclude(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `classes/${selectedClassId}`);
+    } finally {
+      setIsExcluding(false);
+    }
   };
 
   return (
@@ -202,7 +226,9 @@ export const ClassDetailsView = ({
                         <div 
                           key={s.id} 
                           onClick={() => {
-                            if (role !== "Aluno") {
+                            if (role === "Gestor") {
+                              setSelectedStudentForManagement(s);
+                            } else if (role === "Professor") {
                               setSelectedUserId(s.id);
                               setView("user_details");
                             }
@@ -439,6 +465,134 @@ export const ClassDetailsView = ({
                         {isSubmitting ? "Processando..." : "Confirmar Matrícula"}
                       </button>
                     </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Manage Enrollment Modal */}
+      <AnimatePresence>
+        {selectedStudentForManagement && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                if (!isExcluding) {
+                  setSelectedStudentForManagement(null);
+                  setShowConfirmExclude(false);
+                }
+              }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl overflow-hidden border border-white"
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-pro-teal/10 rounded-2xl flex items-center justify-center text-pro-teal">
+                    <Users size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Gerenciar Matrícula</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Painel de gerenciamento de matrícula</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    setSelectedStudentForManagement(null);
+                    setShowConfirmExclude(false);
+                  }}
+                  disabled={isExcluding}
+                  className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 disabled:opacity-50"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="flex items-center gap-4 p-6 bg-slate-50 rounded-[32px] border border-slate-100">
+                  <div className="w-16 h-16 rounded-2xl bg-white overflow-hidden shadow-md shrink-0">
+                    <Avatar src={selectedStudentForManagement.photo} fallbackSize={32} className="w-full h-full rounded-none" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black text-pro-teal uppercase tracking-widest mb-1">Status: Matriculado(a)</p>
+                    <p className="text-lg font-black text-slate-800 uppercase tracking-tight truncate">
+                      {selectedStudentForManagement.artisticName || selectedStudentForManagement.name}
+                    </p>
+                    <p className="text-xs text-slate-400 font-bold truncate">
+                      {selectedStudentForManagement.email}
+                    </p>
+                  </div>
+                </div>
+
+                {targetClass.enrollmentDates?.[selectedStudentForManagement.id] && (
+                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                    <div className="flex items-center gap-3 text-slate-400">
+                      <Calendar size={16} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Data de Matrícula</span>
+                    </div>
+                    <span className="text-xs font-black text-slate-700 bg-white border border-slate-100 px-3 py-1 rounded-xl">
+                      {new Date(targetClass.enrollmentDates[selectedStudentForManagement.id] + 'T00:00:00').toLocaleDateString('pt-BR')}
+                    </span>
+                  </div>
+                )}
+
+                {showConfirmExclude ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-6 bg-red-50 border border-red-100 rounded-[24px] space-y-4"
+                  >
+                    <div className="space-y-1">
+                      <p className="text-xs font-black text-red-800 uppercase">Tem certeza absoluta?</p>
+                      <p className="text-xs text-red-700 font-semibold leading-normal">
+                        Ao confirmar, o aluno será removido da listagem da turma e suas notas, frequências ou conquistas associadas a essa turma poderão ficar inacessíveis. Esta ação é imediata.
+                      </p>
+                    </div>
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => setShowConfirmExclude(false)}
+                        disabled={isExcluding}
+                        className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-slate-50 transition-all disabled:opacity-50"
+                      >
+                        Cancelar
+                      </button>
+                      <button 
+                        onClick={() => handleExcludeEnrollment(selectedStudentForManagement.id)}
+                        disabled={isExcluding}
+                        className="flex-1 py-3 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-red-700 transition-all shadow-lg shadow-red-900/10 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        {isExcluding ? "Excluindo..." : "Confirmar Exclusão"}
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <button 
+                      onClick={() => {
+                        setSelectedUserId(selectedStudentForManagement.id);
+                        setView("user_details");
+                        setSelectedStudentForManagement(null);
+                      }}
+                      className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center justify-center gap-2"
+                    >
+                      Visualizar Perfil Completo
+                    </button>
+                    
+                    <button 
+                      onClick={() => setShowConfirmExclude(true)}
+                      className="w-full py-4 bg-red-50 hover:bg-red-100/70 text-red-600 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center justify-center gap-2 animate-in fade-in zoom-in-95"
+                    >
+                      Excluir Matrícula
+                    </button>
                   </div>
                 )}
               </div>
