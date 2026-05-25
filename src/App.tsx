@@ -2014,6 +2014,7 @@ export default function App() {
             setFilter={setFilter}
             setSelectedUserId={setSelectedUserId}
             setView={setView}
+            showNotification={showNotification}
           />
         ) : view === "user_details" ? (
           <UserDetailsView 
