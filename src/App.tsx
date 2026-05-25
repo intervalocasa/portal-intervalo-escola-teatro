@@ -103,6 +103,390 @@ export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
+  const migrateUserDataAndReferences = async (oldDocId: string, newUid: string, userData: any) => {
+    console.log(`[Migration] Starting total migration from ${oldDocId} to ${newUid} for email ${userData.email}`);
+    
+    // 1. Create/Set the doc at the new uid location
+    await setDoc(doc(db, "usuarios", newUid), {
+      ...userData,
+      migratedFrom: oldDocId,
+      updatedAt: serverTimestamp()
+    });
+
+    // 2. Translocate subcollection 'userBadges'
+    try {
+      const badgesSnap = await getDocs(collection(db, "usuarios", oldDocId, "userBadges"));
+      for (const badgeDoc of badgesSnap.docs) {
+        const badgeData = badgeDoc.data();
+        await setDoc(doc(db, "usuarios", newUid, "userBadges", badgeDoc.id), badgeData);
+        // Clean up old badge
+        await deleteDoc(doc(db, "usuarios", oldDocId, "userBadges", badgeDoc.id));
+      }
+      console.log(`[Migration] User badges successfully translocated for ${userData.email}`);
+    } catch (badgeErr) {
+      console.error("[Migration] Error migrating subcollection userBadges:", badgeErr);
+    }
+
+    // 3. Migrate Class memberships
+    try {
+      const classesSnap = await getDocs(collection(db, "classes"));
+      for (const classDoc of classesSnap.docs) {
+        const classData = classDoc.data();
+        let updated = false;
+        let studentIds = [...(classData.studentIds || [])];
+        let teacherIds = [...(classData.teacherIds || [])];
+        let enrollmentDates = { ...(classData.enrollmentDates || {}) };
+
+        if (studentIds.includes(oldDocId)) {
+          studentIds = studentIds.map((id: string) => id === oldDocId ? newUid : id);
+          updated = true;
+        }
+
+        if (teacherIds.includes(oldDocId)) {
+          teacherIds = teacherIds.map((id: string) => id === oldDocId ? newUid : id);
+          updated = true;
+        }
+
+        if (enrollmentDates[oldDocId]) {
+          enrollmentDates[newUid] = enrollmentDates[oldDocId];
+          delete enrollmentDates[oldDocId];
+          updated = true;
+        }
+
+        // Clean up classDoc error field in case old scalar teacherId is set
+        let updatedPayload: any = { studentIds, teacherIds, enrollmentDates };
+        if (classData.hasOwnProperty("teacherId")) {
+          let scalarTId = classData.teacherId;
+          if (scalarTId === oldDocId) {
+            scalarTId = newUid;
+          }
+          if (scalarTId && !teacherIds.includes(scalarTId)) {
+            teacherIds.push(scalarTId);
+          }
+          updatedPayload.teacherIds = teacherIds;
+          updatedPayload.teacherId = deleteField();
+          updated = true;
+        }
+
+        if (updated) {
+          await updateDoc(doc(db, "classes", classDoc.id), updatedPayload);
+        }
+      }
+      console.log("[Migration] Class references successfully updated");
+    } catch (classErr) {
+      console.error("[Migration] Error migrating class references:", classErr);
+    }
+
+    // 4. Migrate Evaluations
+    try {
+      const evalSnap = await getDocs(query(collection(db, "autoavaliacoes"), where("studentId", "==", oldDocId)));
+      for (const d of evalSnap.docs) {
+        await updateDoc(doc(db, "autoavaliacoes", d.id), { studentId: newUid });
+      }
+      console.log("[Migration] Evaluations successfully updated");
+    } catch (evalErr) {
+      console.error("[Migration] Error migrating evaluations:", evalErr);
+    }
+
+    // 5. Migrate Diaries
+    try {
+      const diarySnapS = await getDocs(query(collection(db, "diarios_classe"), where("studentId", "==", oldDocId)));
+      for (const d of diarySnapS.docs) {
+        await updateDoc(doc(db, "diarios_classe", d.id), { studentId: newUid });
+      }
+      const diarySnapT = await getDocs(query(collection(db, "diarios_classe"), where("teacherId", "==", oldDocId)));
+      for (const d of diarySnapT.docs) {
+        await updateDoc(doc(db, "diarios_classe", d.id), { teacherId: newUid });
+      }
+      console.log("[Migration] Diaries references successfully updated");
+    } catch (diaryErr) {
+      console.error("[Migration] Error migrating diaries references:", diaryErr);
+    }
+
+    // 6. Migrate Evolution records
+    try {
+      const evoSnapS = await getDocs(query(collection(db, "evolucao"), where("studentId", "==", oldDocId)));
+      for (const d of evoSnapS.docs) {
+        await updateDoc(doc(db, "evolucao", d.id), { studentId: newUid });
+      }
+      const evoSnapT = await getDocs(query(collection(db, "evolucao"), where("teacherId", "==", oldDocId)));
+      for (const d of evoSnapT.docs) {
+        await updateDoc(doc(db, "evolucao", d.id), { teacherId: newUid });
+      }
+      console.log("[Migration] Evolution records successfully updated");
+    } catch (evoErr) {
+      console.error("[Migration] Error migrating evolution records:", evoErr);
+    }
+
+    // 7. Migrate announcements
+    try {
+      const avisosSnap = await getDocs(collection(db, "avisos"));
+      for (const avisoDoc of avisosSnap.docs) {
+        const aData = avisoDoc.data();
+        if (aData.targetUserIds && aData.targetUserIds.includes(oldDocId)) {
+          const updatedIds = aData.targetUserIds.map((id: string) => id === oldDocId ? newUid : id);
+          await updateDoc(doc(db, "avisos", avisoDoc.id), { targetUserIds: updatedIds });
+        }
+      }
+      console.log("[Migration] Announcements references successfully updated");
+    } catch (avisoErr) {
+      console.error("[Migration] Error migrating announcements:", avisoErr);
+    }
+
+    // 8. Delete the old redundant user root document
+    try {
+      await deleteDoc(doc(db, "usuarios", oldDocId));
+      console.log(`[Migration] Old user document ${oldDocId} successfully removed.`);
+    } catch (oldDocErr) {
+      // In case write rules did not permit direct delete but we marked as inactive, safe fallback:
+      try {
+        await updateDoc(doc(db, "usuarios", oldDocId), { 
+          migratedTo: newUid, 
+          inactive: true,
+          updatedAt: serverTimestamp() 
+        });
+      } catch (e) {
+        console.error("[Migration] Could not mark document as inactive:", e);
+      }
+    }
+    
+    console.log(`[Migration] User migration completed with full integrity for ${userData.email}`);
+  };
+
+  const healDatabaseAndRelations = async () => {
+    try {
+      console.log("Starting database healing and relation consistency checks...");
+      
+      // 1. Fetch all users
+      const usersSnap = await getDocs(collection(db, "usuarios"));
+      const allUsersData = usersSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
+      
+      // Group active/migrated users
+      // Map of email -> active user doc (the one with 28 chars ID, representing standard Auth UID)
+      const emailToActiveUser: Record<string, any> = {};
+      
+      allUsersData.forEach(u => {
+        if (!u.email) return;
+        const emailLower = u.email.trim().toLowerCase();
+        
+        // Determine if a user has a proper Firebase Auth UID
+        const isProperUid = u.id.length === 28; // Standard Firebase UIDs are 28 characters
+        
+        if (isProperUid && !u.inactive) {
+          // If we don't have an active user for this email, or this one is newer/already has passwordChanged
+          const currentActive = emailToActiveUser[emailLower];
+          if (!currentActive || u.passwordChanged || !currentActive.passwordChanged) {
+            emailToActiveUser[emailLower] = u;
+          }
+        }
+      });
+
+      // 2. Perform copy & cleanup of duplicate/historical unmigrated users
+      // If we have an active user with Auth UID, but also an old user doc (random ID or inactive)
+      for (const oldUser of allUsersData) {
+        if (!oldUser.email) continue;
+        const emailLower = oldUser.email.trim().toLowerCase();
+        const activeUser = emailToActiveUser[emailLower];
+        
+        if (activeUser && oldUser.id !== activeUser.id) {
+          const oldId = oldUser.id;
+          const newId = activeUser.id;
+          console.log(`Healing: Found historical duplicate/unmigrated references for email ${emailLower} from ${oldId} to ${newId}`);
+          
+          // Let's migrate badges from usuarios/{oldId}/userBadges to usuarios/{newId}/userBadges
+          try {
+            const oldBadgesSnap = await getDocs(collection(db, "usuarios", oldId, "userBadges"));
+            for (const bDoc of oldBadgesSnap.docs) {
+              const bData = bDoc.data();
+              // Check if active user already has this badge to prevent duplicates
+              const activeBadgeRef = doc(db, "usuarios", newId, "userBadges", bDoc.id);
+              const activeBadgeSnap = await getDoc(activeBadgeRef);
+              if (!activeBadgeSnap.exists()) {
+                console.log(`Healing: Copying badge ${bDoc.id} for user ${emailLower}`);
+                await setDoc(activeBadgeRef, bData);
+              }
+              // Delete old badge
+              await deleteDoc(doc(db, "usuarios", oldId, "userBadges", bDoc.id));
+            }
+          } catch (badgeErr) {
+            console.error("Error healing userBadges subcollection:", badgeErr);
+          }
+
+          // 3. Update all collections referencing oldId
+          // Classes
+          try {
+            const classesSnap = await getDocs(collection(db, "classes"));
+            for (const cDoc of classesSnap.docs) {
+              const cData = cDoc.data();
+              let updated = false;
+              let studentIds = [...(cData.studentIds || [])];
+              let teacherIds = [...(cData.teacherIds || [])];
+              let enrollmentDates = { ...(cData.enrollmentDates || {}) };
+              
+              // Clean up old bugged "teacherId" scalar field if present
+              let teacherIdScalar = cData.teacherId;
+              if (teacherIdScalar) {
+                if (teacherIdScalar === oldId) {
+                  teacherIdScalar = newId;
+                }
+                if (!teacherIds.includes(teacherIdScalar)) {
+                  teacherIds.push(teacherIdScalar);
+                }
+                updated = true;
+              }
+
+              if (studentIds.includes(oldId)) {
+                studentIds = studentIds.map(sid => sid === oldId ? newId : sid);
+                updated = true;
+              }
+              if (teacherIds.includes(oldId)) {
+                teacherIds = teacherIds.map(tid => tid === oldId ? newId : tid);
+                updated = true;
+              }
+              if (enrollmentDates[oldId]) {
+                enrollmentDates[newId] = enrollmentDates[oldId];
+                delete enrollmentDates[oldId];
+                updated = true;
+              }
+
+              if (updated) {
+                const updatePayload: any = { studentIds, teacherIds, enrollmentDates };
+                if (cData.hasOwnProperty("teacherId")) {
+                  updatePayload.teacherId = deleteField(); // delete old bugged scalar field
+                }
+                await updateDoc(doc(db, "classes", cDoc.id), updatePayload);
+              }
+            }
+          } catch (clsErr) {
+            console.error("Error healing classes references:", clsErr);
+          }
+
+          // Autoavaliacoes
+          try {
+            const evalSnap = await getDocs(query(collection(db, "autoavaliacoes"), where("studentId", "==", oldId)));
+            for (const d of evalSnap.docs) {
+              await updateDoc(doc(db, "autoavaliacoes", d.id), { studentId: newId });
+            }
+          } catch (evalErr) {
+            console.error("Error healing evaluations:", evalErr);
+          }
+
+          // Diários de classe
+          try {
+            const diaryS = await getDocs(query(collection(db, "diarios_classe"), where("studentId", "==", oldId)));
+            for (const d of diaryS.docs) await updateDoc(doc(db, "diarios_classe", d.id), { studentId: newId });
+            
+            const diaryT = await getDocs(query(collection(db, "diarios_classe"), where("teacherId", "==", oldId)));
+            for (const d of diaryT.docs) await updateDoc(doc(db, "diarios_classe", d.id), { teacherId: newId });
+          } catch (diaryErr) {
+            console.error("Error healing diaries:", diaryErr);
+          }
+
+          // Evolução
+          try {
+            const evoS = await getDocs(query(collection(db, "evolucao"), where("studentId", "==", oldId)));
+            for (const d of evoS.docs) await updateDoc(doc(db, "evolucao", d.id), { studentId: newId });
+            
+            const evoT = await getDocs(query(collection(db, "evolucao"), where("teacherId", "==", oldId)));
+            for (const d of evoT.docs) await updateDoc(doc(db, "evolucao", d.id), { teacherId: newId });
+          } catch (evoErr) {
+            console.error("Error healing evolution records:", evoErr);
+          }
+
+          // Avisos / Announcements
+          try {
+            const avisosSnap = await getDocs(collection(db, "avisos"));
+            for (const avisoDoc of avisosSnap.docs) {
+              const aData = avisoDoc.data();
+              if (aData.targetUserIds && aData.targetUserIds.includes(oldId)) {
+                const updatedIds = aData.targetUserIds.map((id: string) => id === oldId ? newId : id);
+                await updateDoc(doc(db, "avisos", avisoDoc.id), { targetUserIds: updatedIds });
+              }
+            }
+          } catch (avisoErr) {
+            console.error("Error healing announcements:", avisoErr);
+          }
+
+          // Delete the redundant old document or mark it inactive
+          try {
+            await deleteDoc(doc(db, "usuarios", oldId));
+            console.log(`Healing: Deleted old user document ${oldId} for email ${emailLower}`);
+          } catch (delErr) {
+            // Safe fallback
+            try {
+              await updateDoc(doc(db, "usuarios", oldId), { 
+                migratedTo: newId, 
+                inactive: true, 
+                updatedAt: serverTimestamp() 
+              });
+            } catch (err2) {
+              console.error("Error marking old doc status as inactive:", err2);
+            }
+          }
+        }
+      }
+
+      // 4. One final sanity check for all Classes: make sure all teacherIds/studentIds lists inside class objects point to valid existing users
+      try {
+        const classesSnap = await getDocs(collection(db, "classes"));
+        for (const cDoc of classesSnap.docs) {
+          const cData = cDoc.data();
+          let updated = false;
+          let studentIds = [...(cData.studentIds || [])];
+          let teacherIds = [...(cData.teacherIds || [])];
+          
+          // If there's any scalar teacherId left in classes, clean it up!
+          if (cData.hasOwnProperty("teacherId")) {
+            const scalarId = cData.teacherId;
+            if (scalarId && !teacherIds.includes(scalarId)) {
+              teacherIds.push(scalarId);
+            }
+            updated = true;
+          }
+
+          // Replace any loose/random old studentId/teacherId representing an email if there's an active UID user
+          studentIds = studentIds.map(sid => {
+            const matchingUser = allUsersData.find(u => u.id === sid);
+            if (matchingUser?.email) {
+              const actUser = emailToActiveUser[matchingUser.email.toLowerCase()];
+              if (actUser && actUser.id !== sid) {
+                updated = true;
+                return actUser.id;
+              }
+            }
+            return sid;
+          });
+
+          teacherIds = teacherIds.map(tid => {
+            const matchingUser = allUsersData.find(u => u.id === tid);
+            if (matchingUser?.email) {
+              const actUser = emailToActiveUser[matchingUser.email.toLowerCase()];
+              if (actUser && actUser.id !== tid) {
+                updated = true;
+                return actUser.id;
+              }
+            }
+            return tid;
+          });
+
+          if (updated) {
+            const payload: any = { studentIds, teacherIds };
+            if (cData.hasOwnProperty("teacherId")) {
+              payload.teacherId = deleteField();
+            }
+            await updateDoc(doc(db, "classes", cDoc.id), payload);
+          }
+        }
+      } catch (clsSanityErr) {
+        console.error("Error in class references sanity healing:", clsSanityErr);
+      }
+
+      console.log("Database healing and relation consistency checks completed successfully!");
+    } catch (err) {
+      console.error("Error executing database self-healing:", err);
+    }
+  };
+
   // Connection validation
   useEffect(() => {
     let retryCount = 0;
@@ -265,6 +649,13 @@ export default function App() {
   const view = _view;
   const [role, setRole] = useState<UserRole | null>(null);
   
+  // Trigger self-healing database routine when the Gestor is logged in
+  useEffect(() => {
+    if (currentUser && role === "Gestor") {
+      healDatabaseAndRelations();
+    }
+  }, [currentUser, role]);
+  
   // Data States
   const [users, setUsers] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
@@ -356,75 +747,10 @@ export default function App() {
         // Let's migrate the doc to use UID if it's currently using a random ID
         const oldDocId = snap.docs[0].id;
         if (oldDocId !== user.uid) {
-          await setDoc(doc(db, "usuarios", user.uid), {
+          await migrateUserDataAndReferences(oldDocId, user.uid, {
             ...userData,
-            passwordChanged: true,
-            updatedAt: serverTimestamp()
+            passwordChanged: true
           });
-
-          // Reference Migration: Update all references to oldDocId with user.uid
-          try {
-            // 1. Update Classes (studentIds array and teacherIds array)
-            const classesQuery = query(collection(db, "classes"));
-            const classesSnap = await getDocs(classesQuery);
-            for (const classDoc of classesSnap.docs) {
-              const classData = classDoc.data();
-              let updated = false;
-              let studentIds = classData.studentIds || [];
-              let teacherIds = classData.teacherIds || [];
-
-              if (studentIds.includes(oldDocId)) {
-                studentIds = studentIds.map((id: string) => id === oldDocId ? user.uid : id);
-                updated = true;
-              }
-
-              if (teacherIds.includes(oldDocId)) {
-                teacherIds = teacherIds.map((id: string) => id === oldDocId ? user.uid : id);
-                updated = true;
-              }
-
-              if (updated) {
-                await updateDoc(doc(db, "classes", classDoc.id), { studentIds, teacherIds });
-              }
-            }
-
-            // 2. Update Evaluations
-            const evaluationsQuery = query(collection(db, "autoavaliacoes"), where("studentId", "==", oldDocId));
-            const evaluationsSnap = await getDocs(evaluationsQuery);
-            for (const evalDoc of evaluationsSnap.docs) {
-              await updateDoc(doc(db, "autoavaliacoes", evalDoc.id), { studentId: user.uid });
-            }
-
-            // 3. Update Diaries
-            const diariesQueryStudent = query(collection(db, "diarios_classe"), where("studentId", "==", oldDocId));
-            const diariesSnapStudent = await getDocs(diariesQueryStudent);
-            for (const diaryDoc of diariesSnapStudent.docs) {
-              await updateDoc(doc(db, "diarios_classe", diaryDoc.id), { studentId: user.uid });
-            }
-            const diariesQueryTeacher = query(collection(db, "diarios_classe"), where("teacherId", "==", oldDocId));
-            const diariesSnapTeacher = await getDocs(diariesQueryTeacher);
-            for (const diaryDoc of diariesSnapTeacher.docs) {
-              await updateDoc(doc(db, "diarios_classe", diaryDoc.id), { teacherId: user.uid });
-            }
-
-            // 4. Update Evolution Records
-            const evolutionsQueryStudent = query(collection(db, "evolucao"), where("studentId", "==", oldDocId));
-            const evolutionsSnapStudent = await getDocs(evolutionsQueryStudent);
-            for (const evDoc of evolutionsSnapStudent.docs) {
-              await updateDoc(doc(db, "evolucao", evDoc.id), { studentId: user.uid });
-            }
-            const evolutionsQueryTeacher = query(collection(db, "evolucao"), where("teacherId", "==", oldDocId));
-            const evolutionsSnapTeacher = await getDocs(evolutionsQueryTeacher);
-            for (const evDoc of evolutionsSnapTeacher.docs) {
-              await updateDoc(doc(db, "evolucao", evDoc.id), { teacherId: user.uid });
-            }
-
-          } catch (refErr) {
-            console.error("Error migrating references:", refErr);
-          }
-
-          // Finally delete the old user document
-          await deleteDoc(doc(db, "usuarios", oldDocId));
         } else {
           await updateDoc(doc(db, "usuarios", user.uid), {
             passwordChanged: true,
@@ -570,74 +896,7 @@ export default function App() {
                 userRole = userDocData?.role;
                 
                 // MIGRATION START
-                console.log(`Migrating user ${user.email} from ${oldDocId} to ${user.uid}`);
-                
-                await setDoc(doc(db, "usuarios", user.uid), {
-                  ...userDocData,
-                  migratedFrom: oldDocId,
-                  updatedAt: serverTimestamp()
-                });
-
-                // Migrate References
-                try {
-                  // 1. Classes
-                  const classesSnap = await getDocs(collection(db, "classes"));
-                  for (const classDoc of classesSnap.docs) {
-                    const cData = classDoc.data();
-                    let updated = false;
-                    let studentIds = [...(cData.studentIds || [])];
-                    let teacherId = cData.teacherId;
-
-                    if (studentIds.includes(oldDocId)) {
-                      studentIds = studentIds.map((id: string) => id === oldDocId ? user.uid : id);
-                      updated = true;
-                    }
-                    if (teacherId === oldDocId) {
-                      teacherId = user.uid;
-                      updated = true;
-                    }
-                    if (updated) {
-                      await updateDoc(doc(db, "classes", classDoc.id), { studentIds, teacherId });
-                    }
-                  }
-
-                  // 2. Evaluations
-                  const evalSnap = await getDocs(query(collection(db, "autoavaliacoes"), where("studentId", "==", oldDocId)));
-                  for (const d of evalSnap.docs) await updateDoc(doc(db, "autoavaliacoes", d.id), { studentId: user.uid });
-
-                  // 3. Diaries
-                  const diarySnapS = await getDocs(query(collection(db, "diarios_classe"), where("studentId", "==", oldDocId)));
-                  for (const d of diarySnapS.docs) await updateDoc(doc(db, "diarios_classe", d.id), { studentId: user.uid });
-                  const diarySnapT = await getDocs(query(collection(db, "diarios_classe"), where("teacherId", "==", oldDocId)));
-                  for (const d of diarySnapT.docs) await updateDoc(doc(db, "diarios_classe", d.id), { teacherId: user.uid });
-
-                  // 4. Evolution
-                  const evoSnapS = await getDocs(query(collection(db, "evolucao"), where("studentId", "==", oldDocId)));
-                  for (const d of evoSnapS.docs) await updateDoc(doc(db, "evolucao", d.id), { studentId: user.uid });
-                  const evoSnapT = await getDocs(query(collection(db, "evolucao"), where("teacherId", "==", oldDocId)));
-                  for (const d of evoSnapT.docs) await updateDoc(doc(db, "evolucao", d.id), { teacherId: user.uid });
-
-                  // 5. Announcements
-                  const avisosSnap = await getDocs(collection(db, "avisos"));
-                  for (const avisoDoc of avisosSnap.docs) {
-                    const aData = avisoDoc.data();
-                    if (aData.targetUserIds && aData.targetUserIds.includes(oldDocId)) {
-                      const updatedIds = aData.targetUserIds.map((id: string) => id === oldDocId ? user.uid : id);
-                      await updateDoc(doc(db, "avisos", avisoDoc.id), { targetUserIds: updatedIds });
-                    }
-                  }
-
-                  // Mark old document as migrated
-                  await updateDoc(doc(db, "usuarios", oldDocId), { 
-                    migratedTo: user.uid, 
-                    inactive: true,
-                    updatedAt: serverTimestamp() 
-                  });
-                  
-                  console.log("Migration completed successfully for", user.email);
-                } catch (migrateErr) {
-                  console.error("Migration references error:", migrateErr);
-                }
+                await migrateUserDataAndReferences(oldDocId, user.uid, userDocData);
                 // MIGRATION END
               }
             }
@@ -1268,75 +1527,7 @@ export default function App() {
           const oldDocId = snap.docs[0].id;
 
           // Migrate data to UID document
-          await setDoc(userRef, {
-            ...userData,
-            updatedAt: serverTimestamp()
-          });
-
-          // Reference Migration
-          try {
-            // 1. Classes
-            const classesQuery = query(collection(db, "classes"));
-            const classesSnap = await getDocs(classesQuery);
-            for (const classDoc of classesSnap.docs) {
-              const classData = classDoc.data();
-              let updated = false;
-              let studentIds = classData.studentIds || [];
-              let teacherIds = classData.teacherIds || [];
-
-              if (studentIds.includes(oldDocId)) {
-                studentIds = studentIds.map((id: string) => id === oldDocId ? user.uid : id);
-                updated = true;
-              }
-              if (teacherIds.includes(oldDocId)) {
-                teacherIds = teacherIds.map((id: string) => id === oldDocId ? user.uid : id);
-                updated = true;
-              }
-              if (updated) {
-                await updateDoc(doc(db, "classes", classDoc.id), { studentIds, teacherIds });
-              }
-            }
-
-            // 2. Evaluations
-            const evaluationsQuery = query(collection(db, "autoavaliacoes"), where("studentId", "==", oldDocId));
-            const evaluationsSnap = await getDocs(evaluationsQuery);
-            for (const evalDoc of evaluationsSnap.docs) {
-              await updateDoc(doc(db, "autoavaliacoes", evalDoc.id), { studentId: user.uid });
-            }
-
-            // 3. Diaries
-            const diariesQueryStudent = query(collection(db, "diarios_classe"), where("studentId", "==", oldDocId));
-            const diariesSnapStudent = await getDocs(diariesQueryStudent);
-            for (const diaryDoc of diariesSnapStudent.docs) {
-              await updateDoc(doc(db, "diarios_classe", diaryDoc.id), { studentId: user.uid });
-            }
-            const diariesQueryTeacher = query(collection(db, "diarios_classe"), where("teacherId", "==", oldDocId));
-            const diariesSnapTeacher = await getDocs(diariesQueryTeacher);
-            for (const diaryDoc of diariesSnapTeacher.docs) {
-              await updateDoc(doc(db, "diarios_classe", diaryDoc.id), { teacherId: user.uid });
-            }
-
-            // 4. Evolution
-            const evolutionsQueryStudent = query(collection(db, "evolucao"), where("studentId", "==", oldDocId));
-            const evolutionsSnapStudent = await getDocs(evolutionsQueryStudent);
-            for (const evDoc of evolutionsSnapStudent.docs) {
-              await updateDoc(doc(db, "evolucao", evDoc.id), { studentId: user.uid });
-            }
-            const evolutionsQueryTeacher = query(collection(db, "evolucao"), where("teacherId", "==", oldDocId));
-            const evolutionsSnapTeacher = await getDocs(evolutionsQueryTeacher);
-            for (const evDoc of evolutionsSnapTeacher.docs) {
-              await updateDoc(doc(db, "evolucao", evDoc.id), { teacherId: user.uid });
-            }
-          } catch (refErr) {
-            console.error("Error migrating references in Google Login:", refErr);
-          }
-
-          // Mark old doc as migrated
-          await updateDoc(doc(db, "usuarios", oldDocId), { 
-            migratedTo: user.uid, 
-            inactive: true,
-            updatedAt: serverTimestamp() 
-          });
+          await migrateUserDataAndReferences(oldDocId, user.uid, userData);
         } else if (user.email === 'intervalocasa@gmail.com') {
           // New gestor account
           await setDoc(userRef, {
