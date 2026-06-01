@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useMemo } from "react";
 import { motion } from "motion/react";
 import { ArrowLeft, Save, HelpCircle, CheckCircle2 } from "lucide-react";
 import { User, Class } from "../types";
@@ -53,13 +54,54 @@ export const StudentDiaryFormView = ({
   const isProfessional = targetClass?.type?.includes("Profissional") || targetClass?.type?.includes("Montagem");
   const criteria = isProfessional ? PROFESSIONAL_COURSE_CRITERIA : ADULT_COURSE_CRITERIA;
 
-  const eligibleIds = [selectedDiaryStudentId, student?.id, student?.migratedFrom].filter(Boolean) as string[];
-  const studentEval = evaluations.find(e => 
-    eligibleIds.includes(e.studentId) &&
-    e.classId === selectedClassId &&
-    e.month === diaryFilterMonth &&
-    e.year === diaryFilterYear
-  );
+  // Obter todos os emails possíveis associados a este aluno
+  const studentEmails = useMemo(() => {
+    const list: string[] = [];
+    if (student?.email) list.push(student.email.toLowerCase().trim());
+    const matchedUser = users.find(u => u.id === selectedDiaryStudentId);
+    if (matchedUser?.email) list.push(matchedUser.email.toLowerCase().trim());
+    return Array.from(new Set(list));
+  }, [student, selectedDiaryStudentId, users]);
+
+  // Encontrar todas as IDs de usuário vinculadas a esses emails para correspondência direta
+  const eligibleIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (selectedDiaryStudentId) ids.add(selectedDiaryStudentId);
+    if (student?.id) ids.add(student.id);
+    if (student?.migratedFrom) ids.add(student.migratedFrom);
+    
+    // Incluir qualquer documento de usuário que tenha o mesmo email
+    users.forEach(u => {
+      if (u.email && studentEmails.includes(u.email.toLowerCase().trim())) {
+        ids.add(u.id);
+        if (u.migratedFrom) ids.add(u.migratedFrom);
+        if (u.migratedTo) ids.add(u.migratedTo);
+      }
+    });
+    
+    return Array.from(ids);
+  }, [selectedDiaryStudentId, student, studentEmails, users]);
+
+  // Encontra a autoavaliação correspondente do aluno para a turma, mês e ano selecionados
+  const studentEval = useMemo(() => {
+    return evaluations.find(e => {
+      if (e.classId !== selectedClassId || e.month !== diaryFilterMonth || e.year !== diaryFilterYear) {
+        return false;
+      }
+      
+      // 1. Correspondência de ID direta
+      if (eligibleIds.includes(e.studentId)) return true;
+      
+      // 2. Correspondência de email salva diretamente no documento da autoavaliação
+      if (e.studentEmail && studentEmails.includes(e.studentEmail.toLowerCase().trim())) return true;
+      
+      // 3. Resolver ID da autoavaliação para um usuário e comparar o email correspondente
+      const evalUser = users.find(u => u.id === e.studentId);
+      if (evalUser?.email && studentEmails.includes(evalUser.email.toLowerCase().trim())) return true;
+      
+      return false;
+    });
+  }, [evaluations, selectedClassId, diaryFilterMonth, diaryFilterYear, eligibleIds, studentEmails, users]);
 
   const allowedBadges = BADGES.filter(b => {
     // Automatic badges
