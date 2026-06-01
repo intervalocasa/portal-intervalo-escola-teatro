@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useState } from "react";
 import { motion } from "motion/react";
 import { 
   Plus, 
@@ -14,7 +15,8 @@ import {
   Trash2,
   Calendar,
   Star,
-  Award
+  Award,
+  Database
 } from "lucide-react";
 import { Logo, Avatar } from "../components/CommonComponents";
 import { AnnouncementPanel } from "../components/AnnouncementPanel";
@@ -28,6 +30,7 @@ interface GestorDashboardProps {
   handleResetUserForm: () => void;
   filteredAnnouncements: any[];
   onAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
+  onHealDatabase?: () => Promise<void>;
 }
 
 export const GestorDashboard = ({
@@ -37,8 +40,10 @@ export const GestorDashboard = ({
   setView,
   handleResetUserForm,
   filteredAnnouncements,
-  onAwardBadge
+  onAwardBadge,
+  onHealDatabase
 }: GestorDashboardProps) => {
+  const [isHealing, setIsHealing] = useState(false);
   const user = users.find(u => u.id === currentUser?.uid);
   
   return (
@@ -215,6 +220,36 @@ export const GestorDashboard = ({
                 <div className="text-xs opacity-70 mt-1">Conquistas dos alunos</div>
               </div>
             </motion.button>
+
+            {onHealDatabase && (
+              <motion.button
+                onClick={async () => {
+                  if (window.confirm("Deseja fazer a limpeza de usuários duplicados e sincronização na base de dados do Firebase agora?")) {
+                    try {
+                      setIsHealing(true);
+                      await onHealDatabase();
+                      alert("Limpeza e sincronização da base de dados concluídas com sucesso!");
+                    } catch (err) {
+                      alert("Erro ao executar a limpeza da base de dados.");
+                    } finally {
+                      setIsHealing(false);
+                    }
+                  }
+                }}
+                disabled={isHealing}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="w-full p-6 bg-white border-2 border-slate-100 rounded-2xl flex items-center gap-5 text-slate-700 shadow-xl shadow-slate-900/5 transition-all text-left group"
+              >
+                <div className="bg-slate-800 p-3 rounded-xl text-white group-hover:scale-110 transition-transform">
+                  <Database size={24} className={isHealing ? "animate-spin" : ""} />
+                </div>
+                <div>
+                  <div className="font-bold text-lg leading-none">Limpar Duplicados & Banco</div>
+                  <div className="text-xs text-slate-400 mt-1 font-bold">Garante a consistência de dados e exclui duplicados</div>
+                </div>
+              </motion.button>
+            )}
 
             <motion.button
               onClick={handleLogout}

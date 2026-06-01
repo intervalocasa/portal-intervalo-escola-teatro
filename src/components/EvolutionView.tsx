@@ -55,13 +55,16 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
 
   const [teacherCommentModal, setTeacherCommentModal] = React.useState<{ text: string; teacherName: string; teacherPhoto?: string } | null>(null);
 
-  const studentEvals = evaluations.filter(e => e.studentId === currentUser?.uid);
+  const mappedUser = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+  const eligibleIds = [currentUser?.uid, mappedUser?.id, mappedUser?.migratedFrom].filter(Boolean) as string[];
+
+  const studentEvals = evaluations.filter(e => eligibleIds.includes(e.studentId));
   
   // Robust diary filtering: first try by studentId, then heal by name if needed
-  const studentDiariesById = diaries.filter(d => d.studentId === currentUser?.uid);
+  const studentDiariesById = diaries.filter(d => eligibleIds.includes(d.studentId));
   const otherOrphanedDiaries = diaries.filter(d => 
-    d.studentId !== currentUser?.uid && 
-    d.studentName === currentUser?.name &&
+    !eligibleIds.includes(d.studentId) && 
+    (d.studentName === currentUser?.name || d.studentName === mappedUser?.name) &&
     // Only consider it orphaned if the studentId in the diary doesn't exist in our users list anymore
     !users.some(u => u.id === d.studentId)
   );

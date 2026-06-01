@@ -32,7 +32,11 @@ export const ClassesListView = ({
 
   const filteredClasses = classes.filter(c => {
     // If professor, only show their classes by default or match search
-    const isTeacher = role === "Professor" && c.teacherIds?.includes(currentUser?.uid);
+    const matchedProfDoc = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+    const isTeacher = role === "Professor" && (
+      c.teacherIds?.includes(currentUser?.uid) ||
+      (matchedProfDoc && c.teacherIds?.includes(matchedProfDoc.id))
+    );
     const matchesSearch = c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.teacherIds?.some(tid => (users.find(u => u.id === tid)?.name || "").toLowerCase().includes(searchTerm.toLowerCase()));

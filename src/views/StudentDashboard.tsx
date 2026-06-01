@@ -52,11 +52,12 @@ export const StudentDashboard = ({
   userBadges,
   onAwardBadge
 }: StudentDashboardProps) => {
-  const user = users.find(u => u.id === currentUser?.uid);
+  const user = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+  const eligibleIds = [currentUser?.uid, user?.id, user?.migratedFrom].filter(Boolean) as string[];
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   // Filter classes only for this student
-  const studentClasses = classes.filter(c => c.studentIds?.includes(user?.id));
+  const studentClasses = classes.filter(c => c.studentIds?.some(id => eligibleIds.includes(id)));
   
   return (
     <motion.div
@@ -115,8 +116,8 @@ export const StudentDashboard = ({
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {classes.filter(c => c.studentIds?.includes(user?.id)).length > 0 ? (
-                classes.filter(c => c.studentIds?.includes(user?.id)).map(c => (
+              {classes.filter(c => c.studentIds?.some(id => eligibleIds.includes(id))).length > 0 ? (
+                classes.filter(c => c.studentIds?.some(id => eligibleIds.includes(id))).map(c => (
                   <motion.button
                     key={c.id}
                     onClick={() => {
@@ -191,7 +192,7 @@ export const StudentDashboard = ({
                     cnpj: user.cnpj || ""
                   });
                   setPhotoPreview(user.photo || null);
-                  const userClasses = classes.filter(c => c.studentIds?.includes(user.id)).map(c => c.id);
+                  const userClasses = classes.filter(c => c.studentIds?.some(id => eligibleIds.includes(id))).map(c => c.id);
                   setSelectedUserClasses(userClasses);
                 }
                 setView("edit_self");

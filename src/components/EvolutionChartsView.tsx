@@ -33,6 +33,7 @@ interface EvolutionChartsViewProps {
   evaluations: any[];
   diaries: any[];
   currentUser: any;
+  users: any[];
   classes: any[];
   setView: (view: string) => void;
   setAnalyticsClassId: (id: string) => void;
@@ -43,20 +44,24 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
   evaluations,
   diaries,
   currentUser,
+  users,
   classes,
   setView,
   setAnalyticsClassId
 }) => {
+  const mappedUser = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+  const eligibleIds = [currentUser?.uid, mappedUser?.id, mappedUser?.migratedFrom].filter(Boolean) as string[];
+
   const currentClass = classes.find(c => c.id === analyticsClassId);
   const isAdultOr60 = currentClass?.type?.includes("Adulto") || currentClass?.type?.includes("60+");
 
   const studentClassesWithData = React.useMemo(() => {
     const ids = new Set([
-      ...evaluations.filter(e => e.studentId === currentUser?.uid).map(e => e.classId),
-      ...diaries.filter(d => d.studentId === currentUser?.uid).map(d => d.classId)
+      ...evaluations.filter(e => eligibleIds.includes(e.studentId)).map(e => e.classId),
+      ...diaries.filter(d => eligibleIds.includes(d.studentId)).map(d => d.classId)
     ]);
     return classes.filter(c => ids.has(c.id));
-  }, [evaluations, diaries, currentUser, classes]);
+  }, [evaluations, diaries, eligibleIds, classes]);
 
   const criteria = currentClass?.type?.includes("Profissional") || currentClass?.type?.includes("Montagem")
     ? PROFESSIONAL_COURSE_CRITERIA
@@ -64,11 +69,11 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
 
   const chartData = React.useMemo(() => {
     const studentEvals = evaluations
-      .filter(e => e.studentId === currentUser?.uid && e.classId === analyticsClassId)
+      .filter(e => eligibleIds.includes(e.studentId) && e.classId === analyticsClassId)
       .sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month));
       
     const studentDiaries = diaries
-      .filter(d => d.studentId === currentUser?.uid && d.classId === analyticsClassId && d.status === "concluido")
+      .filter(d => eligibleIds.includes(d.studentId) && d.classId === analyticsClassId && d.status === "concluido")
       .sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month));
 
     const combinedMap = new Map();

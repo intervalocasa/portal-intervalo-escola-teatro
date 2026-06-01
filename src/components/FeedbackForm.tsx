@@ -11,6 +11,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
 import { User, Class } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
@@ -133,8 +134,10 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       // Main rating is the average of expression, quality and challenge (1-5 scaled)
       const avgRating = (expressionScore + qualityScore + challengeScore) / 3;
 
+      const authUid = getAuth().currentUser?.uid || currentUser.id;
+
       await addDoc(collection(db, "feedbacks-aulas"), {
-        studentId: currentUser.id,
+        studentId: authUid,
         studentName: currentUser.name,
         classId: selectedClassId,
         className: selectedClass?.code || 'Turma não identificada',

@@ -55,6 +55,9 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
   setView,
   handleAssessmentSubmit
 }) => {
+  const mappedUser = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+  const eligibleIds = [currentUser?.uid, mappedUser?.id, mappedUser?.migratedFrom].filter(Boolean) as string[];
+
   return (
     <motion.div
       key="assessment-screen"
@@ -147,11 +150,11 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
               </div>
               
               <div className="grid gap-4">
-                {classes.filter(c => c.studentIds?.includes(currentUser?.uid)).length > 0 ? (
-                  classes.filter(c => c.studentIds?.includes(currentUser?.uid)).map(c => {
+                {classes.filter(c => c.studentIds?.some(id => eligibleIds.includes(id))).length > 0 ? (
+                  classes.filter(c => c.studentIds?.some(id => eligibleIds.includes(id))).map(c => {
                     const m = assessmentMonth;
                     const y = assessmentYear;
-                    const hasSubmitted = evaluations.find(e => e.studentId === currentUser.uid && e.classId === c.id && e.month === m && e.year === y);
+                    const hasSubmitted = evaluations.find(e => eligibleIds.includes(e.studentId) && e.classId === c.id && e.month === m && e.year === y);
                     
                     return (
                       <motion.button

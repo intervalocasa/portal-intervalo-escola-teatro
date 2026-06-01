@@ -5,7 +5,7 @@
 
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, UserCircle, Edit, Users, Calendar, Info, UserPlus, X, Search, Plus, LayoutGrid, MessageSquare } from "lucide-react";
+import { ArrowLeft, UserCircle, Edit, Users, Calendar, Info, UserPlus, X, Search, Plus, LayoutGrid, MessageSquare, Pencil } from "lucide-react";
 import { Class, User, UserRole } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { MuralTurma } from "../components/MuralTurma";
@@ -53,10 +53,18 @@ export const ClassDetailsView = ({
   const classTeachers = useMemo(() => {
     return users.filter(u => targetClass?.teacherIds?.includes(u.id));
   }, [users, targetClass?.teacherIds]);
-  const enrichedUser = users.find(u => u.id === currentUser?.uid) || null;
+  const enrichedUser = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || null;
   const classStudents = useMemo(() => {
     return users
-      .filter(u => targetClass?.studentIds?.includes(u.id))
+      .filter(u => {
+        if (!targetClass?.studentIds) return false;
+        if (targetClass.studentIds.includes(u.id)) return true;
+        if (u.migratedFrom && targetClass.studentIds.includes(u.migratedFrom)) return true;
+        return targetClass.studentIds.some(sid => {
+          const matchingDoc = users.find(uDoc => uDoc.id === sid);
+          return matchingDoc && matchingDoc.email?.toLowerCase() === u.email?.toLowerCase();
+        });
+      })
       .sort((a, b) => (a.artisticName || a.name || "").localeCompare(b.artisticName || b.name || "", 'pt-BR'));
   }, [users, targetClass?.studentIds]);
 
@@ -248,6 +256,11 @@ export const ClassDetailsView = ({
                               <span className="text-[8px] font-black uppercase tracking-widest">
                                 {new Date(targetClass.enrollmentDates[s.id] + 'T00:00:00').toLocaleDateString('pt-BR')}
                               </span>
+                            </div>
+                          )}
+                          {role === "Gestor" && (
+                            <div className="w-8 h-8 rounded-full bg-slate-100 group-hover:bg-pro-teal group-hover:text-white flex items-center justify-center text-slate-400 transition-colors shrink-0">
+                              <Pencil size={14} />
                             </div>
                           )}
                         </div>

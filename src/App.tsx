@@ -1182,7 +1182,7 @@ export default function App() {
 
   const handleAwardBadge = async (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => {
     try {
-      const requester = users.find(u => u.id === currentUser?.uid);
+      const requester = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
       const badgeData = {
         badgeId: badgeDef.badgeId,
         name: badgeDef.name,
@@ -2166,6 +2166,7 @@ export default function App() {
               handleResetUserForm={handleResetUserForm}
               filteredAnnouncements={filteredAnnouncements}
               onAwardBadge={handleAwardBadge}
+              onHealDatabase={healDatabaseAndRelations}
             />
           ) : role === "Professor" ? (
             <ProfessorDashboard 
@@ -2340,6 +2341,7 @@ export default function App() {
             evaluations={evaluations}
             diaries={diaries}
             currentUser={currentUser}
+            users={users}
             classes={classes}
             setView={setView}
             setAnalyticsClassId={setAnalyticsClassId}
@@ -2355,7 +2357,7 @@ export default function App() {
             classes={classes}
             users={users}
             diaries={diaries}
-            currentUser={users.find(u => u.id === currentUser?.uid) || null}
+            currentUser={users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || null}
             setSelectedDiaryStudentId={setSelectedDiaryStudentId}
             setDiaryFormData={setDiaryFormData}
             setView={setView}
@@ -2374,6 +2376,7 @@ export default function App() {
             handleAwardBadge={handleAwardBadge}
             userRole={role}
             setView={setView}
+            evaluations={evaluations}
           />
         ) : view === "manage_diaries" ? (
           <ManageDiariesView 
@@ -2393,7 +2396,7 @@ export default function App() {
             <BackButton onClick={() => setView("dashboard")} />
             <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
               <AgendaEventos 
-                currentUser={users.find(u => u.id === currentUser?.uid) || null}
+                currentUser={users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || null}
                 isGestor={role === "Gestor"}
               />
             </div>

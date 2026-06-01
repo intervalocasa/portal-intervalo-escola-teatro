@@ -111,6 +111,9 @@ export interface User {
   photo?: string;
   createdAt: any;
   updatedAt: any;
+  migratedFrom?: string;
+  migratedTo?: string;
+  inactive?: boolean;
 }
 
 export interface Class {

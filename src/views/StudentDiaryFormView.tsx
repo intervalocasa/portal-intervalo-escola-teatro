@@ -10,7 +10,8 @@ import { Avatar, BackButton } from "../components/CommonComponents";
 import { 
   PROFESSIONAL_COURSE_CRITERIA, 
   ADULT_COURSE_CRITERIA, 
-  GRADE_LEGEND 
+  GRADE_LEGEND,
+  SCALES
 } from "../constants";
 import { BADGES } from "../constants/badges";
 import { Award, Star } from "lucide-react";
@@ -29,6 +30,7 @@ interface StudentDiaryFormViewProps {
   handleAwardBadge: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
   userRole?: UserRole | null;
   setView: (view: string) => void;
+  evaluations?: any[];
 }
 
 export const StudentDiaryFormView = ({
@@ -43,12 +45,21 @@ export const StudentDiaryFormView = ({
   handleSubmitDiary,
   handleAwardBadge,
   userRole,
-  setView
+  setView,
+  evaluations = []
 }: StudentDiaryFormViewProps) => {
   const student = users.find(u => u.id === selectedDiaryStudentId);
   const targetClass = classes.find(c => c.id === selectedClassId);
   const isProfessional = targetClass?.type?.includes("Profissional") || targetClass?.type?.includes("Montagem");
   const criteria = isProfessional ? PROFESSIONAL_COURSE_CRITERIA : ADULT_COURSE_CRITERIA;
+
+  const eligibleIds = [selectedDiaryStudentId, student?.id, student?.migratedFrom].filter(Boolean) as string[];
+  const studentEval = evaluations.find(e => 
+    eligibleIds.includes(e.studentId) &&
+    e.classId === selectedClassId &&
+    e.month === diaryFilterMonth &&
+    e.year === diaryFilterYear
+  );
 
   const allowedBadges = BADGES.filter(b => {
     // Automatic badges
@@ -272,7 +283,42 @@ export const StudentDiaryFormView = ({
                        <div className="max-w-xl space-y-3">
                           <div className="flex items-center gap-4">
                              <span className="text-4xl font-black text-pro-orange opacity-20">#{idx + 1}</span>
-                             <h4 className="text-2xl font-black text-slate-800 uppercase tracking-tight">{c.label}</h4>
+                             <div className="relative group/tooltip inline-block">
+                               <h4 className="text-2xl font-black text-slate-800 uppercase tracking-tight hover:text-pro-teal transition-colors cursor-help flex items-center gap-3">
+                                  {c.label}
+                                  <HelpCircle size={14} className="text-slate-400 group-hover/tooltip:text-pro-teal transition-colors shrink-0" />
+                               </h4>
+                               
+                               {/* Tooltip content on hover */}
+                               <div className="absolute left-0 bottom-full mb-3 hidden group-hover/tooltip:flex flex-col bg-slate-950 text-white p-4 rounded-2xl shadow-xl border border-slate-800 text-xs w-72 md:w-80 space-y-2 pointer-events-none transition-all z-10">
+                                 <div className="font-black uppercase tracking-widest text-[#00ebc7] text-[10px]">
+                                   Autoavaliação do Aluno
+                                 </div>
+                                 {(() => {
+                                   const studentNote = studentEval?.notes?.[c.id];
+                                   const scaleObj = SCALES.find(s => Number(s.value) === Number(studentNote));
+                                   const studentNoteLabel = scaleObj ? scaleObj.label : "Não respondido";
+                                   
+                                   return studentNote !== undefined ? (
+                                     <div className="space-y-1">
+                                       <div className="flex items-center gap-2">
+                                         <span className="text-sm font-black text-pro-yellow">{studentNote} / 10</span>
+                                         <span className="text-[10px] uppercase font-bold text-slate-400">
+                                           ({studentNote === 10 ? "Excelente" : studentNote >= 8 ? "Desenvolvendo" : studentNote >= 5 ? "Em Movimento" : "Inicial"})
+                                         </span>
+                                       </div>
+                                       <p className="text-slate-200 font-bold leading-normal uppercase text-[9px] tracking-wide">
+                                         "{studentNoteLabel}"
+                                       </p>
+                                     </div>
+                                   ) : (
+                                     <p className="text-slate-400 font-bold uppercase text-[9px] tracking-wider leading-relaxed">
+                                       Nenhuma autoavaliação enviada para este critério neste mês.
+                                     </p>
+                                   );
+                                 })()}
+                               </div>
+                             </div>
                           </div>
                           <p className="text-sm text-slate-400 font-bold leading-relaxed">{c.definition}</p>
                           <textarea 
