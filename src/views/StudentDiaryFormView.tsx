@@ -54,33 +54,60 @@ export const StudentDiaryFormView = ({
   const isProfessional = targetClass?.type?.includes("Profissional") || targetClass?.type?.includes("Montagem");
   const criteria = isProfessional ? PROFESSIONAL_COURSE_CRITERIA : ADULT_COURSE_CRITERIA;
 
-  // Obter todos os emails possíveis associados a este aluno
-  const studentEmails = useMemo(() => {
-    const list: string[] = [];
-    if (student?.email) list.push(student.email.toLowerCase().trim());
-    const matchedUser = users.find(u => u.id === selectedDiaryStudentId);
-    if (matchedUser?.email) list.push(matchedUser.email.toLowerCase().trim());
-    return Array.from(new Set(list));
-  }, [student, selectedDiaryStudentId, users]);
-
-  // Encontrar todas as IDs de usuário vinculadas a esses emails para correspondência direta
-  const eligibleIds = useMemo(() => {
+  // Obter todos os emails, IDs e nomes possíveis associados a este aluno para correspondência robusta de autoavaliação
+  const { studentEmails, studentNames, eligibleIds } = useMemo(() => {
+    const emails = new Set<string>();
+    const names = new Set<string>();
     const ids = new Set<string>();
+
     if (selectedDiaryStudentId) ids.add(selectedDiaryStudentId);
     if (student?.id) ids.add(student.id);
     if (student?.migratedFrom) ids.add(student.migratedFrom);
-    
-    // Incluir qualquer documento de usuário que tenha o mesmo email
+    if (student?.migratedTo) ids.add(student.migratedTo);
+
+    if (student?.email) emails.add(student.email.toLowerCase().trim());
+    if (student?.name) names.add(student.name.toLowerCase().trim().replace(/\s+/g, ' '));
+    if (student?.artisticName) names.add(student.artisticName.toLowerCase().trim().replace(/\s+/g, ' '));
+
+    const matchedUser = users.find(u => u.id === selectedDiaryStudentId);
+    if (matchedUser) {
+      if (matchedUser.email) emails.add(matchedUser.email.toLowerCase().trim());
+      if (matchedUser.name) names.add(matchedUser.name.toLowerCase().trim().replace(/\s+/g, ' '));
+      if (matchedUser.artisticName) names.add(matchedUser.artisticName.toLowerCase().trim().replace(/\s+/g, ' '));
+      if (matchedUser.migratedFrom) ids.add(matchedUser.migratedFrom);
+      if (matchedUser.migratedTo) ids.add(matchedUser.migratedTo);
+    }
+
+    // Heurística de cura: incluir qualquer outro usuário que tenha o mesmo email ou nome
     users.forEach(u => {
-      if (u.email && studentEmails.includes(u.email.toLowerCase().trim())) {
+      let emailMatch = false;
+      let nameMatch = false;
+      
+      const uEmail = u.email?.toLowerCase().trim();
+      if (uEmail && emails.has(uEmail)) {
+        emailMatch = true;
+      }
+      
+      const uName = u.name?.toLowerCase().trim().replace(/\s+/g, ' ');
+      if (uName && names.has(uName)) {
+        nameMatch = true;
+      }
+
+      if (emailMatch || nameMatch) {
         ids.add(u.id);
         if (u.migratedFrom) ids.add(u.migratedFrom);
         if (u.migratedTo) ids.add(u.migratedTo);
+        if (uEmail) emails.add(uEmail);
+        if (uName) names.add(uName);
       }
     });
-    
-    return Array.from(ids);
-  }, [selectedDiaryStudentId, student, studentEmails, users]);
+
+    return {
+      studentEmails: Array.from(emails),
+      studentNames: Array.from(names),
+      eligibleIds: Array.from(ids)
+    };
+  }, [student, selectedDiaryStudentId, users]);
 
   // Encontra a autoavaliação correspondente do aluno para a turma, mês e ano selecionados
   const studentEval = useMemo(() => {
@@ -89,19 +116,23 @@ export const StudentDiaryFormView = ({
         return false;
       }
       
-      // 1. Correspondência de ID direta
+      // 1. Correspondência de ID direta ou resolvida do aluno
       if (eligibleIds.includes(e.studentId)) return true;
       
       // 2. Correspondência de email salva diretamente no documento da autoavaliação
       if (e.studentEmail && studentEmails.includes(e.studentEmail.toLowerCase().trim())) return true;
       
-      // 3. Resolver ID da autoavaliação para um usuário e comparar o email correspondente
+      // 3. Correspondência de nome salva diretamente no documento
+      if (e.studentName && studentNames.includes(e.studentName.toLowerCase().trim().replace(/\s+/g, ' '))) return true;
+      
+      // 4. Resolver ID da autoavaliação para um usuário e comparar o email correspondente ou nome correspondente
       const evalUser = users.find(u => u.id === e.studentId);
       if (evalUser?.email && studentEmails.includes(evalUser.email.toLowerCase().trim())) return true;
+      if (evalUser?.name && studentNames.includes(evalUser.name.toLowerCase().trim().replace(/\s+/g, ' '))) return true;
       
       return false;
     });
-  }, [evaluations, selectedClassId, diaryFilterMonth, diaryFilterYear, eligibleIds, studentEmails, users]);
+  }, [evaluations, selectedClassId, diaryFilterMonth, diaryFilterYear, eligibleIds, studentEmails, studentNames, users]);
 
   const allowedBadges = BADGES.filter(b => {
     // Automatic badges
@@ -332,37 +363,155 @@ export const StudentDiaryFormView = ({
                                </h4>
                                
                                {/* Tooltip content on hover */}
-                               <div className="absolute left-0 bottom-full mb-3 hidden group-hover/tooltip:flex flex-col bg-slate-950 text-white p-4 rounded-2xl shadow-xl border border-slate-800 text-xs w-72 md:w-80 space-y-2 pointer-events-none transition-all z-10">
-                                 <div className="font-black uppercase tracking-widest text-[#00ebc7] text-[10px]">
-                                   Autoavaliação do Aluno
+                               <div className="absolute left-0 bottom-full mb-3 hidden group-hover/tooltip:flex flex-col bg-slate-950 text-white p-4 rounded-2xl shadow-xl border border-slate-800 text-xs w-72 md:w-80 space-y-3 pointer-events-none transition-all z-10">
+                                 <div>
+                                   <div className="font-black uppercase tracking-widest text-[#00ebc7] text-[9px] mb-1">
+                                     Autoavaliação do Aluno
+                                   </div>
+                                   {(() => {
+                                     const studentNote = studentEval?.notes?.[c.id];
+                                     const scaleObj = SCALES.find(s => Number(s.value) === Number(studentNote));
+                                     const studentNoteLabel = scaleObj ? scaleObj.label : "Não respondido";
+                                     
+                                     return studentNote !== undefined ? (
+                                       <div className="space-y-1">
+                                         <div className="flex items-center gap-2">
+                                           <span className="text-sm font-black text-pro-yellow">{studentNote} / 10</span>
+                                           <span className="text-[9px] uppercase font-bold text-slate-400">
+                                             ({studentNote === 10 ? "Excelente" : studentNote >= 8 ? "Desenvolvendo" : studentNote >= 5 ? "Em Movimento" : "Inicial"})
+                                           </span>
+                                         </div>
+                                         <p className="text-slate-300 font-medium leading-normal uppercase text-[8px] tracking-wide">
+                                           "{studentNoteLabel}"
+                                         </p>
+                                       </div>
+                                     ) : (
+                                       <p className="text-slate-400 font-bold uppercase text-[9px] tracking-wider leading-relaxed">
+                                         Nenhuma autoavaliação enviada.
+                                       </p>
+                                     );
+                                   })()}
                                  </div>
+
                                  {(() => {
                                    const studentNote = studentEval?.notes?.[c.id];
-                                   const scaleObj = SCALES.find(s => Number(s.value) === Number(studentNote));
-                                   const studentNoteLabel = scaleObj ? scaleObj.label : "Não respondido";
+                                   const currentProfGrade = diaryFormData.grades[c.id];
                                    
-                                   return studentNote !== undefined ? (
-                                     <div className="space-y-1">
-                                       <div className="flex items-center gap-2">
-                                         <span className="text-sm font-black text-pro-yellow">{studentNote} / 10</span>
-                                         <span className="text-[10px] uppercase font-bold text-slate-400">
-                                           ({studentNote === 10 ? "Excelente" : studentNote >= 8 ? "Desenvolvendo" : studentNote >= 5 ? "Em Movimento" : "Inicial"})
-                                         </span>
+                                   if (studentNote !== undefined && currentProfGrade !== undefined && currentProfGrade !== "") {
+                                     const selfVal = Number(studentNote);
+                                     const profVal = Number(currentProfGrade);
+                                     const weightSelf = isProfessional ? 2 : 3;
+                                     const weightProf = isProfessional ? 2 : 1;
+                                     const compAvg = (selfVal * weightSelf + profVal * weightProf) / 4;
+                                     
+                                     return (
+                                       <div className="border-t border-slate-800 pt-2">
+                                         <div className="font-black uppercase tracking-widest text-pro-orange text-[9px] mb-1">
+                                           Nível Consolidado Estimado
+                                         </div>
+                                         <div className="flex items-center gap-2">
+                                           <span className="text-sm font-black text-white">
+                                             {isProfessional ? compAvg.toFixed(1) : (compAvg === 0 ? GRADE_LEGEND[0] : compAvg <= 3 ? GRADE_LEGEND[1] : compAvg <= 6 ? GRADE_LEGEND[2] : compAvg <= 9 ? GRADE_LEGEND[3] : GRADE_LEGEND[4]).label}
+                                           </span>
+                                           <span className="text-[9px] text-slate-400">({compAvg.toFixed(1)} / 10)</span>
+                                         </div>
                                        </div>
-                                       <p className="text-slate-200 font-bold leading-normal uppercase text-[9px] tracking-wide">
-                                         "{studentNoteLabel}"
-                                       </p>
-                                     </div>
-                                   ) : (
-                                     <p className="text-slate-400 font-bold uppercase text-[9px] tracking-wider leading-relaxed">
-                                       Nenhuma autoavaliação enviada para este critério neste mês.
-                                     </p>
-                                   );
+                                     );
+                                   }
+                                   return null;
                                  })()}
                                </div>
                              </div>
                           </div>
                           <p className="text-sm text-slate-400 font-bold leading-relaxed">{c.definition}</p>
+                          
+                          {/* Consolidated assessment summary block */}
+                          <div className="mt-4 p-4 rounded-3xl bg-slate-50 border border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                            <div className="flex-1 space-y-1">
+                              <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Autoavaliação do Aluno</div>
+                              {(() => {
+                                const studentNote = studentEval?.notes?.[c.id];
+                                if (studentNote !== undefined) {
+                                  const scaleObj = SCALES.find(s => Number(s.value) === Number(studentNote));
+                                  return (
+                                    <div className="space-y-0.5">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-black text-pro-teal">{studentNote} / 10</span>
+                                        <span className="text-[9px] font-black uppercase text-slate-500 opacity-80">
+                                          ({studentNote === 10 ? "Excelente" : studentNote >= 8 ? "Desenvolvendo" : studentNote >= 5 ? "Em Movimento" : "Inicial"})
+                                        </span>
+                                      </div>
+                                      <p className="text-[10px] text-slate-400 leading-normal italic">
+                                        "{scaleObj?.label || "Respondido"}"
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight italic">
+                                    Aguardando autoavaliação...
+                                  </div>
+                                );
+                              })()}
+                            </div>
+
+                            <div className="w-px h-10 bg-slate-200 hidden sm:block" />
+
+                            <div className="flex-1 space-y-1 sm:pl-4">
+                              <div className="text-[9px] font-black uppercase tracking-widest text-[#016a86]">Resultado / Indicador Consolidado</div>
+                              {(() => {
+                                const studentNote = studentEval?.notes?.[c.id];
+                                const currentProfGrade = diaryFormData.grades[c.id];
+                                
+                                if (studentNote !== undefined && currentProfGrade !== undefined && currentProfGrade !== "") {
+                                  const selfVal = Number(studentNote);
+                                  const profVal = Number(currentProfGrade);
+                                  const weightSelf = isProfessional ? 2 : 3;
+                                  const weightProf = isProfessional ? 2 : 1;
+                                  const compAvg = (selfVal * weightSelf + profVal * weightProf) / 4;
+                                  
+                                  if (isProfessional) {
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-black text-slate-800">{compAvg.toFixed(1)} / 10</span>
+                                        <div className="px-2 py-0.5 bg-[#016a86]/10 text-[#016a86] rounded-full text-[8px] font-black uppercase tracking-widest">
+                                          Média Final
+                                        </div>
+                                      </div>
+                                    );
+                                  } else {
+                                    const legendItem = compAvg === 0 ? GRADE_LEGEND[0] : 
+                                                     compAvg <= 3 ? GRADE_LEGEND[1] : 
+                                                     compAvg <= 6 ? GRADE_LEGEND[2] : 
+                                                     compAvg <= 9 ? GRADE_LEGEND[3] : 
+                                                     GRADE_LEGEND[4];
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-black text-[#016a86]">{legendItem.label}</span>
+                                        <span className="text-[9px] font-bold text-slate-400">
+                                          ({compAvg.toFixed(1)} / 10)
+                                        </span>
+                                      </div>
+                                    );
+                                  }
+                                }
+                                
+                                if (studentNote === undefined) {
+                                  return (
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight italic">
+                                      Indisponível (Sem autoavaliação)
+                                    </div>
+                                  );
+                                }
+                                
+                                return (
+                                  <div className="text-[10px] font-bold text-pro-orange uppercase tracking-tight italic">
+                                    Aguardando nota do professor...
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
                           <textarea 
                              placeholder={`Feedback específico sobre ${c.label}...`}
                              value={diaryFormData.criteriaObs[c.id] || ""}
