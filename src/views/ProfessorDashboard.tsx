@@ -101,6 +101,8 @@ export const ProfessorDashboard = ({
                 if (user) {
                   setFormData({
                     name: user.name || "",
+                    socialName: user.socialName || "",
+                    pronouns: user.pronouns || "",
                     artisticName: user.artisticName || "",
                     birthDate: user.birthDate || "",
                     email: user.email || "",

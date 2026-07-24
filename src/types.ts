@@ -96,6 +96,8 @@ export interface PedagogicalMeetingRequest {
 export interface User {
   id: string;
   name: string;
+  socialName?: string;
+  pronouns?: string;
   artisticName?: string;
   birthDate?: string;
   email: string;

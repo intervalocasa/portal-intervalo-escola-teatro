@@ -7,6 +7,7 @@ import { motion } from "motion/react";
 import { Plus, X, UserCircle, Calendar, GraduationCap, ChevronDown, Check, ArrowLeft } from "lucide-react";
 import { User, ClassData } from "../types";
 import { Logo, BackButton } from "../components/CommonComponents";
+import { getUserDisplayName } from "../lib/userUtils";
 import { FormEvent, useState, useRef, useEffect } from "react";
 
 interface CreateClassViewProps {
@@ -32,7 +33,7 @@ export const CreateClassView = ({
 }: CreateClassViewProps) => {
   const teachers = users
     .filter(u => u.role === "Professor")
-    .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+    .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
   const [isDayDropdownOpen, setIsDayDropdownOpen] = useState(false);
   const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -195,7 +196,7 @@ export const CreateClassView = ({
               <span className={`truncate ${selectedTeacherIds.length === 0 ? "text-slate-400 text-sm" : "text-slate-800 font-medium text-sm"}`}>
                 {selectedTeacherIds.length === 0 
                   ? "Selecione o(s) professor(es)" 
-                  : selectedTeacherIds.map(id => teachers.find(t => t.id === id)?.name).filter(Boolean).join(", ")}
+                  : selectedTeacherIds.map(id => { const t = teachers.find(x => x.id === id); return t ? getUserDisplayName(t) : ""; }).filter(Boolean).join(", ")}
               </span>
               <ChevronDown size={18} className={`text-slate-400 transition-transform ${isTeacherDropdownOpen ? "rotate-180" : ""}`} />
             </div>
@@ -214,7 +215,7 @@ export const CreateClassView = ({
                         : "text-slate-600 hover:bg-slate-50"
                       }`}
                     >
-                      {t.name}
+                      {getUserDisplayName(t)}
                       {selectedTeacherIds.includes(t.id) && <Check size={16} />}
                     </button>
                   ))}

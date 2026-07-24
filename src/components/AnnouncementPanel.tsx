@@ -11,6 +11,7 @@ import { db } from "../lib/firebase";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
 import { User, Announcement, Class } from "../types";
 import { checkForBlogueirinhoBadge } from "../lib/badgeUtils";
+import { getUserDisplayName } from "../lib/userUtils";
 
 interface AnnouncementPanelProps {
   announcements: Announcement[];
@@ -87,7 +88,7 @@ export const AnnouncementPanel = ({ announcements, currentUser, studentClasses =
     try {
       await addDoc(collection(db, "posts"), {
         authorId: currentUser.id,
-        authorName: currentUser.artisticName || currentUser.name,
+        authorName: getUserDisplayName(currentUser),
         classId,
         content: `🎉 CONQUISTEI UMA NOVA BADGE!\n\n${aviso.title}\n\n${aviso.content}`,
         likes: [],

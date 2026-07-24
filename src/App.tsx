@@ -1447,6 +1447,8 @@ export default function App() {
   // Form State for Registration
   const [formData, setFormData] = useState({
     name: "",
+    socialName: "",
+    pronouns: "",
     artisticName: "",
     birthDate: "",
     email: "",
@@ -1572,6 +1574,8 @@ export default function App() {
     setPhotoPreview(null);
     setFormData({
       name: "",
+      socialName: "",
+      pronouns: "",
       artisticName: "",
       email: "",
       phone: "",

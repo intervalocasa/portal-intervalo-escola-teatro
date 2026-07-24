@@ -10,6 +10,7 @@ import { DetailItem, Avatar, BackButton } from "../components/CommonComponents";
 import { BadgeAwardModal } from "../components/BadgeAwardModal";
 import { BADGES } from "../constants/badges";
 import { useState } from "react";
+import { getUserDisplayName, getUserPronouns } from "../lib/userUtils";
 
 interface UserDetailsViewProps {
   selectedUserId: string | null;
@@ -84,7 +85,12 @@ export const UserDetailsView = ({
            </div>
          </div>
          <div>
-           <h1 className="text-white text-3xl md:text-5xl font-black">{user.name}</h1>
+           <h1 className="text-white text-3xl md:text-5xl font-black">{getUserDisplayName(user)}</h1>
+           {user.pronouns && (
+             <p className="text-white/80 text-xs md:text-sm font-bold mt-1 uppercase tracking-wider">
+               Pronomes: {user.pronouns}
+             </p>
+           )}
            <p className="text-pro-yellow text-xs md:text-sm mt-3 uppercase tracking-[0.4em] font-black bg-white/10 p-2 rounded-lg backdrop-blur-sm border border-white/10 inline-block">
              {user.role}
            </p>
@@ -99,6 +105,8 @@ export const UserDetailsView = ({
                setFormData({
                  id: user.id,
                  name: user.name,
+                 socialName: user.socialName || "",
+                 pronouns: user.pronouns || "",
                  artisticName: user.artisticName || "",
                  birthDate: user.birthDate || "",
                  email: user.email,
@@ -155,9 +163,12 @@ export const UserDetailsView = ({
             <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Dados Pessoais</h4>
           </div>
           
+          <DetailItem label="Nome Social" value={user.socialName} />
+          <DetailItem label="Pronomes" value={user.pronouns} />
           <DetailItem label="Nome Artístico" value={user.artisticName} />
+          {isGestor && <DetailItem label="Nome de Registro Civil (Apenas Gestão)" value={user.name} />}
           <DetailItem label="Data de Nascimento" value={user.birthDate ? new Date(user.birthDate + 'T00:00:00').toLocaleDateString('pt-BR') : ""} />
-          <DetailItem label="CPF (Login)" value={user.cpf} />
+          {isGestor && <DetailItem label="CPF (Login)" value={user.cpf} />}
           <DetailItem label="E-mail" value={user.email} />
           <DetailItem label="Telefone" value={user.phone} />
           <DetailItem label="Endereço" value={user.address} fullWidth />

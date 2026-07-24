@@ -9,6 +9,7 @@ import { UserCircle, Presentation, ArrowLeft, Drama, Download } from "lucide-rea
 import { User, Class, Diary, Evaluation } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { generateDiaryPDF } from "../lib/pdfExporter";
+import { getUserDisplayName } from "../lib/userUtils";
 
 interface ProfessorDiaryViewProps {
   selectedClassId: string | null;
@@ -50,7 +51,7 @@ export const ProfessorDiaryView = ({
     if (!targetClass?.studentIds) return [];
     return users
       .filter(u => targetClass.studentIds.includes(u.id))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+      .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
   }, [targetClass?.studentIds, users]);
 
   return (
@@ -73,7 +74,7 @@ export const ProfessorDiaryView = ({
          <div className="flex items-center gap-3 mt-2">
            <div className="px-4 py-1.5 bg-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white/90 border border-white/10 backdrop-blur-md flex items-center gap-2">
               <UserCircle size={12} className="text-pro-yellow" />
-              {currentUser?.name}
+              {getUserDisplayName(currentUser)}
            </div>
          </div>
       </div>
@@ -178,8 +179,8 @@ export const ProfessorDiaryView = ({
                           <Avatar src={student?.photo} fallbackSize={24} className="w-full h-full rounded-none" />
                         </div>
                         <div>
-                          <h4 className="font-black text-slate-800 uppercase tracking-tight leading-none mb-1">{student?.artisticName || student?.name || "Aluno Desconhecido"}</h4>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{student?.artisticName ? student?.name : "..."}</p>
+                          <h4 className="font-black text-slate-800 uppercase tracking-tight leading-none mb-1">{getUserDisplayName(student) || "Aluno Desconhecido"}</h4>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{student?.pronouns ? `Pronomes: ${student.pronouns}` : (student?.artisticName && student?.socialName ? `Artístico: ${student.artisticName}` : "...")}</p>
                         </div>
                       </div>
 
@@ -220,11 +221,11 @@ export const ProfessorDiaryView = ({
                                   e.stopPropagation();
                                   const stEval = evaluations.find(ev => ev.studentId === student.id && ev.classId === selectedClassId && ev.month === diaryFilterMonth && ev.year === diaryFilterYear);
                                   generateDiaryPDF({
-                                    studentName: student.artisticName || student.name,
-                                    artisticName: student.artisticName ? student.name : undefined,
+                                    studentName: getUserDisplayName(student),
+                                    artisticName: student?.artisticName,
                                     className: targetClass?.code || "Turma",
                                     classType: targetClass?.type,
-                                    teacherName: currentUser?.name || "Professor",
+                                    teacherName: getUserDisplayName(currentUser) || "Professor",
                                     month: diaryFilterMonth,
                                     year: diaryFilterYear,
                                     presences: diary.presences || 0,

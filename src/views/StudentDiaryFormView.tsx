@@ -18,6 +18,7 @@ import { BADGES } from "../constants/badges";
 import { Award, Star } from "lucide-react";
 import { UserRole } from "../types";
 import { generateDiaryPDF } from "../lib/pdfExporter";
+import { getUserDisplayName } from "../lib/userUtils";
 
 interface StudentDiaryFormViewProps {
   selectedClassId: string | null;
@@ -149,7 +150,7 @@ export const StudentDiaryFormView = ({
   const teacherName = useMemo(() => {
     if (!targetClass?.teacherIds) return "Professor Responsável";
     const found = users.find(u => targetClass.teacherIds.includes(u.id));
-    return found?.name || "Professor Responsável";
+    return found ? getUserDisplayName(found) : "Professor Responsável";
   }, [targetClass, users]);
 
   const handleDownloadPDF = () => {
@@ -161,8 +162,8 @@ export const StudentDiaryFormView = ({
       : 0;
 
     generateDiaryPDF({
-      studentName: student?.artisticName || student?.name || "Aluno",
-      artisticName: student?.artisticName ? student?.name : undefined,
+      studentName: getUserDisplayName(student) || "Aluno",
+      artisticName: student?.artisticName,
       className: targetClass?.code || "Turma",
       classType: targetClass?.type,
       teacherName: teacherName,
@@ -197,7 +198,12 @@ export const StudentDiaryFormView = ({
              />
            </div>
            <div>
-             <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tight">{student?.name}</h1>
+             <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tight">{getUserDisplayName(student)}</h1>
+             {student?.pronouns && (
+               <p className="text-white/80 text-xs font-bold uppercase tracking-wider mt-1">
+                 Pronomes: {student.pronouns}
+               </p>
+             )}
              <div className="flex flex-wrap items-center gap-3 mt-2">
                <p className="text-pro-yellow text-[10px] md:text-xs font-black uppercase tracking-[0.3em] italic bg-white/10 px-4 py-2 rounded-lg border border-white/10 inline-block backdrop-blur-md">
                  {targetClass?.code} • {new Date(0, (diaryFilterMonth || 1) - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()} {diaryFilterYear}

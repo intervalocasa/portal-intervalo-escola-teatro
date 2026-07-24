@@ -18,6 +18,7 @@ import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { motion, AnimatePresence } from 'motion/react';
+import { getUserDisplayName } from '../lib/userUtils';
 import React from 'react';
 import { generateDiaryPDF } from '../lib/pdfExporter';
 import { 
@@ -58,7 +59,31 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
   const [teacherCommentModal, setTeacherCommentModal] = React.useState<{ text: string; teacherName: string; teacherPhoto?: string } | null>(null);
 
   const mappedUser = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
-  const eligibleIds = [currentUser?.uid, mappedUser?.id, mappedUser?.migratedFrom].filter(Boolean) as string[];
+  const isStaff = currentUser?.role === "Gestor" || currentUser?.role === "Professor" || mappedUser?.role === "Gestor" || mappedUser?.role === "Professor";
+
+  const allStudents = React.useMemo(() => {
+    return users
+      .filter(u => u.role === "Aluno")
+      .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
+  }, [users]);
+
+  const [selectedStudentId, setSelectedStudentId] = React.useState<string>("");
+
+  const activeUser = React.useMemo(() => {
+    if (isStaff && selectedStudentId) {
+      const found = users.find(u => u.id === selectedStudentId);
+      if (found) return found;
+    }
+    if (isStaff && allStudents.length > 0) {
+      return allStudents[0];
+    }
+    return mappedUser;
+  }, [isStaff, selectedStudentId, users, allStudents, mappedUser]);
+
+  const eligibleIds = React.useMemo(() => {
+    if (!activeUser) return [currentUser?.uid].filter(Boolean) as string[];
+    return [activeUser.id, activeUser.migratedFrom, activeUser.migratedTo].filter(Boolean) as string[];
+  }, [activeUser, currentUser?.uid]);
 
   const studentEvals = evaluations.filter(e => eligibleIds.includes(e.studentId));
   
@@ -66,8 +91,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
   const studentDiariesById = diaries.filter(d => eligibleIds.includes(d.studentId));
   const otherOrphanedDiaries = diaries.filter(d => 
     !eligibleIds.includes(d.studentId) && 
-    (d.studentName === currentUser?.name || d.studentName === mappedUser?.name) &&
-    // Only consider it orphaned if the studentId in the diary doesn't exist in our users list anymore
+    activeUser && (d.studentName === activeUser.name || d.studentName === activeUser.socialName || d.studentName === activeUser.artisticName) &&
     !users.some(u => u.id === d.studentId)
   );
 
@@ -79,7 +103,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
     try {
       await addDoc(collection(db, "pedagogical-requests"), {
         studentId: currentUser.uid,
-        studentName: currentUser.displayName || currentUser.name || "Aluno",
+        studentName: getUserDisplayName(mappedUser) || currentUser.displayName || "Aluno",
         classId: meetingModal.classId,
         className: meetingModal.className,
         status: "pendente",

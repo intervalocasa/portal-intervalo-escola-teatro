@@ -5,7 +5,7 @@
 
 import React from "react";
 import { motion } from "motion/react";
-import { UserCircle, Camera, CheckCircle2, ArrowLeft } from "lucide-react";
+import { UserCircle, Camera, CheckCircle2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { User, UserRole } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 
@@ -115,19 +115,80 @@ export const RegisterEditUserView = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
           <div className="space-y-4 col-span-full">
             <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Identidade no Portal</h4>
+            
+            {/* Legal rights notice for trans persons */}
+            <div className="bg-teal-50/80 border border-teal-200/80 p-4 rounded-2xl flex items-start gap-3 text-teal-900 text-xs leading-relaxed shadow-sm">
+              <div className="p-1.5 bg-pro-teal text-white rounded-lg shrink-0 mt-0.5">
+                <ShieldCheck size={18} />
+              </div>
+              <div className="space-y-1">
+                <p className="font-bold text-pro-teal text-xs uppercase tracking-wider">
+                  Nome Social & Inclusão (Direito Garantido por Lei)
+                </p>
+                <p className="text-[11px] text-slate-600">
+                  O <strong>Nome Social</strong> é o nome oficial exibido em turmas, professores, diários e relatórios. O Nome de Registro Civil fica estritamente restrito e visível apenas para a equipe de Gestão em documentos internos.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Completo</label>
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Nome Social</label>
+              <span className="text-[9px] font-bold text-pro-teal bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">Exibido no sistema</span>
+            </div>
+            <input
+              type="text"
+              name="socialName"
+              value={formData.socialName || ""}
+              onChange={handleInputChange}
+              placeholder="Ex: Clara Silva"
+              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Pronomes de Tratamento</label>
+            <input
+              type="text"
+              name="pronouns"
+              value={formData.pronouns || ""}
+              onChange={handleInputChange}
+              placeholder="Ex: ela/dela, ele/dele, elu/delu"
+              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
+            />
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {["ela/dela", "ele/dele", "elu/delu", "ela/elu", "ele/elu"].map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, pronouns: p })}
+                  className={`px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase transition-all ${
+                    formData.pronouns === p
+                      ? "bg-pro-teal text-white"
+                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome de Registro Civil (Documentação)</label>
             <input
               type="text"
               name="name"
               required
-              value={formData.name}
+              value={formData.name || ""}
               onChange={handleInputChange}
-              placeholder="Ex: João da Silva"
+              placeholder="Ex: João Carlos da Silva"
               className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
             />
+            <p className="text-[9px] text-slate-400 font-bold ml-1">
+              {formData.socialName ? "🔒 Restrito à Gestão. Oculto para demais usuários." : "Exibido na ausência de Nome Social."}
+            </p>
           </div>
 
           <div className="space-y-1">
@@ -135,7 +196,7 @@ export const RegisterEditUserView = ({
             <input
               type="text"
               name="artisticName"
-              value={formData.artisticName}
+              value={formData.artisticName || ""}
               onChange={handleInputChange}
               placeholder="Ex: Jota Silva"
               className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"

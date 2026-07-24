@@ -15,6 +15,7 @@ import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
 import { User, Class } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
+import { getUserDisplayName } from '../lib/userUtils';
 
 interface FeedbackFormProps {
   isOpen: boolean;
@@ -138,7 +139,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
       await addDoc(collection(db, "feedbacks-aulas"), {
         studentId: authUid,
-        studentName: currentUser.name,
+        studentName: getUserDisplayName(currentUser),
         classId: selectedClassId,
         className: selectedClass?.code || 'Turma não identificada',
         date: Timestamp.fromDate(feedbackDate),

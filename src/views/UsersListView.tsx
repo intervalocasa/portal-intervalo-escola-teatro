@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { UserCircle, ChevronDown, ArrowLeft, AlertTriangle, Trash2, CheckCircle, X, Loader2 } from "lucide-react";
 import { User, UserRole } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
+import { getUserDisplayName } from "../lib/userUtils";
 import { db } from "../lib/firebase";
 import { doc, deleteDoc } from "firebase/firestore";
 
@@ -195,8 +196,8 @@ export const UsersListView = ({
                         <Avatar src={u.photo} fallbackSize={20} className="w-full h-full rounded-none" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-black text-slate-700 uppercase tracking-tight leading-none mb-1">{u.artisticName || u.name}</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{u.artisticName ? u.name : "..."}</span>
+                        <span className="font-black text-slate-700 uppercase tracking-tight leading-none mb-1">{getUserDisplayName(u)}</span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{u.pronouns ? `(${u.pronouns}) ${u.socialName ? `• Nome civil: ${u.name}` : ''}` : (u.socialName ? `Nome civil: ${u.name}` : (u.artisticName ? `Nome civil: ${u.name}` : "..."))}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">

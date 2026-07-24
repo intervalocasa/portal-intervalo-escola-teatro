@@ -23,6 +23,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../lib/firebase";
 import { Post, User } from "../types";
+import { getUserDisplayName } from "../lib/userUtils";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Image as ImageIcon, 
@@ -133,7 +134,7 @@ export const MuralTurma = ({ classId, currentUser, handleAwardBadge }: MuralTurm
 
       await addDoc(collection(db, "posts"), {
         authorId: currentUser.id,
-        authorName: currentUser.artisticName || currentUser.name,
+        authorName: getUserDisplayName(currentUser),
         classId,
         content: content.trim(),
         imageUrl: imageUrl || null,

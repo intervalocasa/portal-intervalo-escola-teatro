@@ -8,6 +8,7 @@ import { Megaphone, Calendar, Users, ArrowLeft, Send, Clock, Trash2, Edit2, Sear
 import { Logo, BackButton, Avatar } from "../components/CommonComponents";
 import { FormEvent, useState, useMemo } from "react";
 import { THEME } from "../theme";
+import { getUserDisplayName } from "../lib/userUtils";
 
 interface CreateAnnouncementViewProps {
   handleAnnouncementSubmit: (announcement: any) => Promise<void>;
@@ -44,12 +45,12 @@ export const CreateAnnouncementView = ({
   const filteredUsers = useMemo(() => {
     return users
       .filter(u => {
-        const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                             (u.artisticName?.toLowerCase().includes(searchTerm.toLowerCase()));
+        const displayName = getUserDisplayName(u).toLowerCase();
+        const matchesSearch = displayName.includes(searchTerm.toLowerCase());
         const matchesRole = formData.target === "Todos" || u.role === (formData.target === "Alunos" ? "Aluno" : "Professor");
         return matchesSearch && matchesRole;
       })
-      .sort((a, b) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+      .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
   }, [users, searchTerm, formData.target]);
 
   const toggleUserSelection = (userId: string) => {
@@ -250,9 +251,9 @@ export const CreateAnnouncementView = ({
                               : "bg-white border-slate-100 text-slate-600 hover:border-slate-200"
                             }`}
                           >
-                            <Avatar src={user.photo} alt={user.name} className="w-8 h-8 rounded-lg !text-[10px]" />
+                            <Avatar src={user.photo} alt={getUserDisplayName(user)} className="w-8 h-8 rounded-lg !text-[10px]" />
                             <div className="flex-1 min-w-0">
-                               <p className="text-[10px] font-black uppercase truncate">{user.artisticName || user.name}</p>
+                               <p className="text-[10px] font-black uppercase truncate">{getUserDisplayName(user)}</p>
                                <p className={`text-[8px] font-bold uppercase opacity-60`}>{user.role}</p>
                             </div>
                             {formData.targetUserIds.includes(user.id) && <Check size={16} />}
