@@ -12,6 +12,7 @@ import { MuralTurma } from "../components/MuralTurma";
 import { db } from "../lib/firebase";
 import { doc, updateDoc, arrayUnion, arrayRemove, deleteField } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
+import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
 
 interface ClassDetailsViewProps {
   selectedClassId: string | null;
@@ -65,7 +66,7 @@ export const ClassDetailsView = ({
           return matchingDoc && matchingDoc.email?.toLowerCase() === u.email?.toLowerCase();
         });
       })
-      .sort((a, b) => (a.artisticName || a.name || "").localeCompare(b.artisticName || b.name || "", 'pt-BR'));
+      .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
   }, [users, targetClass?.studentIds]);
 
   const availableStudents = useMemo(() => {
@@ -74,10 +75,10 @@ export const ClassDetailsView = ({
       .filter(u => 
         u.role === "Aluno" && 
         !targetClass.studentIds?.includes(u.id) &&
-        (u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-         u.artisticName?.toLowerCase().includes(searchQuery.toLowerCase()))
+        (getUserDisplayName(u).toLowerCase().includes(searchQuery.toLowerCase()) || 
+         getUserSecondaryName(u)?.toLowerCase().includes(searchQuery.toLowerCase()))
       )
-      .sort((a, b) => (a.artisticName || a.name || "").localeCompare(b.artisticName || b.name || "", 'pt-BR'));
+      .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
   }, [users, targetClass, searchQuery]);
 
   if (!targetClass) return null;
@@ -247,8 +248,8 @@ export const ClassDetailsView = ({
                             <Avatar src={s.photo} fallbackSize={24} className="w-full h-full rounded-none" />
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-black text-slate-700 uppercase tracking-tight leading-none mb-1">{s.artisticName || s.name}</p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{s.artisticName ? s.name : "..."}</p>
+                            <p className="text-sm font-black text-slate-700 uppercase tracking-tight leading-none mb-1">{getUserDisplayName(s)}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{getUserSecondaryName(s) || s.pronouns || "..."}</p>
                           </div>
                           {targetClass.enrollmentDates?.[s.id] && (
                             <div className="absolute top-2 right-4 flex items-center gap-1.5 text-slate-300">
@@ -306,8 +307,8 @@ export const ClassDetailsView = ({
                           <Avatar src={teacher.photo} fallbackSize={40} className="w-full h-full rounded-none" />
                         </div>
                         <div>
-                          <h5 className="font-black text-slate-800 uppercase tracking-tight text-sm">{teacher.name}</h5>
-                          <p className="text-[9px] font-black text-pro-teal uppercase tracking-widest mt-1 bg-pro-teal/5 px-3 py-1 rounded-full">{teacher.artisticName || "Professor"}</p>
+                          <h5 className="font-black text-slate-800 uppercase tracking-tight text-sm">{getUserDisplayName(teacher)}</h5>
+                          <p className="text-[9px] font-black text-pro-teal uppercase tracking-widest mt-1 bg-pro-teal/5 px-3 py-1 rounded-full">{getUserSecondaryName(teacher) || teacher.pronouns || "Professor"}</p>
                         </div>
                       </div>
                     ))}
@@ -412,8 +413,8 @@ export const ClassDetailsView = ({
                                 <Avatar src={student.photo} fallbackSize={20} className="w-full h-full rounded-none" />
                               </div>
                               <div>
-                                <p className="text-sm font-black text-slate-700 uppercase tracking-tight">{student.artisticName || student.name}</p>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{student.artisticName ? student.name : "..."}</p>
+                                <p className="text-sm font-black text-slate-700 uppercase tracking-tight">{getUserDisplayName(student)}</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{getUserSecondaryName(student) || student.pronouns || "..."}</p>
                               </div>
                             </div>
                             <button 

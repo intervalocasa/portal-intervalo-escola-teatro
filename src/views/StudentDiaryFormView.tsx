@@ -18,7 +18,7 @@ import { BADGES } from "../constants/badges";
 import { Award, Star } from "lucide-react";
 import { UserRole } from "../types";
 import { generateDiaryPDF } from "../lib/pdfExporter";
-import { getUserDisplayName } from "../lib/userUtils";
+import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
 
 interface StudentDiaryFormViewProps {
   selectedClassId: string | null;
@@ -163,7 +163,7 @@ export const StudentDiaryFormView = ({
 
     generateDiaryPDF({
       studentName: getUserDisplayName(student) || "Aluno",
-      artisticName: student?.artisticName,
+      artisticName: getUserSecondaryName(student),
       className: targetClass?.code || "Turma",
       classType: targetClass?.type,
       teacherName: teacherName,
@@ -199,6 +199,11 @@ export const StudentDiaryFormView = ({
            </div>
            <div>
              <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tight">{getUserDisplayName(student)}</h1>
+              {getUserSecondaryName(student) && (
+                <p className="text-white/90 text-sm font-bold uppercase tracking-wider mt-1">
+                  Nome social: {getUserSecondaryName(student)}
+                </p>
+              )}
              {student?.pronouns && (
                <p className="text-white/80 text-xs font-bold uppercase tracking-wider mt-1">
                  Pronomes: {student.pronouns}

@@ -18,7 +18,7 @@ import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { motion, AnimatePresence } from 'motion/react';
-import { getUserDisplayName } from '../lib/userUtils';
+import { getUserDisplayName, getUserSecondaryName } from '../lib/userUtils';
 import React from 'react';
 import { generateDiaryPDF } from '../lib/pdfExporter';
 import { 
@@ -313,11 +313,11 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const studentName = mappedUser?.artisticName || mappedUser?.name || currentUser?.displayName || currentUser?.name || "Aluno";
+                                    const studentName = getUserDisplayName(activeUser) || getUserDisplayName(mappedUser) || "Aluno";
                                     const targetClassObj = classes.find(c => c.id === period.classId);
                                     generateDiaryPDF({
                                       studentName: studentName,
-                                      artisticName: mappedUser?.artisticName ? mappedUser?.name : undefined,
+                                      artisticName: getUserSecondaryName(activeUser) || getUserSecondaryName(mappedUser),
                                       className: targetClassObj?.code || "Turma",
                                       classType: period.classType,
                                       teacherName: period.professorDiary.teacherName || "Professor Responsável",

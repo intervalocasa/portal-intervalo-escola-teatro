@@ -9,7 +9,7 @@ import { UserCircle, Presentation, ArrowLeft, Drama, Download } from "lucide-rea
 import { User, Class, Diary, Evaluation } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { generateDiaryPDF } from "../lib/pdfExporter";
-import { getUserDisplayName } from "../lib/userUtils";
+import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
 
 interface ProfessorDiaryViewProps {
   selectedClassId: string | null;
@@ -180,7 +180,7 @@ export const ProfessorDiaryView = ({
                         </div>
                         <div>
                           <h4 className="font-black text-slate-800 uppercase tracking-tight leading-none mb-1">{getUserDisplayName(student) || "Aluno Desconhecido"}</h4>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{student?.pronouns ? `Pronomes: ${student.pronouns}` : (student?.artisticName && student?.socialName ? `Artístico: ${student.artisticName}` : "...")}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{getUserSecondaryName(student) ? `Nome social: ${getUserSecondaryName(student)}${student?.pronouns ? ` • Pronomes: ${student.pronouns}` : ''}` : (student?.pronouns ? `Pronomes: ${student.pronouns}` : "...")}</p>
                         </div>
                       </div>
 

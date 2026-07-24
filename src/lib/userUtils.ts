@@ -6,18 +6,19 @@
 import { User } from "../types";
 
 /**
- * Returns the official public display name for a user.
- * Guaranteed by Brazilian law for trans individuals: if socialName is provided,
- * it MUST be used as the official display name across all public views, class rosters,
- * teacher dashboards, diários, and reports.
+ * Returns the primary display name for a user.
+ * Priority:
+ * 1. artisticName (if present)
+ * 2. socialName (if present)
+ * 3. name (civil registration name)
  */
 export function getUserDisplayName(user: Partial<User> | null | undefined): string {
   if (!user) return "";
-  if (user.socialName && user.socialName.trim().length > 0) {
-    return user.socialName.trim();
-  }
   if (user.artisticName && user.artisticName.trim().length > 0) {
     return user.artisticName.trim();
+  }
+  if (user.socialName && user.socialName.trim().length > 0) {
+    return user.socialName.trim();
   }
   return user.name?.trim() || "";
 }
@@ -44,9 +45,28 @@ export function getUserDisplayNameWithPronouns(user: Partial<User> | null | unde
 }
 
 /**
+ * Returns the secondary display name (subtitle under primary display name).
+ * Rule:
+ * - If user has BOTH artisticName and socialName, artisticName is displayed on top
+ *   and socialName is displayed as the secondary name below.
+ * - Under NO circumstances should civil name (user.name) be returned as a public secondary name.
+ */
+export function getUserSecondaryName(user: Partial<User> | null | undefined): string | undefined {
+  if (!user) return undefined;
+  if (
+    user.artisticName &&
+    user.artisticName.trim().length > 0 &&
+    user.socialName &&
+    user.socialName.trim().length > 0
+  ) {
+    return user.socialName.trim();
+  }
+  return undefined;
+}
+
+/**
  * Returns the civil/registration name ONLY if the viewer is a Gestor or the user themselves.
- * For all other users (teachers, students, public), if a socialName is set,
- * the civil name is strictly hidden and never displayed anywhere in the system.
+ * For all other users (teachers, students, public), the civil name is strictly hidden and never displayed.
  */
 export function getUserCivilNameIfAllowed(
   user: Partial<User> | null | undefined,
@@ -56,9 +76,5 @@ export function getUserCivilNameIfAllowed(
   if (viewerIsGestorOrSelf) {
     return user.name;
   }
-  // For non-gestors: if socialName exists, civil name is forbidden
-  if (user.socialName && user.socialName.trim().length > 0) {
-    return undefined;
-  }
-  return user.artisticName ? undefined : user.name;
+  return undefined;
 }
