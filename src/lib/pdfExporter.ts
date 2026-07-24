@@ -5,8 +5,8 @@
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { ADULT_COURSE_CRITERIA, PROFESSIONAL_COURSE_CRITERIA, GRADE_LEGEND, SCALES } from "../constants";
-import { Diary, Evaluation, UserBadge } from "../types";
+import { ADULT_COURSE_CRITERIA, PROFESSIONAL_COURSE_CRITERIA, GRADE_LEGEND } from "../constants";
+import { Evaluation, UserBadge } from "../types";
 
 export interface PDFExportData {
   studentName: string;
@@ -32,6 +32,28 @@ const MONTH_NAMES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
+
+/**
+ * Sanitizes strings for jsPDF Helvetica / WinAnsiEncoding.
+ * Replaces smart quotes, em-dashes, non-breaking spaces, and eliminates unprintable unicode bytes.
+ */
+function sanitizeText(str: string | undefined | null): string {
+  if (!str) return "";
+  return String(str)
+    .normalize("NFC")
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2013\u2014\u2015]/g, "-")
+    .replace(/\u2026/g, "...")
+    .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, " ")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[^\x00-\xFF]/g, (ch) => {
+      const code = ch.charCodeAt(0);
+      if (code >= 128 && code <= 255) return ch;
+      return "";
+    })
+    .trim();
+}
 
 export function generateDiaryPDF(data: PDFExportData) {
   const doc = new jsPDF({
@@ -61,19 +83,50 @@ export function generateDiaryPDF(data: PDFExportData) {
   doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
   doc.rect(0, 26, pageWidth, 2, "F");
 
-  // Logo representation / Brand text in header
+  // --- SCHOOL LOGO BADGE (Header Left) ---
+  // White badge container
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(margin, 3.5, 19, 19, 2.5, 2.5, "F");
+
+  // Logo geometric vector blocks (Intervalo Casa de Artes)
+  // Upper blocks:
+  doc.setFillColor(1, 106, 134); // Teal
+  doc.rect(21.2, 6.2, 4.0, 4.0, "F");
+
+  doc.setFillColor(255, 188, 0); // Yellow
+  doc.rect(21.5, 6.5, 2.7, 2.7, "F");
+
+  doc.setFillColor(251, 211, 182); // Peach
+  doc.rect(20.2, 6.5, 1.0, 2.5, "F");
+
+  // Lower blocks:
+  doc.setFillColor(1, 106, 134); // Teal
+  doc.rect(20.3, 11.2, 4.2, 7.5, "F");
+
+  doc.setFillColor(255, 124, 0); // Orange
+  doc.rect(21.2, 10.7, 3.0, 9.0, "F");
+
+  doc.setFillColor(251, 211, 182); // Peach
+  doc.rect(24.5, 10.7, 0.8, 9.0, "F");
+
+  doc.setFillColor(255, 124, 0); // Orange dot accent
+  doc.rect(23.5, 17.7, 1.0, 1.0, "F");
+
+  // Brand Header Text next to Logo Badge
+  const headerTextX = margin + 22;
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.text("INTERVALO CASA DE ARTES", margin, 12);
-  
+  doc.setFontSize(13);
+  doc.text("INTERVALO CASA DE ARTES", headerTextX, 12);
+
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setTextColor(230, 245, 250);
-  doc.text("ESCOLA DE ATORES | DIÁRIO DE AVALIAÇÃO PEDAGÓGICA", margin, 19);
+  doc.text("ESCOLA DE ATORES | DIÁRIO DE AVALIAÇÃO PEDAGÓGICA", headerTextX, 18);
 
   // Month / Year Badge in Header Right
-  const monthLabel = `${MONTH_NAMES[(data.month - 1) % 12] || ""} ${data.year}`.toUpperCase();
+  const monthName = MONTH_NAMES[(data.month - 1) % 12] || "";
+  const monthLabel = sanitizeText(`${monthName} ${data.year}`).toUpperCase();
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.text(monthLabel, pageWidth - margin, 15, { align: "right" });
@@ -95,14 +148,14 @@ export function generateDiaryPDF(data: PDFExportData) {
   doc.setFontSize(8);
   doc.setTextColor(mutedSlate[0], mutedSlate[1], mutedSlate[2]);
   doc.text("ALUNO(A):", col1X, infoY);
-  
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-  const displayName = data.artisticName 
+  const rawDisplayName = data.artisticName 
     ? `${data.studentName} (${data.artisticName})`
     : data.studentName;
-  doc.text(displayName, col1X + 22, infoY);
+  doc.text(sanitizeText(rawDisplayName), col1X + 22, infoY);
 
   infoY += 7;
   doc.setFont("helvetica", "bold");
@@ -113,7 +166,8 @@ export function generateDiaryPDF(data: PDFExportData) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-  doc.text(`${data.className}${data.classType ? ` - ${data.classType}` : ""}`, col1X + 22, infoY);
+  const classStr = `${data.className}${data.classType ? ` - ${data.classType}` : ""}`;
+  doc.text(sanitizeText(classStr), col1X + 22, infoY);
 
   infoY += 7;
   doc.setFont("helvetica", "bold");
@@ -124,7 +178,7 @@ export function generateDiaryPDF(data: PDFExportData) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-  doc.text(data.teacherName || "Não informado", col1X + 22, infoY);
+  doc.text(sanitizeText(data.teacherName || "Não informado"), col1X + 22, infoY);
 
   // Info Column 2 (Frequency & Average)
   const col2X = pageWidth - margin - 65;
@@ -181,7 +235,7 @@ export function generateDiaryPDF(data: PDFExportData) {
   const tableRows = criteriaList.map(c => {
     const profGradeVal = data.grades?.[c.id];
     const profGradeStr = profGradeVal !== undefined && profGradeVal !== "" ? `${profGradeVal}` : "-";
-    
+
     const selfGradeVal = data.studentEval?.notes?.[c.id];
     const selfGradeStr = selfGradeVal !== undefined ? `${selfGradeVal}` : "-";
 
@@ -208,14 +262,14 @@ export function generateDiaryPDF(data: PDFExportData) {
       indicatorStr = `Prof: ${profGradeVal}`;
     }
 
-    const obsStr = data.criteriaObs?.[c.id] || "-";
+    const rawObs = data.criteriaObs?.[c.id] || "-";
 
     return [
-      `${c.label}\n${c.definition}`,
-      profGradeStr,
-      selfGradeStr,
-      indicatorStr,
-      obsStr
+      sanitizeText(`${c.label}\n${c.definition}`),
+      sanitizeText(profGradeStr),
+      sanitizeText(selfGradeStr),
+      sanitizeText(indicatorStr),
+      sanitizeText(rawObs)
     ];
   });
 
@@ -251,14 +305,23 @@ export function generateDiaryPDF(data: PDFExportData) {
       fillColor: [248, 250, 252]
     },
     didDrawPage: (dataArg) => {
-      // Header on subsequent pages
       if (dataArg.pageNumber > 1) {
         doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.rect(0, 0, pageWidth, 12, "F");
+
+        // Mini logo badge on subsequent pages
+        doc.setFillColor(255, 255, 255);
+        doc.roundedRect(margin, 2, 8, 8, 1, 1, "F");
+        doc.setFillColor(1, 106, 134);
+        doc.rect(margin + 2.5, 3.2, 2, 2, "F");
+        doc.setFillColor(255, 124, 0);
+        doc.rect(margin + 2.5, 5.5, 1.5, 3.5, "F");
+
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(8);
         doc.setFont("helvetica", "bold");
-        doc.text(`INTERVALO CASA DE ARTES | ${data.studentName} - ${data.className} (${monthLabel})`, margin, 8);
+        const subHead = sanitizeText(`INTERVALO CASA DE ARTES | ${data.studentName} - ${data.className} (${monthLabel})`);
+        doc.text(subHead, margin + 11, 8);
       }
     }
   });
@@ -266,21 +329,60 @@ export function generateDiaryPDF(data: PDFExportData) {
   // Get final Y position after table
   currentY = (doc as any).lastAutoTable.finalY + 8;
 
-  // Check if we need a new page for open answers & general observations
-  if (currentY > pageHeight - 60) {
-    doc.addPage();
-    currentY = 20;
-  }
+  // Helper for printing wrapped lines with safe pagination
+  const printWrappedText = (
+    text: string,
+    x: number,
+    startY: number,
+    maxWidth: number,
+    lineHeight: number,
+    bottomMargin: number = 30,
+    headerTitle?: string
+  ): number => {
+    const safeText = sanitizeText(text);
+    if (!safeText) return startY;
+
+    const lines: string[] = doc.splitTextToSize(safeText, maxWidth);
+    let y = startY;
+
+    for (let i = 0; i < lines.length; i++) {
+      if (y > pageHeight - bottomMargin) {
+        doc.addPage();
+        y = 20;
+        if (headerTitle) {
+          doc.setFillColor(241, 245, 249);
+          doc.roundedRect(margin, y, pageWidth - (margin * 2), 6, 1, 1, "F");
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(8.5);
+          doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+          doc.text(sanitizeText(`${headerTitle} (continuação)`), margin + 3, y + 4.2);
+          y += 10;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8.5);
+          doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+        }
+      }
+      doc.text(lines[i], x, y);
+      y += lineHeight;
+    }
+
+    return y;
+  };
 
   // 4. Student Open Self-Assessment (if available)
   if (data.studentEval?.openAnswers && Object.keys(data.studentEval.openAnswers).length > 0) {
+    if (currentY > pageHeight - 45) {
+      doc.addPage();
+      currentY = 20;
+    }
+
     doc.setFillColor(241, 245, 249);
     doc.roundedRect(margin, currentY, pageWidth - (margin * 2), 6, 1, 1, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.text("AUTOAVALIAÇÃO DO ALUNO (RESPOSTAS ABERTAS)", margin + 3, currentY + 4.5);
-    currentY += 9;
+    currentY += 10;
 
     const openAnswers = data.studentEval.openAnswers;
     const questions = [
@@ -291,9 +393,10 @@ export function generateDiaryPDF(data: PDFExportData) {
     ];
 
     questions.forEach(q => {
-      const answer = openAnswers[q.key];
-      if (answer && answer.trim()) {
-        if (currentY > pageHeight - 30) {
+      const rawAnswer = openAnswers[q.key];
+      const answer = sanitizeText(rawAnswer);
+      if (answer) {
+        if (currentY > pageHeight - 35) {
           doc.addPage();
           currentY = 20;
         }
@@ -301,24 +404,31 @@ export function generateDiaryPDF(data: PDFExportData) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(8);
         doc.setTextColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-        doc.text(`• ${q.label}:`, margin + 2, currentY);
-        currentY += 4;
+        doc.text(sanitizeText(`• ${q.label}:`), margin + 2, currentY);
+        currentY += 4.5;
 
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
         doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
 
-        const splitText = doc.splitTextToSize(answer, pageWidth - (margin * 2) - 6);
-        doc.text(splitText, margin + 4, currentY);
-        currentY += (splitText.length * 3.8) + 4;
+        currentY = printWrappedText(
+          answer,
+          margin + 4,
+          currentY,
+          pageWidth - (margin * 2) - 8,
+          3.8,
+          30,
+          "AUTOAVALIAÇÃO DO ALUNO"
+        ) + 4;
       }
     });
 
-    currentY += 3;
+    currentY += 2;
   }
 
   // 5. General Pedagogical Feedback
-  if (data.generalPedagogicalObs && data.generalPedagogicalObs.trim()) {
+  const safePedagogicalObs = sanitizeText(data.generalPedagogicalObs);
+  if (safePedagogicalObs) {
     if (currentY > pageHeight - 45) {
       doc.addPage();
       currentY = 20;
@@ -336,9 +446,15 @@ export function generateDiaryPDF(data: PDFExportData) {
     doc.setFontSize(8.5);
     doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
 
-    const splitPedag = doc.splitTextToSize(data.generalPedagogicalObs, pageWidth - (margin * 2) - 6);
-    doc.text(splitPedag, margin + 3, currentY);
-    currentY += (splitPedag.length * 4) + 8;
+    currentY = printWrappedText(
+      safePedagogicalObs,
+      margin + 3,
+      currentY,
+      pageWidth - (margin * 2) - 6,
+      4.2,
+      35,
+      "PARECER PEDAGÓGICO GERAL"
+    ) + 8;
   }
 
   // 6. Awarded Badges (if any)
@@ -354,33 +470,49 @@ export function generateDiaryPDF(data: PDFExportData) {
     doc.setFontSize(9);
     doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.text("CONQUISTAS E RECONHECIMENTOS (BADGES)", margin + 3, currentY + 4.5);
-    currentY += 9;
+    currentY += 10;
 
     data.userBadges.forEach(b => {
+      const bName = sanitizeText(b.name);
+      const bDesc = sanitizeText(b.description);
+      const bMsg = sanitizeText(b.message);
+
+      if (currentY > pageHeight - 30) {
+        doc.addPage();
+        currentY = 20;
+      }
+
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
       doc.setTextColor(yellowColor[0] * 0.8, yellowColor[1] * 0.8, 0);
-      doc.text(`[CONQUISTA] ${b.name}`, margin + 3, currentY);
+      doc.text(sanitizeText(`[CONQUISTA] ${bName}`), margin + 3, currentY);
+      currentY += 4;
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-      const badgeText = `${b.description}${b.message ? ` - "${b.message}"` : ""}`;
-      const splitBadge = doc.splitTextToSize(badgeText, pageWidth - (margin * 2) - 10);
-      doc.text(splitBadge, margin + 5, currentY + 3.8);
 
-      currentY += (splitBadge.length * 3.5) + 6;
+      const badgeText = `${bDesc}${bMsg ? ` - "${bMsg}"` : ""}`;
+      currentY = printWrappedText(
+        badgeText,
+        margin + 5,
+        currentY,
+        pageWidth - (margin * 2) - 10,
+        3.6,
+        30
+      ) + 5;
     });
 
-    currentY += 3;
+    currentY += 2;
   }
 
   // 7. Signature Line & Footer
-  if (currentY > pageHeight - 35) {
+  const signatureHeightNeeded = 32;
+  if (currentY > pageHeight - signatureHeightNeeded - 12) {
     doc.addPage();
-    currentY = pageHeight - 35;
-  } else if (currentY < pageHeight - 35) {
-    currentY = pageHeight - 35;
+    currentY = pageHeight - signatureHeightNeeded - 12;
+  } else {
+    currentY = Math.max(currentY + 6, pageHeight - signatureHeightNeeded - 12);
   }
 
   doc.setDrawColor(203, 213, 225);
@@ -394,7 +526,7 @@ export function generateDiaryPDF(data: PDFExportData) {
   doc.text("Assinatura do Professor", margin + 50, currentY + 14, { align: "center" });
   doc.text("Coordenação Pedagógica", pageWidth - margin - 50, currentY + 14, { align: "center" });
 
-  // Page numbering on all pages
+  // Page numbering and footer string on all pages
   const totalPages = doc.getNumberOfPages();
   const dateFormatted = new Date().toLocaleDateString("pt-BR");
 
@@ -403,23 +535,20 @@ export function generateDiaryPDF(data: PDFExportData) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    
+
     // Bottom border line
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.2);
     doc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
 
-    doc.text(
-      `Intervalo Casa de Artes • Emitido em ${dateFormatted} • Documento oficial do aluno`,
-      margin,
-      pageHeight - 6
-    );
+    const footerText = sanitizeText(`Intervalo Casa de Artes • Emitido em ${dateFormatted} • Documento oficial do aluno`);
+    doc.text(footerText, margin, pageHeight - 6);
     doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 6, { align: "right" });
   }
 
   // File name generation
-  const cleanStudentName = data.studentName.toLowerCase().replace(/[^a-z0-9]/g, "_");
-  const cleanMonth = MONTH_NAMES[(data.month - 1) % 12].toLowerCase();
+  const cleanStudentName = sanitizeText(data.studentName).toLowerCase().replace(/[^a-z0-9]/g, "_");
+  const cleanMonth = sanitizeText(MONTH_NAMES[(data.month - 1) % 12]).toLowerCase();
   const fileName = `diario_${cleanStudentName}_${cleanMonth}_${data.year}.pdf`;
 
   doc.save(fileName);
