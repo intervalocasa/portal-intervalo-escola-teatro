@@ -10,7 +10,8 @@ import {
   X,
   ArrowLeft,
   Calendar,
-  User as UserIcon
+  User as UserIcon,
+  Download
 } from 'lucide-react';
 import { Logo, BackButton } from './CommonComponents';
 import { db } from '../lib/firebase';
@@ -18,6 +19,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { motion, AnimatePresence } from 'motion/react';
 import React from 'react';
+import { generateDiaryPDF } from '../lib/pdfExporter';
 import { 
   ADULT_COURSE_CRITERIA, 
   PROFESSIONAL_COURSE_CRITERIA, 
@@ -282,6 +284,40 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                 <p className="text-4xl font-black text-slate-100">—</p>
                               )}
                               
+                              {period.professorDiary && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const studentName = mappedUser?.artisticName || mappedUser?.name || currentUser?.displayName || currentUser?.name || "Aluno";
+                                    const targetClassObj = classes.find(c => c.id === period.classId);
+                                    generateDiaryPDF({
+                                      studentName: studentName,
+                                      artisticName: mappedUser?.artisticName ? mappedUser?.name : undefined,
+                                      className: targetClassObj?.code || "Turma",
+                                      classType: period.classType,
+                                      teacherName: period.professorDiary.teacherName || "Professor Responsável",
+                                      month: period.month,
+                                      year: period.year,
+                                      presences: period.professorDiary.presences || 0,
+                                      absences: period.professorDiary.absences || 0,
+                                      frequencyObs: period.professorDiary.frequencyObs,
+                                      grades: period.professorDiary.grades || {},
+                                      criteriaObs: period.professorDiary.criteriaObs || {},
+                                      generalPedagogicalObs: period.professorDiary.generalPedagogicalObs || "",
+                                      averageGrade: period.professorDiary.averageGrade,
+                                      studentEval: period.selfEval,
+                                      status: period.professorDiary.status
+                                    });
+                                  }}
+                                  className="p-2.5 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all shadow-sm flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider"
+                                  title="Baixar Diário em PDF"
+                                >
+                                  <Download size={16} />
+                                  <span className="hidden sm:inline">PDF</span>
+                                </button>
+                              )}
+
                               {finalGrade && !isProfessional && (
                                 <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isExpanded ? 'bg-pro-teal text-white' : 'bg-slate-50 text-slate-400'}`}>
                                   <TrendingUp size={20} className={isExpanded ? "rotate-180 transition-transform" : ""} />

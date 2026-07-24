@@ -5,9 +5,10 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "motion/react";
-import { UserCircle, Presentation, ArrowLeft, Drama } from "lucide-react";
-import { User, Class, Diary } from "../types";
+import { UserCircle, Presentation, ArrowLeft, Drama, Download } from "lucide-react";
+import { User, Class, Diary, Evaluation } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
+import { generateDiaryPDF } from "../lib/pdfExporter";
 
 interface ProfessorDiaryViewProps {
   selectedClassId: string | null;
@@ -19,6 +20,7 @@ interface ProfessorDiaryViewProps {
   classes: Class[];
   users: User[];
   diaries: Diary[];
+  evaluations?: Evaluation[];
   currentUser: User | null;
   setSelectedDiaryStudentId: (id: string) => void;
   setDiaryFormData: (data: any) => void;
@@ -35,6 +37,7 @@ export const ProfessorDiaryView = ({
   classes,
   users,
   diaries,
+  evaluations = [],
   currentUser,
   setSelectedDiaryStudentId,
   setDiaryFormData,
@@ -203,11 +206,44 @@ export const ProfessorDiaryView = ({
                             </div>
                          </div>
 
-                         <div className="text-center border-l border-slate-100 pl-8">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Média</p>
-                            <p className={`text-lg font-black ${diary?.status === 'concluido' ? 'text-pro-teal' : 'text-slate-300'}`}>
-                              {diary?.averageGrade ? diary.averageGrade.toFixed(1) : "—"}
-                            </p>
+                         <div className="text-center border-l border-slate-100 pl-8 flex items-center gap-4">
+                            <div>
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Média</p>
+                              <p className={`text-lg font-black ${diary?.status === 'concluido' ? 'text-pro-teal' : 'text-slate-300'}`}>
+                                {diary?.averageGrade ? diary.averageGrade.toFixed(1) : "—"}
+                              </p>
+                            </div>
+                            {diary && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const stEval = evaluations.find(ev => ev.studentId === student.id && ev.classId === selectedClassId && ev.month === diaryFilterMonth && ev.year === diaryFilterYear);
+                                  generateDiaryPDF({
+                                    studentName: student.artisticName || student.name,
+                                    artisticName: student.artisticName ? student.name : undefined,
+                                    className: targetClass?.code || "Turma",
+                                    classType: targetClass?.type,
+                                    teacherName: currentUser?.name || "Professor",
+                                    month: diaryFilterMonth,
+                                    year: diaryFilterYear,
+                                    presences: diary.presences || 0,
+                                    absences: diary.absences || 0,
+                                    frequencyObs: diary.frequencyObs,
+                                    grades: diary.grades || {},
+                                    criteriaObs: diary.criteriaObs || {},
+                                    generalPedagogicalObs: diary.generalPedagogicalObs || "",
+                                    averageGrade: diary.averageGrade,
+                                    studentEval: stEval,
+                                    status: diary.status
+                                  });
+                                }}
+                                className="p-2.5 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all shadow-sm flex items-center justify-center"
+                                title="Baixar PDF do Diário"
+                              >
+                                <Download size={16} />
+                              </button>
+                            )}
                          </div>
                       </div>
                     </div>

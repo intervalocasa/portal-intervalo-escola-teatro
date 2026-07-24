@@ -9,10 +9,13 @@ import { User, Class, Diary, Evaluation, PedagogicalMeetingRequest } from "../ty
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { db } from "../lib/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { generateDiaryPDF } from "../lib/pdfExporter";
 
 interface ManageDiariesViewProps {
   diaries: Diary[];
   users: User[];
+  classes?: Class[];
+  evaluations?: Evaluation[];
   pedagogicalRequests: PedagogicalMeetingRequest[];
   setSelectedClassId: (id: string | null) => void;
   setSelectedDiaryStudentId: (id: string | null) => void;
@@ -26,6 +29,8 @@ interface ManageDiariesViewProps {
 export const ManageDiariesView = ({
   diaries,
   users,
+  classes = [],
+  evaluations = [],
   pedagogicalRequests = [],
   setSelectedClassId,
   setSelectedDiaryStudentId,
@@ -269,6 +274,34 @@ export const ManageDiariesView = ({
                          </td>
                          <td className="px-6 py-5 text-right px-8">
                             <div className="flex justify-end gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const cls = classes.find(c => c.id === d.classId);
+                                  const stEval = evaluations.find(ev => ev.studentId === d.studentId && ev.classId === d.classId && ev.month === d.month && ev.year === d.year);
+                                  generateDiaryPDF({
+                                    studentName: d.studentName || "Aluno",
+                                    className: d.className || cls?.code || "Turma",
+                                    classType: d.classType || cls?.type,
+                                    teacherName: d.teacherName || "Professor Responsável",
+                                    month: d.month,
+                                    year: d.year,
+                                    presences: d.presences || 0,
+                                    absences: d.absences || 0,
+                                    frequencyObs: d.frequencyObs,
+                                    grades: d.grades || {},
+                                    criteriaObs: d.criteriaObs || {},
+                                    generalPedagogicalObs: d.generalPedagogicalObs || "",
+                                    averageGrade: d.averageGrade,
+                                    studentEval: stEval,
+                                    status: d.status
+                                  });
+                                }}
+                                className="p-2.5 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+                                title="Baixar PDF do Diário"
+                              >
+                                <Download size={16} />
+                              </button>
                               <button
                                 onClick={() => {
                                   setSelectedClassId(d.classId);

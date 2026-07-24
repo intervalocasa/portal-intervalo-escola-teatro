@@ -5,7 +5,7 @@
 
 import { useMemo } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Save, HelpCircle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Save, HelpCircle, CheckCircle2, Download } from "lucide-react";
 import { User, Class } from "../types";
 import { Avatar, BackButton } from "../components/CommonComponents";
 import { 
@@ -17,6 +17,7 @@ import {
 import { BADGES } from "../constants/badges";
 import { Award, Star } from "lucide-react";
 import { UserRole } from "../types";
+import { generateDiaryPDF } from "../lib/pdfExporter";
 
 interface StudentDiaryFormViewProps {
   selectedClassId: string | null;
@@ -145,6 +146,40 @@ export const StudentDiaryFormView = ({
     return true;
   });
 
+  const teacherName = useMemo(() => {
+    if (!targetClass?.teacherIds) return "Professor Responsável";
+    const found = users.find(u => targetClass.teacherIds.includes(u.id));
+    return found?.name || "Professor Responsável";
+  }, [targetClass, users]);
+
+  const handleDownloadPDF = () => {
+    const gradeValues = Object.values(diaryFormData.grades || {})
+      .map(v => Number(v))
+      .filter(v => !isNaN(v));
+    const avgGrade = gradeValues.length > 0 
+      ? gradeValues.reduce((a, b) => a + b, 0) / gradeValues.length 
+      : 0;
+
+    generateDiaryPDF({
+      studentName: student?.artisticName || student?.name || "Aluno",
+      artisticName: student?.artisticName ? student?.name : undefined,
+      className: targetClass?.code || "Turma",
+      classType: targetClass?.type,
+      teacherName: teacherName,
+      month: diaryFilterMonth || 1,
+      year: diaryFilterYear || 2026,
+      presences: diaryFormData.presences || 0,
+      absences: diaryFormData.absences || 0,
+      frequencyObs: diaryFormData.frequencyObs,
+      grades: diaryFormData.grades || {},
+      criteriaObs: diaryFormData.criteriaObs || {},
+      generalPedagogicalObs: diaryFormData.generalPedagogicalObs || "",
+      averageGrade: avgGrade,
+      studentEval: studentEval,
+      status: "concluido"
+    });
+  };
+
   return (
     <motion.div
       key="student-diary-form-screen"
@@ -163,9 +198,18 @@ export const StudentDiaryFormView = ({
            </div>
            <div>
              <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tight">{student?.name}</h1>
-             <p className="text-pro-yellow text-[10px] md:text-xs font-black uppercase tracking-[0.3em] mt-2 italic bg-white/10 px-4 py-2 rounded-lg border border-white/10 inline-block backdrop-blur-md">
-               {targetClass?.code} • {new Date(0, (diaryFilterMonth || 1) - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()} {diaryFilterYear}
-             </p>
+             <div className="flex flex-wrap items-center gap-3 mt-2">
+               <p className="text-pro-yellow text-[10px] md:text-xs font-black uppercase tracking-[0.3em] italic bg-white/10 px-4 py-2 rounded-lg border border-white/10 inline-block backdrop-blur-md">
+                 {targetClass?.code} • {new Date(0, (diaryFilterMonth || 1) - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()} {diaryFilterYear}
+               </p>
+               <button
+                 type="button"
+                 onClick={handleDownloadPDF}
+                 className="px-4 py-2 bg-pro-yellow text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-lg shadow-lg hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 border border-pro-yellow/30"
+               >
+                 <Download size={14} /> Baixar PDF
+               </button>
+             </div>
            </div>
          </div>
          <div className="w-24 h-24 md:w-32 md:h-32 rounded-3xl border-4 border-white/10 overflow-hidden shadow-2xl bg-white/10 flex items-center justify-center">
@@ -581,16 +625,24 @@ export const StudentDiaryFormView = ({
           {/* Action Area */}
           <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-4xl px-6 flex flex-col md:flex-row gap-4">
              <button 
+               type="button"
+               onClick={handleDownloadPDF}
+               className="py-5 px-6 bg-amber-400 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl hover:bg-amber-300 active:scale-95 transition-all border border-amber-300 flex items-center justify-center gap-2"
+               title="Baixar Diário em PDF"
+             >
+               <Download size={16} /> PDF
+             </button>
+             <button 
                onClick={() => handleSubmitDiary("rascunho")}
                className="flex-1 py-5 bg-white text-pro-teal font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl hover:bg-slate-50 active:scale-95 transition-all border border-slate-100"
              >
-               Salvar como Rascunho
+               Salvar Rascunho
              </button>
              <button 
                onClick={() => handleSubmitDiary("concluido")}
                className="flex-[2] py-5 bg-pro-teal text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl shadow-teal-900/30 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-3"
              >
-               <CheckCircle2 size={16} /> Finalizar e Consolidar Notas
+               <CheckCircle2 size={16} /> Finalizar e Consolidar
              </button>
           </div>
         </div>

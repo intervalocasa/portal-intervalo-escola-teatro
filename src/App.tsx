@@ -2357,6 +2357,7 @@ export default function App() {
             classes={classes}
             users={users}
             diaries={diaries}
+            evaluations={evaluations}
             currentUser={users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || null}
             setSelectedDiaryStudentId={setSelectedDiaryStudentId}
             setDiaryFormData={setDiaryFormData}
@@ -2382,6 +2383,8 @@ export default function App() {
           <ManageDiariesView 
             diaries={diaries}
             users={users}
+            classes={classes}
+            evaluations={evaluations}
             pedagogicalRequests={pedagogicalRequests}
             setSelectedClassId={setSelectedClassId}
             setSelectedDiaryStudentId={setSelectedDiaryStudentId}
