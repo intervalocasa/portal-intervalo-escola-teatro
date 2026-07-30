@@ -38,6 +38,7 @@ export const CreateClassView = ({
     .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
   const [isDayDropdownOpen, setIsDayDropdownOpen] = useState(false);
   const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const teacherDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -275,8 +276,9 @@ export const CreateClassView = ({
           {isEditing && handleDeleteClass && (
             <button
                type="button"
-               onClick={handleDeleteClass}
-               className="flex-1 py-4 bg-white text-red-500 border border-red-100 font-bold rounded-xl hover:bg-red-50 transition-all active:scale-95 uppercase tracking-widest text-[10px]"
+               onClick={() => setShowDeleteConfirm(true)}
+               disabled={isAppLoading}
+               className="flex-1 py-4 bg-white text-red-500 border border-red-100 font-bold rounded-xl hover:bg-red-50 transition-all active:scale-95 uppercase tracking-widest text-[10px] disabled:opacity-50"
             >
                Excluir Turma
             </button>
@@ -293,6 +295,50 @@ export const CreateClassView = ({
           </button>
         </div>
       </form>
+
+      {/* Modal de Confirmação de Exclusão */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl space-y-6"
+          >
+            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+              <X size={24} />
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Excluir Turma?</h3>
+              <p className="text-slate-500 text-xs font-semibold">
+                Tem certeza que deseja excluir esta turma <span className="font-bold text-slate-800">"{classData.code}"</span>? Esta ação é irreversível e removerá todos os dados vinculados a esta turma.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isAppLoading}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs uppercase tracking-wider transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowDeleteConfirm(false);
+                  if (handleDeleteClass) {
+                    await handleDeleteClass();
+                  }
+                }}
+                disabled={isAppLoading}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-red-600/20 disabled:opacity-50"
+              >
+                {isAppLoading ? "Excluindo..." : "Sim, Excluir"}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   );
 };

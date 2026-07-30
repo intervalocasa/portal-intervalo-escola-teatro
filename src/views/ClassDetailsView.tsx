@@ -16,6 +16,7 @@ import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
 
 interface ClassDetailsViewProps {
   selectedClassId: string | null;
+  setSelectedClassId?: (id: string | null) => void;
   classes: Class[];
   users: User[];
   role: UserRole | null;
@@ -29,6 +30,7 @@ interface ClassDetailsViewProps {
 
 export const ClassDetailsView = ({
   selectedClassId,
+  setSelectedClassId,
   classes,
   users,
   role,
@@ -205,6 +207,9 @@ export const ClassDetailsView = ({
                         <button 
                           onClick={() => {
                             if (targetClass) {
+                              if (setSelectedClassId) {
+                                setSelectedClassId(targetClass.id);
+                              }
                               setClassData({
                                 id: targetClass.id,
                                 code: targetClass.code,

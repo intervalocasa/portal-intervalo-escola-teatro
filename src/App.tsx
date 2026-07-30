@@ -2093,14 +2093,31 @@ export default function App() {
   };
 
   const handleDeleteClass = async () => {
-    if (!selectedClassId) return;
+    const targetId = selectedClassId || classData.id;
+    if (!targetId) {
+      showNotification("Nenhuma turma selecionada para exclusão.", "Aviso");
+      return;
+    }
     setIsAppLoading(true);
     try {
-      await deleteDoc(doc(db, "classes", selectedClassId));
+      await deleteDoc(doc(db, "classes", targetId));
+      setSelectedClassId(null);
+      setClassData({
+        code: "",
+        type: "Curso Livre Adultos",
+        teacherIds: [],
+        studentIds: [],
+        isActive: true,
+        inactivationReason: "",
+        year: new Date().getFullYear().toString(),
+        weekday: "",
+        time: "",
+        startDate: ""
+      });
       showNotification("Turma excluída com sucesso!", "Sucesso");
       setView("classes_list");
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `classes/${selectedClassId}`);
+      handleFirestoreError(err, OperationType.DELETE, `classes/${targetId}`);
     } finally {
       setIsAppLoading(false);
     }
@@ -2471,6 +2488,7 @@ export default function App() {
         ) : view === "class_details" ? (
           <ClassDetailsView 
             selectedClassId={selectedClassId}
+            setSelectedClassId={setSelectedClassId}
             classes={classes}
             users={users}
             role={role}
