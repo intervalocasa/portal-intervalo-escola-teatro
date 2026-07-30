@@ -600,18 +600,22 @@ export default function App() {
             }
           }
 
-          await updateDoc(doc(db, "classes", primaryClass.id), {
-            studentIds: mergedStudentIds,
-            teacherIds: mergedTeacherIds,
-            enrollmentDates: mergedEnrollmentDates,
-            type: mergedType || primaryClass.type || "Curso Livre Adultos",
-            weekday: mergedWeekday || "",
-            time: mergedTime || "",
-            startDate: mergedStartDate || "",
-            isActive: mergedIsActive,
-            updatedAt: serverTimestamp()
-          });
-          console.log(`[Class Deduplication] Merged data into primary class ${primaryClass.id} for code "${codeKey}"`);
+          try {
+            await setDoc(doc(db, "classes", primaryClass.id), {
+              studentIds: mergedStudentIds,
+              teacherIds: mergedTeacherIds,
+              enrollmentDates: mergedEnrollmentDates,
+              type: mergedType || primaryClass.type || "Curso Livre Adultos",
+              weekday: mergedWeekday || "",
+              time: mergedTime || "",
+              startDate: mergedStartDate || "",
+              isActive: mergedIsActive,
+              updatedAt: serverTimestamp()
+            }, { merge: true });
+            console.log(`[Class Deduplication] Merged data into primary class ${primaryClass.id} for code "${codeKey}"`);
+          } catch (err) {
+            console.error(`Error updating primary class ${primaryClass.id}:`, err);
+          }
         }
       }
     } catch (err) {
