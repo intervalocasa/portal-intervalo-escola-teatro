@@ -19,6 +19,7 @@ interface CreateClassViewProps {
   setShowInactivationPopup: (show: boolean) => void;
   isEditing?: boolean;
   handleDeleteClass?: () => Promise<void>;
+  isAppLoading?: boolean;
 }
 
 export const CreateClassView = ({
@@ -29,7 +30,8 @@ export const CreateClassView = ({
   setView,
   setShowInactivationPopup,
   isEditing,
-  handleDeleteClass
+  handleDeleteClass,
+  isAppLoading = false
 }: CreateClassViewProps) => {
   const teachers = users
     .filter(u => u.role === "Professor")
@@ -281,8 +283,12 @@ export const CreateClassView = ({
           )}
           <button
             type="submit"
-            className="flex-[2] py-4 bg-pro-teal text-white font-bold rounded-xl shadow-lg shadow-teal-900/20 hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest text-[10px]"
+            disabled={isAppLoading}
+            className="flex-[2] py-4 bg-pro-teal text-white font-bold rounded-xl shadow-lg shadow-teal-900/20 hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest text-[10px] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
           >
+            {isAppLoading ? (
+              <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+            ) : null}
             {isEditing ? "Salvar Alterações" : "Criar Turma"}
           </button>
         </div>

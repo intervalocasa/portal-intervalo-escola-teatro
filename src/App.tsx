@@ -487,6 +487,138 @@ export default function App() {
     }
   };
 
+  const deduplicateClassesAndFixReferences = async () => {
+    try {
+      const classesSnap = await getDocs(collection(db, "classes"));
+      if (classesSnap.empty) return;
+
+      const classesByCode: Record<string, any[]> = {};
+      for (const classDoc of classesSnap.docs) {
+        const data = classDoc.data();
+        const codeKey = (data.code || "").trim().toUpperCase();
+        if (!codeKey) continue;
+        if (!classesByCode[codeKey]) {
+          classesByCode[codeKey] = [];
+        }
+        classesByCode[codeKey].push({ id: classDoc.id, ...data });
+      }
+
+      for (const [codeKey, classList] of Object.entries(classesByCode)) {
+        if (classList.length > 1) {
+          console.log(`[Class Deduplication] Found ${classList.length} duplicate class documents for code "${codeKey}"`);
+          
+          classList.sort((a, b) => {
+            const scoreA = (a.studentIds?.length || 0) + (a.teacherIds?.length || 0);
+            const scoreB = (b.studentIds?.length || 0) + (b.teacherIds?.length || 0);
+            if (scoreB !== scoreA) return scoreB - scoreA;
+            return a.id.localeCompare(b.id);
+          });
+
+          const primaryClass = classList[0];
+          const duplicateClasses = classList.slice(1);
+
+          let mergedStudentIds = Array.from(new Set([...(primaryClass.studentIds || [])]));
+          let mergedTeacherIds = Array.from(new Set([...(primaryClass.teacherIds || [])]));
+          let mergedEnrollmentDates = { ...(primaryClass.enrollmentDates || {}) };
+
+          let mergedType = primaryClass.type;
+          let mergedWeekday = primaryClass.weekday;
+          let mergedTime = primaryClass.time;
+          let mergedStartDate = primaryClass.startDate;
+          let mergedIsActive = primaryClass.isActive !== undefined ? primaryClass.isActive : true;
+
+          for (const dup of duplicateClasses) {
+            const dupId = dup.id;
+
+            if (dup.studentIds && Array.isArray(dup.studentIds)) {
+              dup.studentIds.forEach((sId: string) => {
+                if (!mergedStudentIds.includes(sId)) mergedStudentIds.push(sId);
+              });
+            }
+
+            if (dup.teacherIds && Array.isArray(dup.teacherIds)) {
+              dup.teacherIds.forEach((tId: string) => {
+                if (!mergedTeacherIds.includes(tId)) mergedTeacherIds.push(tId);
+              });
+            }
+
+            if (dup.enrollmentDates && typeof dup.enrollmentDates === 'object') {
+              Object.entries(dup.enrollmentDates).forEach(([sId, eDate]) => {
+                if (!mergedEnrollmentDates[sId] && eDate) {
+                  mergedEnrollmentDates[sId] = eDate as string;
+                }
+              });
+            }
+
+            if (!mergedType && dup.type) mergedType = dup.type;
+            if (!mergedWeekday && dup.weekday) mergedWeekday = dup.weekday;
+            if (!mergedTime && dup.time) mergedTime = dup.time;
+            if (!mergedStartDate && dup.startDate) mergedStartDate = dup.startDate;
+
+            // Reassign references in other collections pointing to dupId -> primaryClass.id
+            try {
+              const dSnap = await getDocs(query(collection(db, "diarios_classe"), where("classId", "==", dupId)));
+              for (const dDoc of dSnap.docs) {
+                await updateDoc(doc(db, "diarios_classe", dDoc.id), { classId: primaryClass.id });
+              }
+            } catch (err) {
+              console.error(`Error reassigning diarios_classe for duplicate class ${dupId}:`, err);
+            }
+
+            try {
+              const eSnap = await getDocs(query(collection(db, "autoavaliacoes"), where("classId", "==", dupId)));
+              for (const eDoc of eSnap.docs) {
+                await updateDoc(doc(db, "autoavaliacoes", eDoc.id), { classId: primaryClass.id });
+              }
+            } catch (err) {
+              console.error(`Error reassigning autoavaliacoes for duplicate class ${dupId}:`, err);
+            }
+
+            try {
+              const evoSnap = await getDocs(query(collection(db, "evolucao"), where("classId", "==", dupId)));
+              for (const evoDoc of evoSnap.docs) {
+                await updateDoc(doc(db, "evolucao", evoDoc.id), { classId: primaryClass.id });
+              }
+            } catch (err) {
+              console.error(`Error reassigning evolucao for duplicate class ${dupId}:`, err);
+            }
+
+            try {
+              const pSnap = await getDocs(query(collection(db, "pedagogical-requests"), where("classId", "==", dupId)));
+              for (const pDoc of pSnap.docs) {
+                await updateDoc(doc(db, "pedagogical-requests", pDoc.id), { classId: primaryClass.id });
+              }
+            } catch (err) {
+              console.error(`Error reassigning pedagogical-requests for duplicate class ${dupId}:`, err);
+            }
+
+            try {
+              await deleteDoc(doc(db, "classes", dupId));
+              console.log(`[Class Deduplication] Deleted duplicate class doc ${dupId}`);
+            } catch (err) {
+              console.error(`Error deleting duplicate class doc ${dupId}:`, err);
+            }
+          }
+
+          await updateDoc(doc(db, "classes", primaryClass.id), {
+            studentIds: mergedStudentIds,
+            teacherIds: mergedTeacherIds,
+            enrollmentDates: mergedEnrollmentDates,
+            type: mergedType || primaryClass.type || "Curso Livre Adultos",
+            weekday: mergedWeekday || "",
+            time: mergedTime || "",
+            startDate: mergedStartDate || "",
+            isActive: mergedIsActive,
+            updatedAt: serverTimestamp()
+          });
+          console.log(`[Class Deduplication] Merged data into primary class ${primaryClass.id} for code "${codeKey}"`);
+        }
+      }
+    } catch (err) {
+      console.error("Error executing deduplicateClassesAndFixReferences:", err);
+    }
+  };
+
   // Connection validation
   useEffect(() => {
     let retryCount = 0;
@@ -649,10 +781,13 @@ export default function App() {
   const view = _view;
   const [role, setRole] = useState<UserRole | null>(null);
   
-  // Trigger self-healing database routine when the Gestor is logged in
+  // Trigger self-healing database routine when logged in
   useEffect(() => {
-    if (currentUser && role === "Gestor") {
-      healDatabaseAndRelations();
+    if (currentUser) {
+      deduplicateClassesAndFixReferences();
+      if (role === "Gestor") {
+        healDatabaseAndRelations();
+      }
     }
   }, [currentUser, role]);
   
@@ -989,7 +1124,31 @@ export default function App() {
     });
 
     const unsubscribeClasses = onSnapshot(collection(db, "classes"), (snapshot) => {
-      setClasses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const rawClasses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+      const uniqueMap = new Map<string, any>();
+
+      for (const cls of rawClasses) {
+        const normalizedCode = (cls.code || "").trim().toUpperCase();
+        if (!normalizedCode) {
+          uniqueMap.set(cls.id, cls);
+          continue;
+        }
+        if (!uniqueMap.has(normalizedCode)) {
+          uniqueMap.set(normalizedCode, cls);
+        } else {
+          // If two duplicate docs momentarily exist in Firestore before cleanup, merge studentIds and teacherIds in state
+          const existing = uniqueMap.get(normalizedCode);
+          const mergedStudents = Array.from(new Set([...(existing.studentIds || []), ...(cls.studentIds || [])]));
+          const mergedTeachers = Array.from(new Set([...(existing.teacherIds || []), ...(cls.teacherIds || [])]));
+          uniqueMap.set(normalizedCode, {
+            ...existing,
+            studentIds: mergedStudents,
+            teacherIds: mergedTeachers
+          });
+        }
+      }
+
+      setClasses(Array.from(uniqueMap.values()));
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, "classes");
     });
@@ -1797,15 +1956,53 @@ export default function App() {
 
   const handleClassSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isAppLoading) return;
+
+    const normalizedCode = (classData.code || "").trim().toUpperCase();
+    if (!normalizedCode) {
+      showNotification("Por favor, informe o código da turma.", "Aviso");
+      return;
+    }
+
     setIsAppLoading(true);
     try {
-      await addDoc(collection(db, "classes"), {
-        ...classData,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+      const existingClass = classes.find(c => (c.code || "").trim().toUpperCase() === normalizedCode);
+
+      if (existingClass) {
+        const mergedTeachers = Array.from(new Set([...(existingClass.teacherIds || []), ...(classData.teacherIds || [])]));
+        const mergedStudents = Array.from(new Set([...(existingClass.studentIds || []), ...(classData.studentIds || [])]));
+
+        await updateDoc(doc(db, "classes", existingClass.id), {
+          ...classData,
+          code: normalizedCode,
+          teacherIds: mergedTeachers,
+          studentIds: mergedStudents,
+          updatedAt: serverTimestamp()
+        });
+        showNotification(`A turma "${normalizedCode}" já existia e foi atualizada!`, "Sucesso");
+      } else {
+        await addDoc(collection(db, "classes"), {
+          ...classData,
+          code: normalizedCode,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        showNotification("Turma criada com sucesso!", "Sucesso");
+      }
+
+      setClassData({
+        code: "",
+        type: "Curso Livre Adultos",
+        teacherIds: [],
+        studentIds: [],
+        isActive: true,
+        inactivationReason: "",
+        year: new Date().getFullYear().toString(),
+        weekday: "",
+        time: "",
+        startDate: ""
       });
-      showNotification("Turma criada com sucesso!", "Sucesso");
-      setView("dashboard");
+      setView("classes_list");
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "classes");
     } finally {
@@ -2243,6 +2440,7 @@ export default function App() {
             setView={setView}
             setShowInactivationPopup={setShowInactivationPopup}
             users={users}
+            isAppLoading={isAppLoading}
           />
         ) : view === "classes_list" ? (
           <ClassesListView 
@@ -2264,6 +2462,7 @@ export default function App() {
             isEditing={true}
             handleDeleteClass={handleDeleteClass}
             users={users}
+            isAppLoading={isAppLoading}
           />
         ) : view === "class_details" ? (
           <ClassDetailsView 
