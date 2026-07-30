@@ -517,6 +517,10 @@ export default function App() {
           const primaryClass = classList[0];
           const duplicateClasses = classList.slice(1);
 
+          // Verify primary class still exists before operating
+          const primarySnap = await getDoc(doc(db, "classes", primaryClass.id));
+          if (!primarySnap.exists()) continue;
+
           let mergedStudentIds = Array.from(new Set([...(primaryClass.studentIds || [])]));
           let mergedTeacherIds = Array.from(new Set([...(primaryClass.teacherIds || [])]));
           let mergedEnrollmentDates = { ...(primaryClass.enrollmentDates || {}) };
@@ -601,18 +605,21 @@ export default function App() {
           }
 
           try {
-            await setDoc(doc(db, "classes", primaryClass.id), {
-              studentIds: mergedStudentIds,
-              teacherIds: mergedTeacherIds,
-              enrollmentDates: mergedEnrollmentDates,
-              type: mergedType || primaryClass.type || "Curso Livre Adultos",
-              weekday: mergedWeekday || "",
-              time: mergedTime || "",
-              startDate: mergedStartDate || "",
-              isActive: mergedIsActive,
-              updatedAt: serverTimestamp()
-            }, { merge: true });
-            console.log(`[Class Deduplication] Merged data into primary class ${primaryClass.id} for code "${codeKey}"`);
+            const verifySnap = await getDoc(doc(db, "classes", primaryClass.id));
+            if (verifySnap.exists()) {
+              await updateDoc(doc(db, "classes", primaryClass.id), {
+                studentIds: mergedStudentIds,
+                teacherIds: mergedTeacherIds,
+                enrollmentDates: mergedEnrollmentDates,
+                type: mergedType || primaryClass.type || "Curso Livre Adultos",
+                weekday: mergedWeekday || "",
+                time: mergedTime || "",
+                startDate: mergedStartDate || "",
+                isActive: mergedIsActive,
+                updatedAt: serverTimestamp()
+              });
+              console.log(`[Class Deduplication] Merged data into primary class ${primaryClass.id} for code "${codeKey}"`);
+            }
           } catch (err) {
             console.error(`Error updating primary class ${primaryClass.id}:`, err);
           }
@@ -1128,31 +1135,10 @@ export default function App() {
     });
 
     const unsubscribeClasses = onSnapshot(collection(db, "classes"), (snapshot) => {
-      const rawClasses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
-      const uniqueMap = new Map<string, any>();
-
-      for (const cls of rawClasses) {
-        const normalizedCode = (cls.code || "").trim().toUpperCase();
-        if (!normalizedCode) {
-          uniqueMap.set(cls.id, cls);
-          continue;
-        }
-        if (!uniqueMap.has(normalizedCode)) {
-          uniqueMap.set(normalizedCode, cls);
-        } else {
-          // If two duplicate docs momentarily exist in Firestore before cleanup, merge studentIds and teacherIds in state
-          const existing = uniqueMap.get(normalizedCode);
-          const mergedStudents = Array.from(new Set([...(existing.studentIds || []), ...(cls.studentIds || [])]));
-          const mergedTeachers = Array.from(new Set([...(existing.teacherIds || []), ...(cls.teacherIds || [])]));
-          uniqueMap.set(normalizedCode, {
-            ...existing,
-            studentIds: mergedStudents,
-            teacherIds: mergedTeachers
-          });
-        }
-      }
-
-      setClasses(Array.from(uniqueMap.values()));
+      const sortedClasses = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() as any }))
+        .sort((a: any, b: any) => (a.code || "").localeCompare(b.code || "", 'pt-BR'));
+      setClasses(sortedClasses);
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, "classes");
     });
@@ -1247,10 +1233,38 @@ export default function App() {
   const handleDeleteEnrollment = async (classId: string, studentId: string) => {
     setIsAppLoading(true);
     try {
-      await updateDoc(doc(db, "classes", classId), {
-        studentIds: arrayRemove(studentId),
-        [`enrollmentDates.${studentId}`]: deleteField()
+      const studentUser = users.find(u => u.id === studentId);
+      const studentEmail = studentUser?.email?.trim().toLowerCase();
+
+      const allStudentIdsToRemove = new Set<string>();
+      allStudentIdsToRemove.add(studentId);
+      if (studentUser?.migratedFrom) {
+        allStudentIdsToRemove.add(studentUser.migratedFrom);
+      }
+      if (studentEmail) {
+        users.forEach(u => {
+          if (u.email?.trim().toLowerCase() === studentEmail) {
+            allStudentIdsToRemove.add(u.id);
+            if (u.migratedFrom) allStudentIdsToRemove.add(u.migratedFrom);
+          }
+        });
+      }
+
+      const targetClass = classes.find(c => c.id === classId);
+      const currentStudentIds: string[] = targetClass?.studentIds || [];
+      const currentEnrollmentDates: Record<string, string> = { ...(targetClass?.enrollmentDates || {}) };
+
+      const newStudentIds = currentStudentIds.filter(id => !allStudentIdsToRemove.has(id));
+      allStudentIdsToRemove.forEach(id => {
+        delete currentEnrollmentDates[id];
       });
+
+      await updateDoc(doc(db, "classes", classId), {
+        studentIds: newStudentIds,
+        enrollmentDates: currentEnrollmentDates,
+        updatedAt: serverTimestamp()
+      });
+
       showNotification("Matrícula excluída com sucesso!", "Sucesso");
       setEditEnrollmentInfo(null);
     } catch (err: any) {
@@ -2100,7 +2114,31 @@ export default function App() {
     }
     setIsAppLoading(true);
     try {
-      await deleteDoc(doc(db, "classes", targetId));
+      // Get target class to find its code
+      const targetClass = classes.find(c => c.id === targetId);
+      const codeToFind = (targetClass?.code || classData?.code || "").trim().toUpperCase();
+
+      // Find all class documents with this ID or matching normalized code
+      const classesSnap = await getDocs(collection(db, "classes"));
+      const docsToDelete = new Set<string>();
+      docsToDelete.add(targetId);
+
+      classesSnap.docs.forEach(cDoc => {
+        const cData = cDoc.data();
+        const normCode = (cData.code || "").trim().toUpperCase();
+        if (cDoc.id === targetId || (codeToFind && normCode === codeToFind)) {
+          docsToDelete.add(cDoc.id);
+        }
+      });
+
+      for (const dId of Array.from(docsToDelete)) {
+        try {
+          await deleteDoc(doc(db, "classes", dId));
+        } catch (err) {
+          console.error(`Error deleting class doc ${dId}:`, err);
+        }
+      }
+
       setSelectedClassId(null);
       setClassData({
         code: "",
@@ -2127,8 +2165,63 @@ export default function App() {
     if (!selectedUserId) return;
     setIsAppLoading(true);
     try {
+      const targetUser = users.find(u => u.id === selectedUserId);
+      const userEmail = targetUser?.email?.trim().toLowerCase();
+
+      const allUserIds = new Set<string>();
+      allUserIds.add(selectedUserId);
+      if (targetUser?.migratedFrom) allUserIds.add(targetUser.migratedFrom);
+      if (userEmail) {
+        users.forEach(u => {
+          if (u.email?.trim().toLowerCase() === userEmail) {
+            allUserIds.add(u.id);
+            if (u.migratedFrom) allUserIds.add(u.migratedFrom);
+          }
+        });
+      }
+
+      // Remove this user from all classes
+      for (const cls of classes) {
+        let updated = false;
+        const studentIds = (cls.studentIds || []).filter((id: string) => {
+          if (allUserIds.has(id)) {
+            updated = true;
+            return false;
+          }
+          return true;
+        });
+        const teacherIds = (cls.teacherIds || []).filter((id: string) => {
+          if (allUserIds.has(id)) {
+            updated = true;
+            return false;
+          }
+          return true;
+        });
+        const enrollmentDates = { ...(cls.enrollmentDates || {}) };
+        allUserIds.forEach(id => {
+          if (enrollmentDates[id]) {
+            delete enrollmentDates[id];
+            updated = true;
+          }
+        });
+
+        if (updated) {
+          try {
+            await updateDoc(doc(db, "classes", cls.id), {
+              studentIds,
+              teacherIds,
+              enrollmentDates,
+              updatedAt: serverTimestamp()
+            });
+          } catch (err) {
+            console.error(`Error removing deleted user from class ${cls.id}:`, err);
+          }
+        }
+      }
+
       await deleteDoc(doc(db, "usuarios", selectedUserId));
       showNotification("Usuário excluído com sucesso!", "Sucesso");
+      setSelectedUserId(null);
       setView("users_list");
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `usuarios/${selectedUserId}`);

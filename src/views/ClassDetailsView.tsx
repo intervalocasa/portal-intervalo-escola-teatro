@@ -10,7 +10,7 @@ import { Class, User, UserRole } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { MuralTurma } from "../components/MuralTurma";
 import { db } from "../lib/firebase";
-import { doc, updateDoc, arrayUnion, arrayRemove, deleteField } from "firebase/firestore";
+import { doc, updateDoc, arrayUnion, arrayRemove, deleteField, getDoc } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
 import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
 
@@ -120,11 +120,41 @@ export const ClassDetailsView = ({
     if (!selectedClassId) return;
     setIsExcluding(true);
     try {
+      const studentUser = users.find(u => u.id === studentId);
+      const studentEmail = studentUser?.email?.trim().toLowerCase();
+
+      const allStudentIdsToRemove = new Set<string>();
+      allStudentIdsToRemove.add(studentId);
+      if (studentUser?.migratedFrom) {
+        allStudentIdsToRemove.add(studentUser.migratedFrom);
+      }
+      if (studentEmail) {
+        users.forEach(u => {
+          if (u.email?.trim().toLowerCase() === studentEmail) {
+            allStudentIdsToRemove.add(u.id);
+            if (u.migratedFrom) allStudentIdsToRemove.add(u.migratedFrom);
+          }
+        });
+      }
+
       const classRef = doc(db, "classes", selectedClassId);
-      await updateDoc(classRef, {
-        studentIds: arrayRemove(studentId),
-        [`enrollmentDates.${studentId}`]: deleteField()
-      });
+      const classSnap = await getDoc(classRef);
+      if (classSnap.exists()) {
+        const cData = classSnap.data();
+        const currentStudentIds: string[] = cData.studentIds || [];
+        const currentEnrollmentDates: Record<string, string> = { ...(cData.enrollmentDates || {}) };
+
+        const newStudentIds = currentStudentIds.filter(id => !allStudentIdsToRemove.has(id));
+        allStudentIdsToRemove.forEach(id => {
+          delete currentEnrollmentDates[id];
+        });
+
+        await updateDoc(classRef, {
+          studentIds: newStudentIds,
+          enrollmentDates: currentEnrollmentDates
+        });
+      }
+
       showNotification("Matrícula excluída com sucesso!", "Sucesso", "success");
       setSelectedStudentForManagement(null);
       setShowConfirmExclude(false);
