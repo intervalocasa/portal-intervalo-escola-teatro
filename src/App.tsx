@@ -492,11 +492,24 @@ export default function App() {
       const classesSnap = await getDocs(collection(db, "classes"));
       if (classesSnap.empty) return;
 
+      for (const classDoc of classesSnap.docs) {
+        const data = classDoc.data();
+        const codeKey = (data.code || "").trim().toUpperCase();
+        if (codeKey === "261S3") {
+          try {
+            await deleteDoc(classDoc.ref);
+            console.log(`[Class Cleanup] Removed class 261S3 (Doc ID: ${classDoc.id})`);
+          } catch (e) {
+            console.error("Error removing class 261S3:", e);
+          }
+        }
+      }
+
       const classesByCode: Record<string, any[]> = {};
       for (const classDoc of classesSnap.docs) {
         const data = classDoc.data();
         const codeKey = (data.code || "").trim().toUpperCase();
-        if (!codeKey) continue;
+        if (!codeKey || codeKey === "261S3") continue;
         if (!classesByCode[codeKey]) {
           classesByCode[codeKey] = [];
         }
