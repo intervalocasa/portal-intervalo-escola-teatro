@@ -139,7 +139,7 @@ export const LoginView = ({
               <span className="w-full border-t border-slate-100"></span>
             </div>
             <div className="relative flex justify-center text-[10px] uppercase font-black text-slate-300">
-              <span className="bg-white px-2 tracking-[0.2em]">Ou para Gestores</span>
+              <span className="bg-white px-2 tracking-[0.2em]">Ou para Gestão / Direção</span>
             </div>
           </div>
 

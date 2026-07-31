@@ -16,7 +16,7 @@ service cloud.firestore {
     }
     
     function isGestor() {
-      return isSignedIn() && (getUserRole() == 'Gestor' || request.auth.token.email == 'intervalocasa@gmail.com');
+      return isSignedIn() && (getUserRole() == 'Gestor' || getUserRole() == 'Diretor Pedagógico' || request.auth.token.email == 'intervalocasa@gmail.com');
     }
     
     function isProfessor() {

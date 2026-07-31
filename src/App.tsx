@@ -809,7 +809,7 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       deduplicateClassesAndFixReferences();
-      if (role === "Gestor") {
+      if (role === "Gestor" || role === "Diretor Pedagógico") {
         healDatabaseAndRelations();
       }
     }
@@ -1118,7 +1118,7 @@ export default function App() {
     const userRole = currentUsers.find(u => u.id === currentUserId)?.role;
     let shouldNotify = false;
 
-    if (userRole === "Gestor") shouldNotify = true;
+    if (userRole === "Gestor" || userRole === "Diretor Pedagógico") shouldNotify = true;
     else if (aviso.targetSpecificUsers) {
       shouldNotify = aviso.targetUserIds?.includes(currentUserId);
     } else {
@@ -1309,7 +1309,7 @@ export default function App() {
 
     // 2. Check target for current user role
     const userRole = users.find(u => u.id === currentUser?.uid)?.role;
-    if (userRole === "Gestor") return true; // Gestor sees everything
+    if (userRole === "Gestor" || userRole === "Diretor Pedagógico") return true; // Gestor/Diretor sees everything
     
     // 3. Check if it's targeted for specific users
     if (aviso.targetSpecificUsers) {
@@ -1819,7 +1819,7 @@ export default function App() {
       const { initialPassword, ...userDataRest } = formData;
       const dataToSave = {
         ...userDataRest,
-        role: view === "register" ? regType : (view === "edit_user" ? users.find(u => u.id === selectedUserId)?.role : role),
+        role: (view === "register" || (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico"))) ? regType : (view === "edit_user" ? (users.find(u => u.id === selectedUserId)?.role || "Aluno") : role),
         email: formData.email.toLowerCase(),
         photo: photoPreview,
         updatedAt: serverTimestamp()
@@ -1844,8 +1844,8 @@ export default function App() {
       }
 
       // Synchronize Classes
-      if (role === "Gestor" && studentId) {
-        const userType = view === "register" ? regType : users.find(u => u.id === studentId)?.role;
+      if ((role === "Gestor" || role === "Diretor Pedagógico") && studentId) {
+        const userType = (view === "register" || view === "edit_user") ? regType : users.find(u => u.id === studentId)?.role;
         for (const c of classes) {
           if (userType === "Professor") {
             const isCurrentlyLinked = c.teacherIds?.includes(studentId);
@@ -2485,7 +2485,7 @@ export default function App() {
           </form>
         </motion.div>
         ) : view === "dashboard" ? (
-          role === "Gestor" ? (
+          (role === "Gestor" || role === "Diretor Pedagógico") ? (
             <GestorDashboard 
               currentUser={currentUser}
               users={users}
@@ -2554,10 +2554,11 @@ export default function App() {
             onRemoveBadge={handleRemoveBadge}
             selectedUserBadges={selectedUserBadges}
             currentUserRole={role || undefined}
-            isGestor={role === "Gestor"}
+            isGestor={role === "Gestor" || role === "Diretor Pedagógico"}
             setSelectedClassId={setSelectedClassId}
             setSelectedEnrollmentDates={setSelectedEnrollmentDates}
             setEditEnrollmentInfo={setEditEnrollmentInfo}
+            setRegType={setRegType}
           />
         ) : view === "create_class" ? (
           <CreateClassView 
@@ -2618,7 +2619,7 @@ export default function App() {
             setSelectedUserClasses={setSelectedUserClasses}
             handleRegisterSubmit={handleRegisterSubmit}
             setView={setView}
-            isGestor={role === "Gestor"}
+            isGestor={role === "Gestor" || role === "Diretor Pedagógico"}
             regType={regType}
             setRegType={setRegType}
             role={role}
@@ -2627,7 +2628,7 @@ export default function App() {
             currentUser={currentUser}
             selectedUserId={selectedUserId}
             setShowPasswordModal={(show) => {
-              if (view === "edit_user" && role === "Gestor" && selectedUserId !== currentUser?.uid) {
+              if (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico") && selectedUserId !== currentUser?.uid) {
                 setGestorResettingUid(selectedUserId);
               } else {
                 setShowPasswordModal(show);
@@ -2731,7 +2732,7 @@ export default function App() {
             <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
               <AgendaEventos 
                 currentUser={users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || null}
-                isGestor={role === "Gestor"}
+                isGestor={role === "Gestor" || role === "Diretor Pedagógico"}
               />
             </div>
           </div>

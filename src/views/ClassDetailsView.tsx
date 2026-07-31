@@ -53,6 +53,7 @@ export const ClassDetailsView = ({
   const [showConfirmExclude, setShowConfirmExclude] = useState(false);
 
   const targetClass = classes.find(c => c.id === selectedClassId);
+  const isGestorRole = role === "Gestor" || role === "Diretor Pedagógico";
   const classTeachers = useMemo(() => {
     return users.filter(u => targetClass?.teacherIds?.includes(u.id));
   }, [users, targetClass?.teacherIds]);
@@ -226,7 +227,7 @@ export const ClassDetailsView = ({
                       <div className="w-12 h-12 bg-pro-teal/5 rounded-2xl flex items-center justify-center text-pro-teal"><Users size={24} /></div>
                       <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Estudantes do Elenco</h2>
                     </div>
-                    {role === "Gestor" && (
+                    {isGestorRole && (
                       <div className="flex gap-3">
                         <button 
                           onClick={() => setIsEnrollModalOpen(true)}
@@ -270,7 +271,7 @@ export const ClassDetailsView = ({
                         <div 
                           key={s.id} 
                           onClick={() => {
-                            if (role === "Gestor") {
+                            if (isGestorRole) {
                               setSelectedStudentForManagement(s);
                             } else if (role === "Professor") {
                               setSelectedUserId(s.id);
@@ -294,7 +295,7 @@ export const ClassDetailsView = ({
                               </span>
                             </div>
                           )}
-                          {role === "Gestor" && (
+                          {isGestorRole && (
                             <div className="w-8 h-8 rounded-full bg-slate-100 group-hover:bg-pro-teal group-hover:text-white flex items-center justify-center text-slate-400 transition-colors shrink-0">
                               <Pencil size={14} />
                             </div>

@@ -29,7 +29,7 @@ export interface Announcement {
   createdAt: any;
 }
 
-export type UserRole = "Aluno" | "Professor" | "Gestor";
+export type UserRole = "Aluno" | "Professor" | "Gestor" | "Diretor Pedagógico";
 
 export interface Badge {
   id: string;

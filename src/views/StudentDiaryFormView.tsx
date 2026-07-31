@@ -141,7 +141,7 @@ export const StudentDiaryFormView = ({
     if (b.badgeId === 'presenca-vip' || b.badgeId === 'critico-de-arte') return false;
     
     // Gestor-only manual badges
-    if (userRole !== 'Gestor' && (b.badgeId === 'embaixador-da-arte' || b.badgeId === 'blogueirinho')) {
+    if (userRole !== 'Gestor' && userRole !== 'Diretor Pedagógico' && (b.badgeId === 'embaixador-da-arte' || b.badgeId === 'blogueirinho')) {
       return false;
     }
     return true;

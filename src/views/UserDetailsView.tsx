@@ -5,7 +5,7 @@
 
 import { motion } from "motion/react";
 import { UserCircle, Eye, ArrowLeft, Award, Trash2, X } from "lucide-react";
-import { User, Class, Evaluation, UserBadge } from "../types";
+import { User, Class, Evaluation, UserBadge, UserRole } from "../types";
 import { DetailItem, Avatar, BackButton } from "../components/CommonComponents";
 import { BadgeAwardModal } from "../components/BadgeAwardModal";
 import { BADGES } from "../constants/badges";
@@ -33,6 +33,7 @@ interface UserDetailsViewProps {
   isGestor: boolean;
   setSelectedEnrollmentDates: (dates: Record<string, string>) => void;
   setEditEnrollmentInfo: (info: {classId: string, studentId: string, date: string} | null) => void;
+  setRegType?: (role: UserRole) => void;
 }
 
 export const UserDetailsView = ({
@@ -55,7 +56,8 @@ export const UserDetailsView = ({
   currentUserRole,
   isGestor,
   setSelectedEnrollmentDates,
-  setEditEnrollmentInfo
+  setEditEnrollmentInfo,
+  setRegType
 }: UserDetailsViewProps) => {
   const user = users.find(u => u.id === selectedUserId);
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
@@ -136,7 +138,7 @@ export const UserDetailsView = ({
                  });
                }
                setSelectedEnrollmentDates(dates);
-               
+               if (setRegType) setRegType(user.role);
                setView("edit_user");
              }}
              className="p-3 bg-white text-pro-teal rounded-xl border border-slate-200 hover:border-pro-teal transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-sm"

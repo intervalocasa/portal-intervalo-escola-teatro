@@ -209,7 +209,7 @@ export const RegisterEditUserView = ({
               type="text"
               name="cpf"
               required
-              disabled={view !== "register" && role !== "Gestor"}
+              disabled={view !== "register" && !isGestor}
               value={formData.cpf}
               onChange={handleInputChange}
               placeholder="000.000.000-00"
@@ -228,16 +228,16 @@ export const RegisterEditUserView = ({
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1 col-span-full sm:col-span-1">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Usuário</label>
-            <div className="flex gap-2">
-              {["Aluno", "Professor", "Gestor"].map((t) => (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {["Aluno", "Professor", "Gestor", "Diretor Pedagógico"].map((t) => (
                 <button
                   key={t}
                   type="button"
-                  disabled={(view === "edit_self" || view === "edit_user") && role !== "Gestor"}
+                  disabled={(view === "edit_self" || view === "edit_user") && !isGestor}
                   onClick={() => setRegType(t as UserRole)}
-                  className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  className={`py-3.5 px-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${
                     regType === t 
                     ? "bg-pro-teal text-white shadow-lg shadow-teal-900/20" 
                     : "bg-slate-100 text-slate-400 hover:bg-slate-200"

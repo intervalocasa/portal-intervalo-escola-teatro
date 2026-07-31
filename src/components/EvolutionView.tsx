@@ -59,7 +59,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
   const [teacherCommentModal, setTeacherCommentModal] = React.useState<{ text: string; teacherName: string; teacherPhoto?: string } | null>(null);
 
   const mappedUser = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
-  const isStaff = currentUser?.role === "Gestor" || currentUser?.role === "Professor" || mappedUser?.role === "Gestor" || mappedUser?.role === "Professor";
+  const isStaff = currentUser?.role === "Gestor" || currentUser?.role === "Diretor Pedagógico" || currentUser?.role === "Professor" || mappedUser?.role === "Gestor" || mappedUser?.role === "Diretor Pedagógico" || mappedUser?.role === "Professor";
 
   const allStudents = React.useMemo(() => {
     return users

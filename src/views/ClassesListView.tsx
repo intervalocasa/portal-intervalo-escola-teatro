@@ -128,7 +128,7 @@ export const ClassesListView = ({
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {role === "Gestor" && (
+                        {(role === "Gestor" || role === "Diretor Pedagógico") && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
