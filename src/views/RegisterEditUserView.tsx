@@ -228,10 +228,10 @@ export const RegisterEditUserView = ({
             />
           </div>
 
-          <div className="space-y-1 col-span-full sm:col-span-1">
+          <div className="space-y-1 col-span-full">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Usuário</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {["Aluno", "Professor", "Gestor", "Diretor Pedagógico"].map((t) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              {["Aluno", "Professor", "Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor"].map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -293,7 +293,7 @@ export const RegisterEditUserView = ({
           </div>
 
           {/* Financial Info */}
-          {regType === "Professor" && (
+          {(regType === "Professor" || regType === "Diretor Pedagógico e Professor") && (
             <>
               <div className="space-y-4 col-span-full pt-4">
                 <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Informações Financeiras</h4>

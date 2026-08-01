@@ -131,7 +131,7 @@ export const UsersListView = ({
       <div className="p-8 md:p-16 space-y-6 flex-1 flex flex-col max-w-7xl mx-auto w-full">
         {/* Filters */}
         <div className="flex flex-wrap items-center justify-center gap-3 pb-6 border-b border-slate-100">
-          {["Todos", "Aluno", "Professor", "Gestor", "Diretor Pedagógico"].map((type) => (
+          {["Todos", "Aluno", "Professor", "Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor"].map((type) => (
             <button
               key={type}
               onClick={() => setFilter(type as any)}

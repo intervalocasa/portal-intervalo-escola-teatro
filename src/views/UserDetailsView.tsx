@@ -124,7 +124,8 @@ export const UserDetailsView = ({
                  password: ""
                });
                setPhotoPreview(user.photo || "");
-               const linkedClasses = user.role === "Professor" 
+               const isTeacherRole = user.role === "Professor" || user.role === "Diretor Pedagógico e Professor";
+               const linkedClasses = isTeacherRole 
                  ? classes.filter(c => c.teacherIds?.includes(user.id))
                  : classes.filter(c => c.studentIds?.includes(user.id));
                setSelectedUserClasses(linkedClasses.map(c => c.id));
@@ -176,7 +177,7 @@ export const UserDetailsView = ({
           <DetailItem label="Endereço" value={user.address} fullWidth />
 
           {/* Financial Info */}
-          {user.role === "Professor" && (
+          {(user.role === "Professor" || user.role === "Diretor Pedagógico e Professor") && (
             <>
               <div className="col-span-full mb-2 mt-4">
                 <h4 className="text-[10px] font-black text-pro-teal uppercase tracking-[0.2em] border-l-4 border-pro-teal pl-3">Dados Financeiros</h4>
@@ -190,13 +191,14 @@ export const UserDetailsView = ({
             </>
           )}
 
-          {(user.role === "Aluno" || user.role === "Professor") && (
+          {(user.role === "Aluno" || user.role === "Professor" || user.role === "Diretor Pedagógico e Professor") && (
             <div className="col-span-full mt-4">
               <h4 className="text-[10px] font-black text-[#016a86] uppercase tracking-[0.2em] border-l-4 border-[#016a86] pl-3 mb-4">
-                {user.role === "Professor" ? "Turmas Ministradas" : "Turmas Matriculadas"}
+                {(user.role === "Professor" || user.role === "Diretor Pedagógico e Professor") ? "Turmas Ministradas" : "Turmas Matriculadas"}
               </h4>
                 {(() => {
-                  const linkedClasses = user.role === "Professor" 
+                  const isTeacherRole = user.role === "Professor" || user.role === "Diretor Pedagógico e Professor";
+                  const linkedClasses = isTeacherRole 
                     ? classes.filter(c => c.teacherIds?.includes(user.id))
                     : classes.filter(c => c.studentIds?.includes(user.id));
 

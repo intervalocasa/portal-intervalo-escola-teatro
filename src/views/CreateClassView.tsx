@@ -34,7 +34,7 @@ export const CreateClassView = ({
   isAppLoading = false
 }: CreateClassViewProps) => {
   const teachers = users
-    .filter(u => u.role === "Professor")
+    .filter(u => u.role === "Professor" || u.role === "Diretor Pedagógico e Professor")
     .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
   const [isDayDropdownOpen, setIsDayDropdownOpen] = useState(false);
   const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false);

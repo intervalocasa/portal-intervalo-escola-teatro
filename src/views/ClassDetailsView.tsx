@@ -53,7 +53,7 @@ export const ClassDetailsView = ({
   const [showConfirmExclude, setShowConfirmExclude] = useState(false);
 
   const targetClass = classes.find(c => c.id === selectedClassId);
-  const isGestorRole = role === "Gestor" || role === "Diretor Pedagógico";
+  const isGestorRole = role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor";
   const classTeachers = useMemo(() => {
     return users.filter(u => targetClass?.teacherIds?.includes(u.id));
   }, [users, targetClass?.teacherIds]);

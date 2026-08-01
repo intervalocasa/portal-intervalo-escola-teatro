@@ -366,7 +366,7 @@ export const MuralTurma = ({ classId, currentUser, handleAwardBadge }: MuralTurm
 
       {/* Feed */}
       <div className="space-y-6">
-        {(currentUser?.role === "Gestor" || currentUser?.role === "Diretor Pedagógico") && posts.length > 0 && (
+        {(currentUser?.role === "Gestor" || currentUser?.role === "Diretor Pedagógico" || currentUser?.role === "Diretor Pedagógico e Professor") && posts.length > 0 && (
           <div className="flex justify-end mb-4">
             <button
               onClick={handleClearMural}
@@ -434,7 +434,7 @@ export const MuralTurma = ({ classId, currentUser, handleAwardBadge }: MuralTurm
                           }).format(post.timestamp.toDate()) : 'Recentemente'}
                         </p>
                       </div>
-                      {(currentUser?.role === "Gestor" || currentUser?.role === "Diretor Pedagógico") && (
+                      {(currentUser?.role === "Gestor" || currentUser?.role === "Diretor Pedagógico" || currentUser?.role === "Diretor Pedagógico e Professor") && (
                         <button
                           onClick={() => handleDeletePost(post.id)}
                           className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"

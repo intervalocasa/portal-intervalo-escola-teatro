@@ -47,7 +47,8 @@ export const CreateAnnouncementView = ({
       .filter(u => {
         const displayName = getUserDisplayName(u).toLowerCase();
         const matchesSearch = displayName.includes(searchTerm.toLowerCase());
-        const matchesRole = formData.target === "Todos" || u.role === (formData.target === "Alunos" ? "Aluno" : "Professor");
+        const isTeacher = u.role === "Professor" || u.role === "Diretor Pedagógico e Professor";
+        const matchesRole = formData.target === "Todos" || (formData.target === "Alunos" ? u.role === "Aluno" : isTeacher);
         return matchesSearch && matchesRole;
       })
       .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));

@@ -809,7 +809,7 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       deduplicateClassesAndFixReferences();
-      if (role === "Gestor" || role === "Diretor Pedagógico") {
+      if (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") {
         healDatabaseAndRelations();
       }
     }
@@ -1819,7 +1819,7 @@ export default function App() {
       const { initialPassword, ...userDataRest } = formData;
       const dataToSave = {
         ...userDataRest,
-        role: (view === "register" || (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico"))) ? regType : (view === "edit_user" ? (users.find(u => u.id === selectedUserId)?.role || "Aluno") : role),
+        role: (view === "register" || (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor"))) ? regType : (view === "edit_user" ? (users.find(u => u.id === selectedUserId)?.role || "Aluno") : role),
         email: formData.email.toLowerCase(),
         photo: photoPreview,
         updatedAt: serverTimestamp()
@@ -1844,10 +1844,10 @@ export default function App() {
       }
 
       // Synchronize Classes
-      if ((role === "Gestor" || role === "Diretor Pedagógico") && studentId) {
+      if ((role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") && studentId) {
         const userType = (view === "register" || view === "edit_user") ? regType : users.find(u => u.id === studentId)?.role;
         for (const c of classes) {
-          if (userType === "Professor") {
+          if (userType === "Professor" || userType === "Diretor Pedagógico e Professor") {
             const isCurrentlyLinked = c.teacherIds?.includes(studentId);
             const shouldBeLinked = selectedUserClasses.includes(c.id);
 
@@ -2485,7 +2485,7 @@ export default function App() {
           </form>
         </motion.div>
         ) : view === "dashboard" ? (
-          (role === "Gestor" || role === "Diretor Pedagógico") ? (
+          (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") ? (
             <GestorDashboard 
               currentUser={currentUser}
               users={users}
@@ -2554,7 +2554,7 @@ export default function App() {
             onRemoveBadge={handleRemoveBadge}
             selectedUserBadges={selectedUserBadges}
             currentUserRole={role || undefined}
-            isGestor={role === "Gestor" || role === "Diretor Pedagógico"}
+            isGestor={role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor"}
             setSelectedClassId={setSelectedClassId}
             setSelectedEnrollmentDates={setSelectedEnrollmentDates}
             setEditEnrollmentInfo={setEditEnrollmentInfo}
@@ -2619,7 +2619,7 @@ export default function App() {
             setSelectedUserClasses={setSelectedUserClasses}
             handleRegisterSubmit={handleRegisterSubmit}
             setView={setView}
-            isGestor={role === "Gestor" || role === "Diretor Pedagógico"}
+            isGestor={role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor"}
             regType={regType}
             setRegType={setRegType}
             role={role}
@@ -2628,7 +2628,7 @@ export default function App() {
             currentUser={currentUser}
             selectedUserId={selectedUserId}
             setShowPasswordModal={(show) => {
-              if (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico") && selectedUserId !== currentUser?.uid) {
+              if (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") && selectedUserId !== currentUser?.uid) {
                 setGestorResettingUid(selectedUserId);
               } else {
                 setShowPasswordModal(show);
@@ -2732,7 +2732,7 @@ export default function App() {
             <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
               <AgendaEventos 
                 currentUser={users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || null}
-                isGestor={role === "Gestor" || role === "Diretor Pedagógico"}
+                isGestor={role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor"}
               />
             </div>
           </div>
