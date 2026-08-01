@@ -98,6 +98,7 @@ import { ManageDiariesView } from "./views/ManageDiariesView";
 import { AgendaEventos } from "./components/AgendaEventos";
 import { LessonRatingsView } from "./views/LessonRatingsView";
 import { BadgesManagerView } from "./views/BadgesManagerView";
+import { FinancialManagementView } from "./views/FinancialManagementView";
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
@@ -2757,6 +2758,13 @@ export default function App() {
             classes={classes}
             users={users}
             onRemoveBadge={handleRemoveBadge}
+          />
+        ) : view === "financial_management" ? (
+          <FinancialManagementView 
+            users={users}
+            classes={classes}
+            currentUser={currentUser}
+            setView={setView}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-20 bg-white rounded-3xl border border-white/50">
