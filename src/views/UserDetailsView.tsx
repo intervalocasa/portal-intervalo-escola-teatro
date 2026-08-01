@@ -64,6 +64,7 @@ export const UserDetailsView = ({
   const [managingBadgeId, setManagingBadgeId] = useState<string | null>(null);
 
   if (!user) return null;
+  const isGestorOnly = currentUserRole === "Gestor";
 
   return (
     <motion.div
@@ -237,19 +238,21 @@ export const UserDetailsView = ({
                                   </span>
                                 </div>
 
-                                <div>
-                                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest text-right">Condição</p>
-                                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
-                                    c.studentPaymentTypes?.[user.id] === "Isento"
-                                      ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                      : "bg-teal-50 text-teal-700 border border-teal-200"
-                                  }`}>
-                                    {c.studentPaymentTypes?.[user.id] || "Pagante"}
-                                  </span>
-                                </div>
+                                {isGestorOnly && (
+                                  <div>
+                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest text-right">Condição</p>
+                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
+                                      c.studentPaymentTypes?.[user.id] === "Isento"
+                                        ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                        : "bg-teal-50 text-teal-700 border border-teal-200"
+                                    }`}>
+                                      {c.studentPaymentTypes?.[user.id] || "Pagante"}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
 
-                              {isGestor && (
+                              {isGestorOnly ? (
                                 <button
                                   onClick={() => {
                                     setEditEnrollmentInfo({
@@ -262,6 +265,19 @@ export const UserDetailsView = ({
                                   className="w-full py-1.5 px-3 bg-slate-50 hover:bg-slate-100 text-pro-teal rounded-lg transition-all text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200"
                                 >
                                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> Editar Matrícula / Condição
+                                </button>
+                              ) : isGestor && (
+                                <button
+                                  onClick={() => {
+                                    setEditEnrollmentInfo({
+                                      classId: c.id,
+                                      studentId: user.id,
+                                      date: c.enrollmentDates?.[user.id] || ""
+                                    });
+                                  }}
+                                  className="w-full py-1.5 px-3 bg-slate-50 hover:bg-slate-100 text-pro-teal rounded-lg transition-all text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> Editar Data de Matrícula
                                 </button>
                               )}
                             </div>

@@ -54,6 +54,7 @@ export const ClassDetailsView = ({
 
   const targetClass = classes.find(c => c.id === selectedClassId);
   const isGestorRole = role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor";
+  const isGestorOnly = role === "Gestor" || currentUser?.role === "Gestor";
   const classTeachers = useMemo(() => {
     return users.filter(u => targetClass?.teacherIds?.includes(u.id));
   }, [users, targetClass?.teacherIds]);
@@ -288,14 +289,16 @@ export const ClassDetailsView = ({
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <p className="text-sm font-black text-slate-700 uppercase tracking-tight leading-none">{getUserDisplayName(s)}</p>
-                              {targetClass.studentPaymentTypes?.[s.id] === "Isento" ? (
-                                <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
-                                  Isento
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-teal-50 text-teal-700 border border-teal-200">
-                                  Pagante
-                                </span>
+                              {isGestorOnly && (
+                                targetClass.studentPaymentTypes?.[s.id] === "Isento" ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                                    Isento
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-teal-50 text-teal-700 border border-teal-200">
+                                    Pagante
+                                  </span>
+                                )
                               )}
                             </div>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{getUserSecondaryName(s) || s.pronouns || "..."}</p>
@@ -513,33 +516,35 @@ export const ClassDetailsView = ({
                        />
                     </div>
 
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Condição do Aluno</label>
-                       <div className="grid grid-cols-2 gap-3">
-                         <button
-                           type="button"
-                           onClick={() => setEnrollmentProcess(prev => prev ? ({ ...prev, paymentType: "Pagante" }) : null)}
-                           className={`py-3.5 px-4 rounded-2xl font-black text-xs flex items-center justify-center gap-2 border transition-all ${
-                             enrollmentProcess.paymentType === "Pagante"
-                               ? "bg-pro-teal text-white border-pro-teal shadow-md"
-                               : "bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100"
-                           }`}
-                         >
-                           <DollarSign size={16} /> Pagante
-                         </button>
-                         <button
-                           type="button"
-                           onClick={() => setEnrollmentProcess(prev => prev ? ({ ...prev, paymentType: "Isento" }) : null)}
-                           className={`py-3.5 px-4 rounded-2xl font-black text-xs flex items-center justify-center gap-2 border transition-all ${
-                             enrollmentProcess.paymentType === "Isento"
-                               ? "bg-amber-500 text-white border-amber-500 shadow-md"
-                               : "bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100"
-                           }`}
-                         >
-                           <Award size={16} /> Isento
-                         </button>
-                       </div>
-                    </div>
+                    {isGestorOnly && (
+                      <div className="space-y-2">
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Condição do Aluno</label>
+                         <div className="grid grid-cols-2 gap-3">
+                           <button
+                             type="button"
+                             onClick={() => setEnrollmentProcess(prev => prev ? ({ ...prev, paymentType: "Pagante" }) : null)}
+                             className={`py-3.5 px-4 rounded-2xl font-black text-xs flex items-center justify-center gap-2 border transition-all ${
+                               enrollmentProcess.paymentType === "Pagante"
+                                 ? "bg-pro-teal text-white border-pro-teal shadow-md"
+                                 : "bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100"
+                             }`}
+                           >
+                             <DollarSign size={16} /> Pagante
+                           </button>
+                           <button
+                             type="button"
+                             onClick={() => setEnrollmentProcess(prev => prev ? ({ ...prev, paymentType: "Isento" }) : null)}
+                             className={`py-3.5 px-4 rounded-2xl font-black text-xs flex items-center justify-center gap-2 border transition-all ${
+                               enrollmentProcess.paymentType === "Isento"
+                                 ? "bg-amber-500 text-white border-amber-500 shadow-md"
+                                 : "bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100"
+                             }`}
+                           >
+                             <Award size={16} /> Isento
+                           </button>
+                         </div>
+                      </div>
+                    )}
 
                     <div className="flex gap-3 pt-2">
                       <button 
@@ -636,64 +641,66 @@ export const ClassDetailsView = ({
                   </div>
                 )}
 
-                <div className="p-4 bg-slate-50 rounded-2xl space-y-3 border border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Condição Financeira na Turma</span>
-                    <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase ${
-                      targetClass.studentPaymentTypes?.[selectedStudentForManagement.id] === "Isento"
-                        ? "bg-amber-100 text-amber-800"
-                        : "bg-teal-50 text-teal-700"
-                    }`}>
-                      {targetClass.studentPaymentTypes?.[selectedStudentForManagement.id] || "Pagante"}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!selectedClassId || !selectedStudentForManagement) return;
-                        try {
-                          await updateDoc(doc(db, "classes", selectedClassId), {
-                            [`studentPaymentTypes.${selectedStudentForManagement.id}`]: "Pagante"
-                          });
-                          showNotification("Aluno alterado para Pagante nesta turma!", "Sucesso", "success");
-                        } catch (err) {
-                          showNotification("Erro ao atualizar condição de pagamento.", "Erro", "error");
-                        }
-                      }}
-                      className={`py-2.5 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all ${
-                        (targetClass.studentPaymentTypes?.[selectedStudentForManagement.id] || "Pagante") === "Pagante"
-                          ? "bg-pro-teal text-white border-pro-teal shadow-md"
-                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      <DollarSign size={14} /> Definição: Pagante
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!selectedClassId || !selectedStudentForManagement) return;
-                        try {
-                          await updateDoc(doc(db, "classes", selectedClassId), {
-                            [`studentPaymentTypes.${selectedStudentForManagement.id}`]: "Isento"
-                          });
-                          showNotification("Aluno alterado para Isento nesta turma!", "Sucesso", "success");
-                        } catch (err) {
-                          showNotification("Erro ao atualizar condição de pagamento.", "Erro", "error");
-                        }
-                      }}
-                      className={`py-2.5 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all ${
+                {isGestorOnly && (
+                  <div className="p-4 bg-slate-50 rounded-2xl space-y-3 border border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Condição Financeira na Turma</span>
+                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase ${
                         targetClass.studentPaymentTypes?.[selectedStudentForManagement.id] === "Isento"
-                          ? "bg-amber-500 text-white border-amber-500 shadow-md"
-                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      <Award size={14} /> Definição: Isento
-                    </button>
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-teal-50 text-teal-700"
+                      }`}>
+                        {targetClass.studentPaymentTypes?.[selectedStudentForManagement.id] || "Pagante"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!selectedClassId || !selectedStudentForManagement) return;
+                          try {
+                            await updateDoc(doc(db, "classes", selectedClassId), {
+                              [`studentPaymentTypes.${selectedStudentForManagement.id}`]: "Pagante"
+                            });
+                            showNotification("Aluno alterado para Pagante nesta turma!", "Sucesso", "success");
+                          } catch (err) {
+                            showNotification("Erro ao atualizar condição de pagamento.", "Erro", "error");
+                          }
+                        }}
+                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all ${
+                          (targetClass.studentPaymentTypes?.[selectedStudentForManagement.id] || "Pagante") === "Pagante"
+                            ? "bg-pro-teal text-white border-pro-teal shadow-md"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        <DollarSign size={14} /> Definição: Pagante
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!selectedClassId || !selectedStudentForManagement) return;
+                          try {
+                            await updateDoc(doc(db, "classes", selectedClassId), {
+                              [`studentPaymentTypes.${selectedStudentForManagement.id}`]: "Isento"
+                            });
+                            showNotification("Aluno alterado para Isento nesta turma!", "Sucesso", "success");
+                          } catch (err) {
+                            showNotification("Erro ao atualizar condição de pagamento.", "Erro", "error");
+                          }
+                        }}
+                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all ${
+                          targetClass.studentPaymentTypes?.[selectedStudentForManagement.id] === "Isento"
+                            ? "bg-amber-500 text-white border-amber-500 shadow-md"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        <Award size={14} /> Definição: Isento
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {showConfirmExclude ? (
                   <motion.div 

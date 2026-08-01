@@ -2963,33 +2963,35 @@ export default function App() {
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Condição de Pagamento</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, paymentType: "Pagante"})}
-                      className={`py-3 px-3 rounded-xl font-black text-xs transition-all border ${
-                        (editEnrollmentInfo.paymentType || "Pagante") === "Pagante"
-                          ? "bg-pro-teal text-white border-pro-teal shadow-xs"
-                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      Pagante
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, paymentType: "Isento"})}
-                      className={`py-3 px-3 rounded-xl font-black text-xs transition-all border ${
-                        editEnrollmentInfo.paymentType === "Isento"
-                          ? "bg-amber-500 text-white border-amber-500 shadow-xs"
-                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      Isento
-                    </button>
+                {role === "Gestor" && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Condição de Pagamento</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, paymentType: "Pagante"})}
+                        className={`py-3 px-3 rounded-xl font-black text-xs transition-all border ${
+                          (editEnrollmentInfo.paymentType || "Pagante") === "Pagante"
+                            ? "bg-pro-teal text-white border-pro-teal shadow-xs"
+                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        Pagante
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, paymentType: "Isento"})}
+                        className={`py-3 px-3 rounded-xl font-black text-xs transition-all border ${
+                          editEnrollmentInfo.paymentType === "Isento"
+                            ? "bg-amber-500 text-white border-amber-500 shadow-xs"
+                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        Isento
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="flex gap-3">
                   <button
