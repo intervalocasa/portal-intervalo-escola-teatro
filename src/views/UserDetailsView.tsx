@@ -32,7 +32,7 @@ interface UserDetailsViewProps {
   currentUserRole?: string;
   isGestor: boolean;
   setSelectedEnrollmentDates: (dates: Record<string, string>) => void;
-  setEditEnrollmentInfo: (info: {classId: string, studentId: string, date: string} | null) => void;
+  setEditEnrollmentInfo: (info: {classId: string, studentId: string, date: string, paymentType?: "Pagante" | "Isento"} | null) => void;
   setRegType?: (role: UserRole) => void;
 }
 
@@ -226,30 +226,44 @@ export const UserDetailsView = ({
                           </div>
 
                           {user.role === "Aluno" && (
-                            <div className="pt-2 border-t border-slate-50 flex flex-col gap-1">
-                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Data de Matrícula</p>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-black text-slate-700">
-                                  {c.enrollmentDates?.[user.id] 
-                                    ? new Date(c.enrollmentDates[user.id] + 'T00:00:00').toLocaleDateString('pt-BR')
-                                    : "Não informada"}
-                                </span>
-                                {isGestor && (
-                                  <button
-                                    onClick={() => {
-                                      setEditEnrollmentInfo({
-                                        classId: c.id,
-                                        studentId: user.id,
-                                        date: c.enrollmentDates?.[user.id] || ""
-                                      });
-                                    }}
-                                    className="p-1.5 text-pro-teal hover:bg-pro-teal/5 rounded-md transition-all"
-                                    title="Editar Data"
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-                                  </button>
-                                )}
+                            <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Matrícula</p>
+                                  <span className="text-[10px] font-black text-slate-700">
+                                    {c.enrollmentDates?.[user.id] 
+                                      ? new Date(c.enrollmentDates[user.id] + 'T00:00:00').toLocaleDateString('pt-BR')
+                                      : "Não informada"}
+                                  </span>
+                                </div>
+
+                                <div>
+                                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest text-right">Condição</p>
+                                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
+                                    c.studentPaymentTypes?.[user.id] === "Isento"
+                                      ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                      : "bg-teal-50 text-teal-700 border border-teal-200"
+                                  }`}>
+                                    {c.studentPaymentTypes?.[user.id] || "Pagante"}
+                                  </span>
+                                </div>
                               </div>
+
+                              {isGestor && (
+                                <button
+                                  onClick={() => {
+                                    setEditEnrollmentInfo({
+                                      classId: c.id,
+                                      studentId: user.id,
+                                      date: c.enrollmentDates?.[user.id] || "",
+                                      paymentType: c.studentPaymentTypes?.[user.id] || "Pagante"
+                                    });
+                                  }}
+                                  className="w-full py-1.5 px-3 bg-slate-50 hover:bg-slate-100 text-pro-teal rounded-lg transition-all text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> Editar Matrícula / Condição
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

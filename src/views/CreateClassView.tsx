@@ -5,7 +5,7 @@
 
 import { motion } from "motion/react";
 import { Plus, X, UserCircle, Calendar, GraduationCap, ChevronDown, Check, ArrowLeft } from "lucide-react";
-import { User, ClassData } from "../types";
+import { User, ClassData, Course } from "../types";
 import { Logo, BackButton } from "../components/CommonComponents";
 import { getUserDisplayName } from "../lib/userUtils";
 import { FormEvent, useState, useRef, useEffect } from "react";
@@ -14,6 +14,7 @@ interface CreateClassViewProps {
   classData: ClassData;
   setClassData: (data: any) => void;
   users: User[];
+  courses?: Course[];
   handleClassSubmit: (e: FormEvent) => void;
   setView: (view: string) => void;
   setShowInactivationPopup: (show: boolean) => void;
@@ -26,6 +27,7 @@ export const CreateClassView = ({
   classData,
   setClassData,
   users,
+  courses = [],
   handleClassSubmit,
   setView,
   setShowInactivationPopup,
@@ -136,11 +138,21 @@ export const CreateClassView = ({
             <select
               value={classData.type}
               onChange={(e) => setClassData(prev => ({ ...prev, type: e.target.value }))}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal font-medium text-sm"
             >
-              <option value="Curso Livre Adultos">Curso Livre Adultos</option>
-              <option value="Curso Livre 60+">Curso Livre 60+</option>
-              <option value="Prática Profissional de Montagem">Prática Profissional de Montagem</option>
+              {courses.length > 0 ? (
+                courses.map(course => (
+                  <option key={course.id} value={course.name}>
+                    {course.name}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="Curso Livre Adultos">Curso Livre Adultos</option>
+                  <option value="Curso Livre 60+">Curso Livre 60+</option>
+                  <option value="Prática Profissional de Montagem">Prática Profissional de Montagem</option>
+                </>
+              )}
             </select>
           </div>
 

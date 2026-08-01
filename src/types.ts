@@ -130,6 +130,7 @@ export interface Class {
   teacherIds: string[];
   studentIds: string[];
   enrollmentDates?: Record<string, string>;
+  studentPaymentTypes?: Record<string, "Pagante" | "Isento">;
   year: string;
 }
 
@@ -209,3 +210,25 @@ export interface ClassData {
   time: string;
   startDate: string;
 }
+
+export interface CourseSyllabusFile {
+  name: string;
+  url: string; // base64 or download URL
+  type?: string;
+  size?: number;
+  uploadedAt?: string;
+}
+
+export interface Course {
+  id: string;
+  name: string; // "Curso Livre Adultos", "Curso Livre 60+", "Prática Profissional de Montagem", etc.
+  description?: string;
+  ageGroup?: string; // "Acima de 60 anos", "18 a 59 anos", "Livre", etc.
+  monthlyFee?: number; // Valor da mensalidade
+  durationType?: "continua" | "meses"; // Contínua ou quantidade de meses
+  durationMonths?: number; // Se durationType === "meses"
+  syllabusFile?: CourseSyllabusFile | null; // Ementa pedagógica em PDF/doc
+  createdAt?: any;
+  updatedAt?: any;
+}
+

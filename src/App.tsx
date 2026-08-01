@@ -76,7 +76,7 @@ import { analyzePedagogicalFeedback } from "./services/geminiService";
 import { THEME } from "./theme";
 import { BADGES } from "./constants/badges";
 import { InstallPWAModal } from "./components/InstallPWAModal";
-import { UserRole, User, Class, Diary, Evaluation, UserBadge } from "./types";
+import { UserRole, User, Class, Diary, Evaluation, UserBadge, Course } from "./types";
 import { Logo, LoadingScreen, DetailItem, BackButton } from "./components/CommonComponents";
 import { LoginView } from "./views/LoginView";
 import { GestorDashboard } from "./views/GestorDashboard";
@@ -99,6 +99,7 @@ import { AgendaEventos } from "./components/AgendaEventos";
 import { LessonRatingsView } from "./views/LessonRatingsView";
 import { BadgesManagerView } from "./views/BadgesManagerView";
 import { FinancialManagementView } from "./views/FinancialManagementView";
+import { CoursesManagementView } from "./views/CoursesManagementView";
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
@@ -1103,6 +1104,7 @@ export default function App() {
 
   const [viewingEvaluation, setViewingEvaluation] = useState<any>(null);
   const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const lastAvisoIdRef = useRef<string | null>(null);
 
   // Request Notification Permission
@@ -1200,6 +1202,52 @@ export default function App() {
       handleFirestoreError(err, OperationType.LIST, "avisos");
     });
 
+    const unsubscribeCourses = onSnapshot(collection(db, "cursos"), (snapshot) => {
+      const loadedCourses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Course));
+
+      if (loadedCourses.length === 0) {
+        // Seed default courses
+        const defaultCourses: Course[] = [
+          {
+            id: "curso_livre_adultos",
+            name: "Curso Livre Adultos",
+            description: "Desenvolvimento da expressão corporal, vocal e interpretação cênica para adultos.",
+            ageGroup: "Adultos (18 a 59 anos)",
+            monthlyFee: 250,
+            durationType: "continua",
+            syllabusFile: null
+          },
+          {
+            id: "curso_livre_60",
+            name: "Curso Livre 60+",
+            description: "Espaço de sociabilização, estímulo cognitivo, memorização e expressão teatral voltado para a melhor idade.",
+            ageGroup: "Acima de 60 anos",
+            monthlyFee: 250,
+            durationType: "continua",
+            syllabusFile: null
+          },
+          {
+            id: "pratica_profissional_montagem",
+            name: "Prática Profissional de Montagem",
+            description: "Vivência de montagem espetacular completa, da leitura de texto à temporada de apresentações em teatro.",
+            ageGroup: "A partir de 18 anos",
+            monthlyFee: 320,
+            durationType: "meses",
+            durationMonths: 10,
+            syllabusFile: null
+          }
+        ];
+
+        defaultCourses.forEach(async (c) => {
+          await setDoc(doc(db, "cursos", c.id), { ...c, createdAt: serverTimestamp() });
+        });
+      } else {
+        setCourses(loadedCourses);
+      }
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, "cursos");
+    });
+
     return () => {
       unsubscribeUsers();
       unsubscribeClasses();
@@ -1208,6 +1256,7 @@ export default function App() {
       unsubscribePedagogical();
       unsubscribeEvolutions();
       unsubscribeAnnouncements();
+      unsubscribeCourses();
     };
   }, [currentUser?.uid]); // Only re-run if the user ID changes
 
@@ -1220,10 +1269,10 @@ export default function App() {
   const [enrollmentModalClassId, setEnrollmentModalClassId] = useState<string | null>(null);
   const [enrollmentModalDate, setEnrollmentModalDate] = useState("");
 
-  const [editEnrollmentInfo, setEditEnrollmentInfo] = useState<{classId: string, studentId: string, date: string} | null>(null);
+  const [editEnrollmentInfo, setEditEnrollmentInfo] = useState<{classId: string, studentId: string, date: string, paymentType?: "Pagante" | "Isento"} | null>(null);
   const [showEnrollmentDeleteConfirm, setShowEnrollmentDeleteConfirm] = useState(false);
 
-  const handleUpdateEnrollmentDate = async (classId: string, studentId: string, newDate: string) => {
+  const handleUpdateEnrollmentDate = async (classId: string, studentId: string, newDate: string, paymentType?: "Pagante" | "Isento") => {
     setIsAppLoading(true);
     try {
       const cls = classes.find(c => c.id === classId);
@@ -1231,14 +1280,20 @@ export default function App() {
       
       const updatedEnrollmentDates = { ...(cls.enrollmentDates || {}) };
       updatedEnrollmentDates[studentId] = newDate;
+
+      const updatedPaymentTypes = { ...(cls.studentPaymentTypes || {}) };
+      if (paymentType) {
+        updatedPaymentTypes[studentId] = paymentType;
+      }
       
       await updateDoc(doc(db, "classes", classId), {
         enrollmentDates: updatedEnrollmentDates,
+        studentPaymentTypes: updatedPaymentTypes,
         updatedAt: serverTimestamp()
       });
-      showNotification("Data de matrícula atualizada!", "Sucesso");
+      showNotification("Informações da matrícula atualizadas!", "Sucesso");
     } catch (err: any) {
-      showNotification("Erro ao atualizar data: " + err.message, "Erro");
+      showNotification("Erro ao atualizar matrícula: " + err.message, "Erro");
     } finally {
       setIsAppLoading(false);
     }
@@ -2569,6 +2624,7 @@ export default function App() {
             setView={setView}
             setShowInactivationPopup={setShowInactivationPopup}
             users={users}
+            courses={courses}
             isAppLoading={isAppLoading}
           />
         ) : view === "classes_list" ? (
@@ -2591,6 +2647,7 @@ export default function App() {
             isEditing={true}
             handleDeleteClass={handleDeleteClass}
             users={users}
+            courses={courses}
             isAppLoading={isAppLoading}
           />
         ) : view === "class_details" ? (
@@ -2766,6 +2823,12 @@ export default function App() {
             currentUser={currentUser}
             setView={setView}
           />
+        ) : view === "courses" ? (
+          <CoursesManagementView 
+            courses={courses}
+            setView={setView}
+            currentUser={currentUser}
+          />
         ) : (
           <div className="flex-1 flex items-center justify-center p-20 bg-white rounded-3xl border border-white/50">
             <Logo className="h-12 w-auto grayscale opacity-20" />
@@ -2888,9 +2951,9 @@ export default function App() {
                 <p className="text-orange-50/70 text-[10px] mt-1 uppercase tracking-widest font-bold">Turma: {classes.find(c => c.id === editEnrollmentInfo.classId)?.code}</p>
               </div>
 
-               <div className="p-8 space-y-6">
+              <div className="p-8 space-y-6">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nova Data de Matrícula</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data de Matrícula</label>
                   <input
                     type="date"
                     required
@@ -2898,6 +2961,34 @@ export default function App() {
                     onChange={(e) => setEditEnrollmentInfo({...editEnrollmentInfo, date: e.target.value})}
                     className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-pro-orange outline-none font-bold text-sm transition-all"
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Condição de Pagamento</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, paymentType: "Pagante"})}
+                      className={`py-3 px-3 rounded-xl font-black text-xs transition-all border ${
+                        (editEnrollmentInfo.paymentType || "Pagante") === "Pagante"
+                          ? "bg-pro-teal text-white border-pro-teal shadow-xs"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      Pagante
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, paymentType: "Isento"})}
+                      className={`py-3 px-3 rounded-xl font-black text-xs transition-all border ${
+                        editEnrollmentInfo.paymentType === "Isento"
+                          ? "bg-amber-500 text-white border-amber-500 shadow-xs"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      Isento
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex gap-3">
@@ -2913,7 +3004,12 @@ export default function App() {
                   <button
                     onClick={() => {
                       if (editEnrollmentInfo.date) {
-                        handleUpdateEnrollmentDate(editEnrollmentInfo.classId, editEnrollmentInfo.studentId, editEnrollmentInfo.date);
+                        handleUpdateEnrollmentDate(
+                          editEnrollmentInfo.classId,
+                          editEnrollmentInfo.studentId,
+                          editEnrollmentInfo.date,
+                          editEnrollmentInfo.paymentType || "Pagante"
+                        );
                       }
                       setEditEnrollmentInfo(null);
                       setShowEnrollmentDeleteConfirm(false);

@@ -25,13 +25,14 @@ import {
   Check,
   RefreshCw,
   UserCheck,
-  UserX
+  UserX,
+  Award
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { User, Class } from "../types";
 import { BackButton, Avatar, Logo } from "../components/CommonComponents";
-import { collection, onSnapshot, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
 interface FinancialManagementViewProps {
@@ -60,6 +61,7 @@ export interface EnrollmentRecord {
   isClassActive: boolean;
   
   enrollmentDate: string; // YYYY-MM-DD
+  paymentType: "Pagante" | "Isento";
   isEnrollmentActive: boolean;
   statusLabel: "Ativa" | "Inativa";
 }
@@ -74,10 +76,11 @@ export interface PaymentRecord {
   year: number;
   amount: number; // e.g. 250
   dueDate: string; // YYYY-MM-DD
-  status: "Pago" | "Pendente" | "Atrasado";
+  status: "Pago" | "Pendente" | "Atrasado" | "Isento";
   paymentMethod?: "PIX" | "Cartão" | "Boleto" | "Dinheiro" | "Transferência";
   paidAt?: string;
   notes?: string;
+  isExempt?: boolean;
 }
 
 const MONTHS_PT = [
@@ -101,7 +104,7 @@ export const FinancialManagementView = ({
   // Pagamentos States
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"Todos" | "Pago" | "Pendente" | "Atrasado">("Todos");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"Todos" | "Pago" | "Pendente" | "Atrasado" | "Isento">("Todos");
   const [paymentSearch, setPaymentSearch] = useState("");
   const [dbPayments, setDbPayments] = useState<Record<string, any>>({});
   const [isUpdatingPayment, setIsUpdatingPayment] = useState<string | null>(null);
@@ -142,6 +145,8 @@ export const FinancialManagementView = ({
                         (student.createdAt?.toDate ? student.createdAt.toDate().toISOString().split('T')[0] : "") || 
                         "Data N/D";
 
+        const paymentType = c.studentPaymentTypes?.[sId] || "Pagante";
+
         records.push({
           id: `${sId}_${c.id}`,
           studentId: sId,
@@ -159,6 +164,7 @@ export const FinancialManagementView = ({
           classTime: c.time || "",
           isClassActive,
           enrollmentDate: dateStr,
+          paymentType,
           isEnrollmentActive,
           statusLabel: isEnrollmentActive ? "Ativa" : "Inativa"
         });
@@ -209,6 +215,8 @@ export const FinancialManagementView = ({
       const studentClasses = classes.filter(c => c.studentIds?.includes(student.id) && c.isActive);
       const classNameStr = studentClasses.map(c => `${c.type} (${c.code})`).join(", ") || "Sem turma";
 
+      const isAllExempt = studentClasses.length > 0 && studentClasses.every(c => c.studentPaymentTypes?.[student.id] === "Isento");
+
       const defaultDueDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-10`;
 
       if (saved) {
@@ -220,12 +228,13 @@ export const FinancialManagementView = ({
           className: classNameStr,
           month: selectedMonth,
           year: selectedYear,
-          amount: saved.amount ?? 250,
+          amount: isAllExempt ? 0 : (saved.amount ?? 250),
           dueDate: saved.dueDate || defaultDueDate,
-          status: saved.status || "Pendente",
+          status: saved.status || (isAllExempt ? "Isento" : "Pendente"),
           paymentMethod: saved.paymentMethod,
           paidAt: saved.paidAt,
-          notes: saved.notes
+          notes: saved.notes,
+          isExempt: isAllExempt
         };
       }
 
@@ -237,9 +246,10 @@ export const FinancialManagementView = ({
         className: classNameStr,
         month: selectedMonth,
         year: selectedYear,
-        amount: 250,
+        amount: isAllExempt ? 0 : 250,
         dueDate: defaultDueDate,
-        status: "Pendente"
+        status: isAllExempt ? "Isento" : "Pendente",
+        isExempt: isAllExempt
       };
     }).sort((a, b) => a.studentName.localeCompare(b.studentName, "pt-BR"));
   }, [users, classes, dbPayments, selectedMonth, selectedYear]);
@@ -823,6 +833,32 @@ export const FinancialManagementView = ({
                             </div>
                           </div>
 
+                          {/* Payment Condition Badge & Toggle */}
+                          <div className="shrink-0 text-center">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const newType = record.paymentType === "Isento" ? "Pagante" : "Isento";
+                                try {
+                                  await updateDoc(doc(db, "classes", record.classId), {
+                                    [`studentPaymentTypes.${record.studentId}`]: newType
+                                  });
+                                } catch (err) {
+                                  alert("Erro ao alterar condição de pagamento.");
+                                }
+                              }}
+                              title="Clique para alternar entre Pagante e Isento"
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black transition-all hover:scale-105 active:scale-95 shadow-xs cursor-pointer ${
+                                record.paymentType === "Isento"
+                                  ? "bg-amber-100 border border-amber-300 text-amber-800 hover:bg-amber-200"
+                                  : "bg-teal-50 border border-teal-200 text-teal-800 hover:bg-teal-100"
+                              }`}
+                            >
+                              <DollarSign size={12} />
+                              {record.paymentType}
+                            </button>
+                          </div>
+
                           {/* Status Badge */}
                           <div className="shrink-0">
                             {record.isEnrollmentActive ? (
@@ -939,7 +975,7 @@ export const FinancialManagementView = ({
               {/* Search & Filters */}
               <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col lg:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl w-full lg:w-auto">
-                  {(["Todos", "Pago", "Pendente", "Atrasado"] as const).map(st => (
+                  {(["Todos", "Pago", "Pendente", "Atrasado", "Isento"] as const).map(st => (
                     <button
                       key={st}
                       onClick={() => setPaymentStatusFilter(st)}
@@ -1009,11 +1045,16 @@ export const FinancialManagementView = ({
 
                           {/* Quick Action Button to toggle payment status */}
                           <div className="flex items-center gap-2">
-                            {item.status === "Pago" ? (
+                            {item.status === "Isento" ? (
+                              <span className="px-3.5 py-1.5 bg-amber-100 text-amber-800 border border-amber-300 rounded-xl font-black text-xs flex items-center gap-1.5">
+                                <Award size={14} />
+                                Isento
+                              </span>
+                            ) : item.status === "Pago" ? (
                               <button
                                 onClick={() => handleTogglePaymentStatus(item, "Pendente")}
                                 disabled={isUpdatingPayment === item.id}
-                                className="px-3.5 py-1.5 bg-emerald-50 hover:bg-rose-50 text-emerald-700 hover:text-rose-600 border border-emerald-200 hover:border-rose-200 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all group"
+                                className="px-3.5 py-1.5 bg-emerald-50 hover:bg-rose-50 text-emerald-700 hover:text-rose-600 border border-emerald-200 hover:border-rose-200 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all group cursor-pointer"
                                 title="Clique para marcar como pendente"
                               >
                                 <Check size={14} className="group-hover:hidden" />
@@ -1025,7 +1066,7 @@ export const FinancialManagementView = ({
                               <button
                                 onClick={() => handleTogglePaymentStatus(item, "Pago")}
                                 disabled={isUpdatingPayment === item.id}
-                                className="px-3.5 py-1.5 bg-[#016a86] hover:bg-[#004e63] text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm hover:scale-[1.02]"
+                                className="px-3.5 py-1.5 bg-[#016a86] hover:bg-[#004e63] text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm hover:scale-[1.02] cursor-pointer"
                               >
                                 <Check size={14} />
                                 <span>Marcar Pago</span>

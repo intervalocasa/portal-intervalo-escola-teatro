@@ -17,7 +17,8 @@ import {
   Star,
   Award,
   Database,
-  Wallet
+  Wallet,
+  GraduationCap
 } from "lucide-react";
 import { Logo, Avatar } from "../components/CommonComponents";
 import { AnnouncementPanel } from "../components/AnnouncementPanel";
@@ -83,6 +84,22 @@ export const GestorDashboard = ({
           />
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Cursos (Tipos de Turma) */}
+            <motion.button
+              onClick={() => setView("courses")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full p-6 bg-gradient-to-r from-emerald-600 to-teal-700 rounded-2xl flex items-center gap-5 text-white shadow-xl shadow-teal-900/10 transition-all text-left group"
+            >
+              <div className="bg-white/20 p-3 rounded-xl group-hover:scale-110 transition-transform">
+                <GraduationCap size={24} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-none">Cursos</div>
+                <div className="text-xs text-teal-100/80 mt-1">Tipos de turma, valores e ementas</div>
+              </div>
+            </motion.button>
+
             {/* Gestão Financeira */}
             <motion.button
               onClick={() => setView("financial_management")}
