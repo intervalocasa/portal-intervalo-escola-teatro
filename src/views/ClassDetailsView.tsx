@@ -5,7 +5,7 @@
 
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, UserCircle, Edit, Users, Calendar, Info, UserPlus, X, Search, Plus, LayoutGrid, MessageSquare, Pencil, DollarSign, Award } from "lucide-react";
+import { ArrowLeft, UserCircle, Edit, Users, Calendar, Info, UserPlus, X, Search, Plus, LayoutGrid, MessageSquare, Pencil, DollarSign, Award, Lock, UserCheck, UserX } from "lucide-react";
 import { Class, User, UserRole } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { MuralTurma } from "../components/MuralTurma";
@@ -53,7 +53,7 @@ export const ClassDetailsView = ({
   const [showConfirmExclude, setShowConfirmExclude] = useState(false);
 
   const targetClass = classes.find(c => c.id === selectedClassId);
-  const isGestorRole = role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor";
+  const isGestorRole = role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo";
   const isGestorOnly = role === "Gestor" || currentUser?.role === "Gestor";
   const classTeachers = useMemo(() => {
     return users.filter(u => targetClass?.teacherIds?.includes(u.id));
@@ -287,8 +287,18 @@ export const ClassDetailsView = ({
                             <Avatar src={s.photo} fallbackSize={24} className="w-full h-full rounded-none" />
                           </div>
                           <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <p className="text-sm font-black text-slate-700 uppercase tracking-tight leading-none">{getUserDisplayName(s)}</p>
+                              {targetClass.studentEnrollmentStatuses?.[s.id] === "Trancado" && (
+                                <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                                  Trancado(a)
+                                </span>
+                              )}
+                              {targetClass.studentEnrollmentStatuses?.[s.id] === "Inativo" && (
+                                <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200">
+                                  Inativo(a)
+                                </span>
+                              )}
                               {isGestorOnly && (
                                 targetClass.studentPaymentTypes?.[s.id] === "Isento" ? (
                                   <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
@@ -619,7 +629,23 @@ export const ClassDetailsView = ({
                     <Avatar src={selectedStudentForManagement.photo} fallbackSize={32} className="w-full h-full rounded-none" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black text-pro-teal uppercase tracking-widest mb-1">Status: Matriculado(a)</p>
+                    {(() => {
+                      const currentStatus = targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] || "Ativo";
+                      let statusLabel = "Status: Matriculado(a)";
+                      let statusColor = "text-pro-teal";
+                      if (currentStatus === "Trancado") {
+                        statusLabel = "Status: Trancado(a)";
+                        statusColor = "text-amber-600";
+                      } else if (currentStatus === "Inativo") {
+                        statusLabel = "Status: Inativo(a)";
+                        statusColor = "text-rose-600";
+                      }
+                      return (
+                        <p className={`text-[10px] font-black ${statusColor} uppercase tracking-widest mb-1`}>
+                          {statusLabel}
+                        </p>
+                      );
+                    })()}
                     <p className="text-lg font-black text-slate-800 uppercase tracking-tight truncate">
                       {selectedStudentForManagement.artisticName || selectedStudentForManagement.name}
                     </p>
@@ -642,7 +668,91 @@ export const ClassDetailsView = ({
                 )}
 
                 {isGestorOnly && (
-                  <div className="p-4 bg-slate-50 rounded-2xl space-y-3 border border-slate-100">
+                  <>
+                    <div className="p-4 bg-slate-50 rounded-2xl space-y-3 border border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status da Matrícula na Turma</span>
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase ${
+                          targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Trancado"
+                            ? "bg-amber-100 text-amber-800"
+                            : targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Inativo"
+                            ? "bg-rose-100 text-rose-800"
+                            : "bg-teal-50 text-teal-700"
+                        }`}>
+                          {targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] || "Ativo"}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!selectedClassId || !selectedStudentForManagement) return;
+                            try {
+                              await updateDoc(doc(db, "classes", selectedClassId), {
+                                [`studentEnrollmentStatuses.${selectedStudentForManagement.id}`]: "Ativo"
+                              });
+                              showNotification("Matrícula ativada com sucesso!", "Sucesso", "success");
+                            } catch (err) {
+                              showNotification("Erro ao atualizar status da matrícula.", "Erro", "error");
+                            }
+                          }}
+                          className={`py-2.5 px-2 rounded-xl font-extrabold text-[10px] uppercase flex items-center justify-center gap-1.5 border transition-all ${
+                            (!targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] || targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Ativo")
+                              ? "bg-pro-teal text-white border-pro-teal shadow-md"
+                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          <UserCheck size={13} /> Ativo
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!selectedClassId || !selectedStudentForManagement) return;
+                            try {
+                              await updateDoc(doc(db, "classes", selectedClassId), {
+                                [`studentEnrollmentStatuses.${selectedStudentForManagement.id}`]: "Trancado"
+                              });
+                              showNotification("Matrícula trancada com sucesso!", "Sucesso", "success");
+                            } catch (err) {
+                              showNotification("Erro ao atualizar status da matrícula.", "Erro", "error");
+                            }
+                          }}
+                          className={`py-2.5 px-2 rounded-xl font-extrabold text-[10px] uppercase flex items-center justify-center gap-1.5 border transition-all ${
+                            targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Trancado"
+                              ? "bg-amber-500 text-white border-amber-500 shadow-md"
+                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          <Lock size={13} /> Trancar
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!selectedClassId || !selectedStudentForManagement) return;
+                            try {
+                              await updateDoc(doc(db, "classes", selectedClassId), {
+                                [`studentEnrollmentStatuses.${selectedStudentForManagement.id}`]: "Inativo"
+                              });
+                              showNotification("Matrícula inativada com sucesso!", "Sucesso", "success");
+                            } catch (err) {
+                              showNotification("Erro ao atualizar status da matrícula.", "Erro", "error");
+                            }
+                          }}
+                          className={`py-2.5 px-2 rounded-xl font-extrabold text-[10px] uppercase flex items-center justify-center gap-1.5 border transition-all ${
+                            targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Inativo"
+                              ? "bg-rose-600 text-white border-rose-600 shadow-md"
+                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          <UserX size={13} /> Inativar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-slate-50 rounded-2xl space-y-3 border border-slate-100">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Condição Financeira na Turma</span>
                       <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase ${
@@ -700,7 +810,8 @@ export const ClassDetailsView = ({
                       </button>
                     </div>
                   </div>
-                )}
+                </>
+              )}
 
                 {showConfirmExclude ? (
                   <motion.div 

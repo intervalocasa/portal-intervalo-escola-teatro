@@ -128,7 +128,7 @@ export const ClassesListView = ({
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {(role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") && (
+                        {(role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo") && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();

@@ -230,8 +230,8 @@ export const RegisterEditUserView = ({
 
           <div className="space-y-1 col-span-full">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Usuário</label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-              {["Aluno", "Professor", "Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor"].map((t) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              {["Aluno", "Professor", "Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor", "Auxiliar Administrativo"].map((t) => (
                 <button
                   key={t}
                   type="button"

@@ -80,6 +80,7 @@ import { UserRole, User, Class, Diary, Evaluation, UserBadge, Course } from "./t
 import { Logo, LoadingScreen, DetailItem, BackButton } from "./components/CommonComponents";
 import { LoginView } from "./views/LoginView";
 import { GestorDashboard } from "./views/GestorDashboard";
+import { AuxiliarDashboard } from "./views/AuxiliarDashboard";
 import { ProfessorDashboard } from "./views/ProfessorDashboard";
 import { StudentDashboard } from "./views/StudentDashboard";
 import { UsersListView } from "./views/UsersListView";
@@ -100,6 +101,7 @@ import { LessonRatingsView } from "./views/LessonRatingsView";
 import { BadgesManagerView } from "./views/BadgesManagerView";
 import { FinancialManagementView } from "./views/FinancialManagementView";
 import { CoursesManagementView } from "./views/CoursesManagementView";
+import { ExperimentalClassesView } from "./views/ExperimentalClassesView";
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
@@ -1121,7 +1123,7 @@ export default function App() {
     const userRole = currentUsers.find(u => u.id === currentUserId)?.role;
     let shouldNotify = false;
 
-    if (userRole === "Gestor" || userRole === "Diretor Pedagógico") shouldNotify = true;
+    if (userRole === "Gestor" || userRole === "Diretor Pedagógico" || userRole === "Auxiliar Administrativo") shouldNotify = true;
     else if (aviso.targetSpecificUsers) {
       shouldNotify = aviso.targetUserIds?.includes(currentUserId);
     } else {
@@ -1269,10 +1271,16 @@ export default function App() {
   const [enrollmentModalClassId, setEnrollmentModalClassId] = useState<string | null>(null);
   const [enrollmentModalDate, setEnrollmentModalDate] = useState("");
 
-  const [editEnrollmentInfo, setEditEnrollmentInfo] = useState<{classId: string, studentId: string, date: string, paymentType?: "Pagante" | "Isento"} | null>(null);
+  const [editEnrollmentInfo, setEditEnrollmentInfo] = useState<{classId: string, studentId: string, date: string, paymentType?: "Pagante" | "Isento", status?: "Ativo" | "Trancado" | "Inativo"} | null>(null);
   const [showEnrollmentDeleteConfirm, setShowEnrollmentDeleteConfirm] = useState(false);
 
-  const handleUpdateEnrollmentDate = async (classId: string, studentId: string, newDate: string, paymentType?: "Pagante" | "Isento") => {
+  const handleUpdateEnrollmentDate = async (
+    classId: string, 
+    studentId: string, 
+    newDate: string, 
+    paymentType?: "Pagante" | "Isento",
+    status?: "Ativo" | "Trancado" | "Inativo"
+  ) => {
     setIsAppLoading(true);
     try {
       const cls = classes.find(c => c.id === classId);
@@ -1285,10 +1293,16 @@ export default function App() {
       if (paymentType) {
         updatedPaymentTypes[studentId] = paymentType;
       }
+
+      const updatedStatuses = { ...(cls.studentEnrollmentStatuses || {}) };
+      if (status) {
+        updatedStatuses[studentId] = status;
+      }
       
       await updateDoc(doc(db, "classes", classId), {
         enrollmentDates: updatedEnrollmentDates,
         studentPaymentTypes: updatedPaymentTypes,
+        studentEnrollmentStatuses: updatedStatuses,
         updatedAt: serverTimestamp()
       });
       showNotification("Informações da matrícula atualizadas!", "Sucesso");
@@ -1365,7 +1379,7 @@ export default function App() {
 
     // 2. Check target for current user role
     const userRole = users.find(u => u.id === currentUser?.uid)?.role;
-    if (userRole === "Gestor" || userRole === "Diretor Pedagógico") return true; // Gestor/Diretor sees everything
+    if (userRole === "Gestor" || userRole === "Diretor Pedagógico" || userRole === "Auxiliar Administrativo") return true; // Gestor/Diretor/Auxiliar sees everything
     
     // 3. Check if it's targeted for specific users
     if (aviso.targetSpecificUsers) {
@@ -1875,7 +1889,7 @@ export default function App() {
       const { initialPassword, ...userDataRest } = formData;
       const dataToSave = {
         ...userDataRest,
-        role: (view === "register" || (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor"))) ? regType : (view === "edit_user" ? (users.find(u => u.id === selectedUserId)?.role || "Aluno") : role),
+        role: (view === "register" || (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo"))) ? regType : (view === "edit_user" ? (users.find(u => u.id === selectedUserId)?.role || "Aluno") : role),
         email: formData.email.toLowerCase(),
         photo: photoPreview,
         updatedAt: serverTimestamp()
@@ -1900,7 +1914,7 @@ export default function App() {
       }
 
       // Synchronize Classes
-      if ((role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") && studentId) {
+      if ((role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo") && studentId) {
         const userType = (view === "register" || view === "edit_user") ? regType : users.find(u => u.id === studentId)?.role;
         for (const c of classes) {
           if (userType === "Professor" || userType === "Diretor Pedagógico e Professor") {
@@ -2552,6 +2566,16 @@ export default function App() {
               onAwardBadge={handleAwardBadge}
               onHealDatabase={healDatabaseAndRelations}
             />
+          ) : role === "Auxiliar Administrativo" ? (
+            <AuxiliarDashboard 
+              currentUser={currentUser}
+              users={users}
+              handleLogout={handleLogout}
+              setView={setView}
+              handleResetUserForm={handleResetUserForm}
+              filteredAnnouncements={filteredAnnouncements}
+              onAwardBadge={handleAwardBadge}
+            />
           ) : role === "Professor" ? (
             <ProfessorDashboard 
               currentUser={currentUser}
@@ -2610,7 +2634,7 @@ export default function App() {
             onRemoveBadge={handleRemoveBadge}
             selectedUserBadges={selectedUserBadges}
             currentUserRole={role || undefined}
-            isGestor={role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor"}
+            isGestor={role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo"}
             setSelectedClassId={setSelectedClassId}
             setSelectedEnrollmentDates={setSelectedEnrollmentDates}
             setEditEnrollmentInfo={setEditEnrollmentInfo}
@@ -2677,7 +2701,7 @@ export default function App() {
             setSelectedUserClasses={setSelectedUserClasses}
             handleRegisterSubmit={handleRegisterSubmit}
             setView={setView}
-            isGestor={role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor"}
+            isGestor={role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo"}
             regType={regType}
             setRegType={setRegType}
             role={role}
@@ -2686,7 +2710,7 @@ export default function App() {
             currentUser={currentUser}
             selectedUserId={selectedUserId}
             setShowPasswordModal={(show) => {
-              if (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") && selectedUserId !== currentUser?.uid) {
+              if (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo") && selectedUserId !== currentUser?.uid) {
                 setGestorResettingUid(selectedUserId);
               } else {
                 setShowPasswordModal(show);
@@ -2830,6 +2854,13 @@ export default function App() {
             currentUser={currentUser}
             showNotification={showNotification}
           />
+        ) : view === "experimental_classes" ? (
+          <ExperimentalClassesView 
+            setView={setView}
+            courses={courses}
+            classes={classes}
+            showNotification={showNotification}
+          />
         ) : (
           <div className="flex-1 flex items-center justify-center p-20 bg-white rounded-3xl border border-white/50">
             <Logo className="h-12 w-auto grayscale opacity-20" />
@@ -2965,33 +2996,74 @@ export default function App() {
                 </div>
 
                 {role === "Gestor" && (
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Condição de Pagamento</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, paymentType: "Pagante"})}
-                        className={`py-3 px-3 rounded-xl font-black text-xs transition-all border ${
-                          (editEnrollmentInfo.paymentType || "Pagante") === "Pagante"
-                            ? "bg-pro-teal text-white border-pro-teal shadow-xs"
-                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                        }`}
-                      >
-                        Pagante
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, paymentType: "Isento"})}
-                        className={`py-3 px-3 rounded-xl font-black text-xs transition-all border ${
-                          editEnrollmentInfo.paymentType === "Isento"
-                            ? "bg-amber-500 text-white border-amber-500 shadow-xs"
-                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                        }`}
-                      >
-                        Isento
-                      </button>
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status da Matrícula</label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, status: "Ativo"})}
+                          className={`py-2.5 px-2 rounded-xl font-black text-[10px] uppercase transition-all border ${
+                            (editEnrollmentInfo.status || "Ativo") === "Ativo"
+                              ? "bg-pro-teal text-white border-pro-teal shadow-xs"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          Ativo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, status: "Trancado"})}
+                          className={`py-2.5 px-2 rounded-xl font-black text-[10px] uppercase transition-all border ${
+                            editEnrollmentInfo.status === "Trancado"
+                              ? "bg-amber-500 text-white border-amber-500 shadow-xs"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          Trancar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, status: "Inativo"})}
+                          className={`py-2.5 px-2 rounded-xl font-black text-[10px] uppercase transition-all border ${
+                            editEnrollmentInfo.status === "Inativo"
+                              ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          Inativar
+                        </button>
+                      </div>
                     </div>
-                  </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Condição de Pagamento</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, paymentType: "Pagante"})}
+                          className={`py-3 px-3 rounded-xl font-black text-xs transition-all border ${
+                            (editEnrollmentInfo.paymentType || "Pagante") === "Pagante"
+                              ? "bg-pro-teal text-white border-pro-teal shadow-xs"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          Pagante
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, paymentType: "Isento"})}
+                          className={`py-3 px-3 rounded-xl font-black text-xs transition-all border ${
+                            editEnrollmentInfo.paymentType === "Isento"
+                              ? "bg-amber-500 text-white border-amber-500 shadow-xs"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          Isento
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 <div className="flex gap-3">
@@ -3011,7 +3083,8 @@ export default function App() {
                           editEnrollmentInfo.classId,
                           editEnrollmentInfo.studentId,
                           editEnrollmentInfo.date,
-                          editEnrollmentInfo.paymentType || "Pagante"
+                          editEnrollmentInfo.paymentType || "Pagante",
+                          editEnrollmentInfo.status || "Ativo"
                         );
                       }
                       setEditEnrollmentInfo(null);

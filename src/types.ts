@@ -29,7 +29,7 @@ export interface Announcement {
   createdAt: any;
 }
 
-export type UserRole = "Aluno" | "Professor" | "Gestor" | "Diretor Pedagógico" | "Diretor Pedagógico e Professor";
+export type UserRole = "Aluno" | "Professor" | "Gestor" | "Diretor Pedagógico" | "Diretor Pedagógico e Professor" | "Auxiliar Administrativo";
 
 export interface Badge {
   id: string;
@@ -131,6 +131,7 @@ export interface Class {
   studentIds: string[];
   enrollmentDates?: Record<string, string>;
   studentPaymentTypes?: Record<string, "Pagante" | "Isento">;
+  studentEnrollmentStatuses?: Record<string, "Ativo" | "Trancado" | "Inativo">;
   year: string;
 }
 
@@ -230,5 +231,33 @@ export interface Course {
   syllabusFile?: CourseSyllabusFile | null; // Ementa pedagógica em PDF/doc
   createdAt?: any;
   updatedAt?: any;
+}
+
+export interface RescheduleRecord {
+  previousDate: string;
+  newDate: string;
+  previousTime?: string;
+  newTime?: string;
+  reason: string;
+  updatedAt: any;
+}
+
+export interface ExperimentalClassBooking {
+  id: string;
+  studentName: string;
+  course: string;
+  classGroup: string;
+  classTime: string;
+  date: string; // YYYY-MM-DD
+  dayOfWeek: string;
+  status: "PAGAMENTO_PENDENTE" | "AGENDAMENTO_CONFIRMADO";
+  paymentReceiptUrl: string | null;
+  rescheduleCount: number;
+  rescheduleHistory: RescheduleRecord[];
+  createdAt: any;
+  updatedAt: any;
+  studentEmail?: string;
+  studentPhone?: string;
+  notes?: string;
 }
 

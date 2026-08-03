@@ -32,7 +32,7 @@ interface UserDetailsViewProps {
   currentUserRole?: string;
   isGestor: boolean;
   setSelectedEnrollmentDates: (dates: Record<string, string>) => void;
-  setEditEnrollmentInfo: (info: {classId: string, studentId: string, date: string, paymentType?: "Pagante" | "Isento"} | null) => void;
+  setEditEnrollmentInfo: (info: {classId: string, studentId: string, date: string, paymentType?: "Pagante" | "Isento", status?: "Ativo" | "Trancado" | "Inativo"} | null) => void;
   setRegType?: (role: UserRole) => void;
 }
 
@@ -238,6 +238,19 @@ export const UserDetailsView = ({
                                   </span>
                                 </div>
 
+                                {c.studentEnrollmentStatuses?.[user.id] && c.studentEnrollmentStatuses[user.id] !== "Ativo" && (
+                                  <div>
+                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest text-right">Status</p>
+                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
+                                      c.studentEnrollmentStatuses[user.id] === "Trancado"
+                                        ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                        : "bg-rose-100 text-rose-800 border border-rose-200"
+                                    }`}>
+                                      {c.studentEnrollmentStatuses[user.id]}
+                                    </span>
+                                  </div>
+                                )}
+
                                 {isGestorOnly && (
                                   <div>
                                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest text-right">Condição</p>
@@ -259,7 +272,8 @@ export const UserDetailsView = ({
                                       classId: c.id,
                                       studentId: user.id,
                                       date: c.enrollmentDates?.[user.id] || "",
-                                      paymentType: c.studentPaymentTypes?.[user.id] || "Pagante"
+                                      paymentType: c.studentPaymentTypes?.[user.id] || "Pagante",
+                                      status: c.studentEnrollmentStatuses?.[user.id] || "Ativo"
                                     });
                                   }}
                                   className="w-full py-1.5 px-3 bg-slate-50 hover:bg-slate-100 text-pro-teal rounded-lg transition-all text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200"
@@ -272,7 +286,8 @@ export const UserDetailsView = ({
                                     setEditEnrollmentInfo({
                                       classId: c.id,
                                       studentId: user.id,
-                                      date: c.enrollmentDates?.[user.id] || ""
+                                      date: c.enrollmentDates?.[user.id] || "",
+                                      status: c.studentEnrollmentStatuses?.[user.id] || "Ativo"
                                     });
                                   }}
                                   className="w-full py-1.5 px-3 bg-slate-50 hover:bg-slate-100 text-pro-teal rounded-lg transition-all text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200"
