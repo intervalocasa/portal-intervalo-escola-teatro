@@ -25,7 +25,8 @@ import {
   Eye, 
   History,
   Sparkles,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle
 } from "lucide-react";
 import { 
   collection, 
@@ -95,6 +96,10 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const [receiptViewingBooking, setReceiptViewingBooking] = useState<ExperimentalClassBooking | null>(null);
   const [uploadingBookingId, setUploadingBookingId] = useState<string | null>(null);
 
+  // Manual Confirmation Modal State
+  const [manualConfirmBooking, setManualConfirmBooking] = useState<ExperimentalClassBooking | null>(null);
+  const [manualConfirmReasonInput, setManualConfirmReasonInput] = useState("");
+
   // Form State
   const [studentName, setStudentName] = useState("");
   const [studentEmail, setStudentEmail] = useState("");
@@ -106,6 +111,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const [dayOfWeek, setDayOfWeek] = useState("");
   const [status, setStatus] = useState<"PAGAMENTO_PENDENTE" | "AGENDAMENTO_CONFIRMADO">("PAGAMENTO_PENDENTE");
   const [notes, setNotes] = useState("");
+  const [manualConfirmationReason, setManualConfirmationReason] = useState("");
 
   // Reschedule state
   const [rescheduleReason, setRescheduleReason] = useState("");
@@ -147,6 +153,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setDayOfWeek(getDayOfWeekInPortuguese(today));
     setStatus("PAGAMENTO_PENDENTE");
     setNotes("");
+    setManualConfirmationReason("");
     setRescheduleReason("");
     setEditingBooking(null);
   };
@@ -168,6 +175,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setDayOfWeek(booking.dayOfWeek || getDayOfWeekInPortuguese(booking.date || ""));
     setStatus(booking.status || "PAGAMENTO_PENDENTE");
     setNotes(booking.notes || "");
+    setManualConfirmationReason(booking.manualConfirmationReason || "");
     setRescheduleReason("");
     setIsCreateModalOpen(false);
   };
@@ -188,6 +196,11 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       return;
     }
 
+    if (status === "AGENDAMENTO_CONFIRMADO" && !manualConfirmationReason.trim()) {
+      showNotification?.("Para confirmar o agendamento sem comprovante, é necessário preencher a justificativa por extenso.", "Campo Obrigatório", "error");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const computedDayOfWeek = dayOfWeek || getDayOfWeekInPortuguese(date);
@@ -202,6 +215,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         dayOfWeek: computedDayOfWeek,
         status: status,
         paymentReceiptUrl: null,
+        manualConfirmationReason: status === "AGENDAMENTO_CONFIRMADO" ? manualConfirmationReason.trim() : null,
         rescheduleCount: 0,
         rescheduleHistory: [],
         notes: notes.trim() || null,
@@ -245,6 +259,11 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       }
     }
 
+    if (status === "AGENDAMENTO_CONFIRMADO" && !editingBooking.paymentReceiptUrl && !manualConfirmationReason.trim()) {
+      showNotification?.("Para confirmar o agendamento sem comprovante, informe a justificativa por extenso.", "Campo Obrigatório", "error");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const computedDayOfWeek = getDayOfWeekInPortuguese(date);
@@ -273,6 +292,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         date: date,
         dayOfWeek: computedDayOfWeek,
         status: status,
+        manualConfirmationReason: status === "AGENDAMENTO_CONFIRMADO" ? (manualConfirmationReason.trim() || editingBooking.manualConfirmationReason || null) : null,
         rescheduleCount: updatedRescheduleCount,
         rescheduleHistory: updatedRescheduleHistory,
         notes: notes.trim() || null,
@@ -286,6 +306,34 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     } catch (err) {
       console.error("Error updating booking:", err);
       showNotification?.("Erro ao atualizar agendamento.", "Erro", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Submit Direct Manual Confirmation Modal
+  const handleConfirmManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualConfirmBooking) return;
+
+    if (!manualConfirmReasonInput.trim()) {
+      showNotification?.("Por favor, insira a justificativa por extenso.", "Campo Obrigatório", "error");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await updateDoc(doc(db, "experimental_classes", manualConfirmBooking.id), {
+        status: "AGENDAMENTO_CONFIRMADO",
+        manualConfirmationReason: manualConfirmReasonInput.trim(),
+        updatedAt: serverTimestamp()
+      });
+      showNotification?.("Agendamento confirmado manualmente com sucesso!", "Sucesso", "success");
+      setManualConfirmBooking(null);
+      setManualConfirmReasonInput("");
+    } catch (err) {
+      console.error("Error confirming booking manually:", err);
+      showNotification?.("Erro ao confirmar agendamento.", "Erro", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -491,7 +539,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   <th className="py-4 px-6">Turma & Horário</th>
                   <th className="py-4 px-6">Data & Dia</th>
                   <th className="py-4 px-6">Status</th>
-                  <th className="py-4 px-6 text-center">Comprovante</th>
+                  <th className="py-4 px-6 text-center">Comprovante / Confirmação</th>
                   <th className="py-4 px-6 text-right">Ações</th>
                 </tr>
               </thead>
@@ -542,9 +590,16 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     {/* Status Badge */}
                     <td className="py-4 px-6">
                       {b.status === "AGENDAMENTO_CONFIRMADO" ? (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-teal-50 text-teal-700 border border-teal-200">
-                          <CheckCircle2 size={12} /> Confirmado
-                        </span>
+                        <div className="space-y-1">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-teal-50 text-teal-700 border border-teal-200">
+                            <CheckCircle2 size={12} /> Confirmado
+                          </span>
+                          {b.manualConfirmationReason && (
+                            <p className="text-[10px] text-slate-500 font-medium italic max-w-xs truncate" title={b.manualConfirmationReason}>
+                              Justificativa: "{b.manualConfirmationReason}"
+                            </p>
+                          )}
+                        </div>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
                           <Clock size={12} /> Pagamento Pendente
@@ -552,32 +607,51 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                       )}
                     </td>
 
-                    {/* Comprovante */}
+                    {/* Comprovante / Confirmação Manual */}
                     <td className="py-4 px-6 text-center">
-                      {b.paymentReceiptUrl ? (
-                        <button
-                          onClick={() => setReceiptViewingBooking(b)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-black uppercase transition-all"
-                          title="Visualizar Comprovante"
-                        >
-                          <FileText size={12} className="text-pro-teal" /> Ver Anexo
-                        </button>
-                      ) : (
-                        <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase transition-all border border-amber-200">
-                          {uploadingBookingId === b.id ? (
-                            <span className="animate-spin w-3 h-3 border-2 border-amber-700 border-t-transparent rounded-full"></span>
-                          ) : (
-                            <Upload size={12} />
-                          )}
-                          Enviar
-                          <input
-                            type="file"
-                            accept="image/*,application/pdf"
-                            onChange={(e) => handleFileUpload(b, e)}
-                            className="hidden"
-                          />
-                        </label>
-                      )}
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        {b.paymentReceiptUrl ? (
+                          <button
+                            onClick={() => setReceiptViewingBooking(b)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-black uppercase transition-all"
+                            title="Visualizar Comprovante"
+                          >
+                            <FileText size={12} className="text-pro-teal" /> Ver Anexo
+                          </button>
+                        ) : b.status === "PAGAMENTO_PENDENTE" ? (
+                          <div className="flex items-center gap-1.5">
+                            <label className="cursor-pointer inline-flex items-center gap-1 px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase transition-all border border-amber-200">
+                              {uploadingBookingId === b.id ? (
+                                <span className="animate-spin w-3 h-3 border-2 border-amber-700 border-t-transparent rounded-full"></span>
+                              ) : (
+                                <Upload size={12} />
+                              )}
+                              Enviar Comprovante
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                onChange={(e) => handleFileUpload(b, e)}
+                                className="hidden"
+                              />
+                            </label>
+
+                            <button
+                              onClick={() => {
+                                setManualConfirmBooking(b);
+                                setManualConfirmReasonInput("");
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg text-[10px] font-black uppercase transition-all border border-teal-200"
+                              title="Confirmar manualmente com justificativa por extenso"
+                            >
+                              <CheckCircle size={12} className="text-teal-600" /> Confirmar Manualmente
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">
+                            Confirmado {b.manualConfirmationReason ? "manualmente" : "com comprovante"}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Ações */}
@@ -657,13 +731,19 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   </div>
                 </div>
 
+                {b.manualConfirmationReason && (
+                  <div className="text-[10px] font-medium text-slate-600 bg-teal-50/60 p-2 rounded-lg border border-teal-100 italic">
+                    <span className="font-black not-italic text-teal-800">Justificativa manual:</span> "{b.manualConfirmationReason}"
+                  </div>
+                )}
+
                 {(b.rescheduleCount || 0) > 0 && (
                   <div className="text-[10px] font-bold text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-200 flex items-center gap-1">
                     <History size={12} /> {b.rescheduleCount} reagendamento(s) realizado(s)
                   </div>
                 )}
 
-                <div className="flex items-center justify-between pt-1 gap-2">
+                <div className="flex flex-wrap items-center justify-between pt-1 gap-2">
                   {b.paymentReceiptUrl ? (
                     <button
                       onClick={() => setReceiptViewingBooking(b)}
@@ -671,19 +751,30 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     >
                       <FileText size={12} /> Ver Comprovante
                     </button>
-                  ) : (
-                    <label className="cursor-pointer px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold flex items-center gap-1 border border-amber-200">
-                      <Upload size={12} /> Enviar Comprovante
-                      <input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        onChange={(e) => handleFileUpload(b, e)}
-                        className="hidden"
-                      />
-                    </label>
-                  )}
+                  ) : b.status === "PAGAMENTO_PENDENTE" ? (
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <label className="cursor-pointer px-2.5 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-[10px] font-black uppercase flex items-center gap-1 border border-amber-200">
+                        <Upload size={12} /> Comprovante
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          onChange={(e) => handleFileUpload(b, e)}
+                          className="hidden"
+                        />
+                      </label>
+                      <button
+                        onClick={() => {
+                          setManualConfirmBooking(b);
+                          setManualConfirmReasonInput("");
+                        }}
+                        className="px-2.5 py-1.5 bg-teal-50 text-teal-800 rounded-lg text-[10px] font-black uppercase flex items-center gap-1 border border-teal-200"
+                      >
+                        <CheckCircle size={12} /> Confirmar Manualmente
+                      </button>
+                    </div>
+                  ) : null}
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 ml-auto">
                     <button
                       onClick={() => openEditModal(b)}
                       className="p-2 bg-slate-100 text-pro-teal rounded-lg font-bold"
@@ -705,6 +796,90 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           </div>
         </div>
       )}
+
+      {/* MANUAL CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {manualConfirmBooking && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-100 relative space-y-4"
+            >
+              <button
+                onClick={() => {
+                  setManualConfirmBooking(null);
+                  setManualConfirmReasonInput("");
+                }}
+                className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-all"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-teal-50 text-pro-teal rounded-2xl">
+                  <CheckCircle size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">Confirmação Manual do Agendamento</h3>
+                  <p className="text-xs font-bold text-slate-400">
+                    Aluno(a): {manualConfirmBooking.studentName} ({manualConfirmBooking.course})
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-teal-50/50 border border-teal-100 rounded-2xl text-xs text-slate-600 space-y-1">
+                <p className="font-bold text-teal-900">Confirmação sem comprovante de pagamento</p>
+                <p>
+                  Para confirmar a aula experimental sem a necessidade de upload de comprovante, insira uma justificativa detalhada por extenso abaixo.
+                </p>
+              </div>
+
+              <form onSubmit={handleConfirmManualSubmit} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">
+                    Justificativa por Extenso *
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    placeholder="Ex: Pagamento realizado em dinheiro presencialmente na secretaria com autorização da gestão..."
+                    value={manualConfirmReasonInput}
+                    onChange={(e) => setManualConfirmReasonInput(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-pro-teal"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualConfirmBooking(null);
+                      setManualConfirmReasonInput("");
+                    }}
+                    className="px-5 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold uppercase"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-6 py-2.5 bg-pro-teal hover:bg-teal-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all flex items-center gap-2"
+                  >
+                    {isSubmitting ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    Confirmar Agendamento
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* CREATE & EDIT MODAL */}
       <AnimatePresence>
@@ -934,6 +1109,30 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     <option value="AGENDAMENTO_CONFIRMADO">Agendamento Confirmado</option>
                   </select>
                 </div>
+
+                {/* Justificativa de Confirmação Manual se Status for Confirmado sem Comprovante */}
+                {status === "AGENDAMENTO_CONFIRMADO" && !editingBooking?.paymentReceiptUrl && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    className="p-4 bg-teal-50 border border-teal-200 rounded-2xl space-y-2"
+                  >
+                    <label className="text-[10px] font-black uppercase tracking-widest text-teal-900 block">
+                      Justificativa da Confirmação Manual *
+                    </label>
+                    <p className="text-[11px] text-teal-700">
+                      Como o agendamento está sendo confirmado sem o upload de comprovante, insira a justificativa por extenso.
+                    </p>
+                    <textarea
+                      required
+                      rows={2}
+                      placeholder="Ex: Pagamento efetuado em dinheiro presencialmente na recepção..."
+                      value={manualConfirmationReason}
+                      onChange={(e) => setManualConfirmationReason(e.target.value)}
+                      className="w-full p-3 bg-white border border-teal-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-teal-600"
+                    />
+                  </motion.div>
+                )}
 
                 {/* Observações */}
                 <div>
