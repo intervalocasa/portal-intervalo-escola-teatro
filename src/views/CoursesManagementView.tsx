@@ -33,6 +33,7 @@ interface CoursesManagementViewProps {
   courses: Course[];
   setView: (view: any) => void;
   currentUser: any;
+  showNotification?: (message: string, title?: string, type?: "success" | "warning" | "error") => void;
 }
 
 const AGE_GROUP_SUGGESTIONS = [
@@ -47,7 +48,8 @@ const AGE_GROUP_SUGGESTIONS = [
 export const CoursesManagementView = ({
   courses,
   setView,
-  currentUser
+  currentUser,
+  showNotification
 }: CoursesManagementViewProps) => {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -147,7 +149,11 @@ export const CoursesManagementView = ({
   const handleSaveCourse = async (e: FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
-      alert("Por favor, informe o nome do curso / tipo de turma.");
+      if (showNotification) {
+        showNotification("Por favor, informe o nome do curso / tipo de turma.", "Aviso", "warning");
+      } else {
+        alert("Por favor, informe o nome do curso / tipo de turma.");
+      }
       return;
     }
 
@@ -157,17 +163,25 @@ export const CoursesManagementView = ({
       const courseRef = doc(db, "cursos", courseId);
 
       const feeNumber = formMonthlyFee ? parseFloat(formMonthlyFee.replace(",", ".")) : 0;
-      const durationMonthsNum = formDurationType === "meses" ? parseInt(formDurationMonths, 10) || 6 : null;
+      const durationMonthsNum = formDurationType === "meses" ? (parseInt(formDurationMonths, 10) || 6) : null;
 
-      const courseData: Course = {
+      const cleanedSyllabusFile = formSyllabusFile ? {
+        name: formSyllabusFile.name || "",
+        url: formSyllabusFile.url || "",
+        type: formSyllabusFile.type || "application/pdf",
+        size: formSyllabusFile.size || 0,
+        uploadedAt: formSyllabusFile.uploadedAt || new Date().toLocaleDateString("pt-BR")
+      } : null;
+
+      const courseData: Record<string, any> = {
         id: courseId,
         name: formName.trim(),
         description: formDescription.trim(),
         ageGroup: formAgeGroup.trim(),
         monthlyFee: isNaN(feeNumber) ? 0 : feeNumber,
         durationType: formDurationType,
-        durationMonths: durationMonthsNum || undefined,
-        syllabusFile: formSyllabusFile || null,
+        durationMonths: durationMonthsNum,
+        syllabusFile: cleanedSyllabusFile,
         updatedAt: serverTimestamp()
       };
 
@@ -177,9 +191,16 @@ export const CoursesManagementView = ({
 
       await setDoc(courseRef, courseData, { merge: true });
       setIsModalOpen(false);
-    } catch (err) {
+      if (showNotification) {
+        showNotification("Curso salvo com sucesso!", "Sucesso", "success");
+      }
+    } catch (err: any) {
       console.error("Erro ao salvar curso:", err);
-      alert("Ocorreu um erro ao salvar as informações do curso.");
+      if (showNotification) {
+        showNotification("Erro ao salvar o curso: " + (err.message || "Verifique os dados."), "Erro", "error");
+      } else {
+        alert("Ocorreu um erro ao salvar as informações do curso.");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -193,9 +214,16 @@ export const CoursesManagementView = ({
       if (selectedCourse?.id === courseId) {
         setIsModalOpen(false);
       }
-    } catch (err) {
+      if (showNotification) {
+        showNotification("Curso excluído com sucesso!", "Sucesso", "success");
+      }
+    } catch (err: any) {
       console.error("Erro ao excluir curso:", err);
-      alert("Erro ao excluir o curso.");
+      if (showNotification) {
+        showNotification("Erro ao excluir o curso: " + (err.message || ""), "Erro", "error");
+      } else {
+        alert("Erro ao excluir o curso.");
+      }
     }
   };
 

@@ -2828,6 +2828,7 @@ export default function App() {
             courses={courses}
             setView={setView}
             currentUser={currentUser}
+            showNotification={showNotification}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-20 bg-white rounded-3xl border border-white/50">
