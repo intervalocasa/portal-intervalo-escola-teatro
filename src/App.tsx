@@ -2844,6 +2844,7 @@ export default function App() {
           <FinancialManagementView 
             users={users}
             classes={classes}
+            courses={courses}
             currentUser={currentUser}
             setView={setView}
           />

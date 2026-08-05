@@ -26,11 +26,12 @@ import {
   RefreshCw,
   UserCheck,
   UserX,
-  Award
+  Award,
+  Edit3
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { User, Class } from "../types";
+import { User, Class, Course } from "../types";
 import { BackButton, Avatar, Logo } from "../components/CommonComponents";
 import { collection, onSnapshot, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -38,8 +39,61 @@ import { db } from "../lib/firebase";
 interface FinancialManagementViewProps {
   users: User[];
   classes: Class[];
+  courses?: Course[];
   currentUser: any;
   setView: (view: any) => void;
+}
+
+const DEFAULT_COURSES: Course[] = [
+  { id: "curso_livre_adultos", name: "Curso Livre Adultos", monthlyFee: 250 },
+  { id: "curso_livre_60", name: "Curso Livre 60+", monthlyFee: 250 },
+  { id: "pratica_profissional_montagem", name: "Prática Profissional de Montagem", monthlyFee: 320 },
+];
+
+export function calculateStudentMonthlyFee(
+  studentId: string,
+  migratedFrom: string | undefined,
+  classes: Class[],
+  courses?: Course[]
+): { totalAmount: number; isAllExempt: boolean; activeClassesCount: number } {
+  const activeStudentClasses = classes.filter(c => {
+    if (!c.isActive || !c.studentIds) return false;
+    const isEnrolled = c.studentIds.includes(studentId) || Boolean(migratedFrom && c.studentIds.includes(migratedFrom));
+    if (!isEnrolled) return false;
+    const status = c.studentEnrollmentStatuses?.[studentId] || (migratedFrom ? c.studentEnrollmentStatuses?.[migratedFrom] : undefined);
+    return status !== "Inativo" && status !== "Trancado";
+  });
+
+  if (activeStudentClasses.length === 0) {
+    return { totalAmount: 0, isAllExempt: false, activeClassesCount: 0 };
+  }
+
+  let isAllExempt = true;
+  let totalAmount = 0;
+  const courseList = (courses && courses.length > 0) ? courses : DEFAULT_COURSES;
+
+  activeStudentClasses.forEach(c => {
+    const pType = c.studentPaymentTypes?.[studentId] || (migratedFrom ? c.studentPaymentTypes?.[migratedFrom] : undefined) || "Pagante";
+    if (pType !== "Isento") {
+      isAllExempt = false;
+      const matchedCourse = courseList.find(crs =>
+        crs.name.trim().toLowerCase() === c.type.trim().toLowerCase() ||
+        crs.id === c.type
+      );
+
+      let fee = 250;
+      if (matchedCourse && matchedCourse.monthlyFee !== undefined && matchedCourse.monthlyFee !== null && !isNaN(Number(matchedCourse.monthlyFee))) {
+        fee = Number(matchedCourse.monthlyFee);
+      } else if (c.type.toLowerCase().includes("montagem") || c.type.toLowerCase().includes("profissional")) {
+        fee = 320;
+      } else if (c.type.toLowerCase().includes("60+") || c.type.toLowerCase().includes("adulto")) {
+        fee = 250;
+      }
+      totalAmount += fee;
+    }
+  });
+
+  return { totalAmount, isAllExempt, activeClassesCount: activeStudentClasses.length };
 }
 
 export interface EnrollmentRecord {
@@ -91,6 +145,7 @@ const MONTHS_PT = [
 export const FinancialManagementView = ({
   users,
   classes,
+  courses,
   currentUser,
   setView
 }: FinancialManagementViewProps) => {
@@ -108,6 +163,9 @@ export const FinancialManagementView = ({
   const [paymentSearch, setPaymentSearch] = useState("");
   const [dbPayments, setDbPayments] = useState<Record<string, any>>({});
   const [isUpdatingPayment, setIsUpdatingPayment] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
+  const [tempAmountValue, setTempAmountValue] = useState<string>("");
 
   // Subscribe to payments in Firestore
   useEffect(() => {
@@ -217,12 +275,31 @@ export const FinancialManagementView = ({
       const docId = `${student.id}_${selectedYear}_${selectedMonth + 1}`;
       const saved = dbPayments[docId];
 
-      const studentClasses = classes.filter(c => c.studentIds?.includes(student.id) && c.isActive);
-      const classNameStr = studentClasses.map(c => `${c.type} (${c.code})`).join(", ") || "Sem turma";
+      const { totalAmount: calculatedAmount, isAllExempt, activeClassesCount } = calculateStudentMonthlyFee(
+        student.id,
+        student.migratedFrom,
+        classes,
+        courses
+      );
 
-      const isAllExempt = studentClasses.length > 0 && studentClasses.every(c => c.studentPaymentTypes?.[student.id] === "Isento");
+      const activeStudentClasses = classes.filter(c => {
+        if (!c.studentIds) return false;
+        const isEnrolled = c.studentIds.includes(student.id) || Boolean(student.migratedFrom && c.studentIds.includes(student.migratedFrom));
+        if (!isEnrolled) return false;
+        const status = c.studentEnrollmentStatuses?.[student.id] || (student.migratedFrom ? c.studentEnrollmentStatuses?.[student.migratedFrom] : undefined);
+        return status !== "Inativo" && status !== "Trancado";
+      });
+
+      const classNameStr = activeStudentClasses.map(c => `${c.type} (${c.code})`).join(", ") || (activeClassesCount === 0 ? "Sem turma ativa" : "Sem turma");
 
       const defaultDueDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-10`;
+
+      let finalAmount = calculatedAmount;
+      if (isAllExempt) {
+        finalAmount = 0;
+      } else if (saved && saved.amount !== undefined && saved.amount !== null) {
+        finalAmount = Number(saved.amount);
+      }
 
       if (saved) {
         return {
@@ -233,7 +310,7 @@ export const FinancialManagementView = ({
           className: classNameStr,
           month: selectedMonth,
           year: selectedYear,
-          amount: isAllExempt ? 0 : (saved.amount ?? 250),
+          amount: finalAmount,
           dueDate: saved.dueDate || defaultDueDate,
           status: saved.status || (isAllExempt ? "Isento" : "Pendente"),
           paymentMethod: saved.paymentMethod,
@@ -251,13 +328,13 @@ export const FinancialManagementView = ({
         className: classNameStr,
         month: selectedMonth,
         year: selectedYear,
-        amount: isAllExempt ? 0 : 250,
+        amount: finalAmount,
         dueDate: defaultDueDate,
         status: isAllExempt ? "Isento" : "Pendente",
         isExempt: isAllExempt
       };
     }).sort((a, b) => a.studentName.localeCompare(b.studentName, "pt-BR"));
-  }, [users, classes, dbPayments, selectedMonth, selectedYear]);
+  }, [users, classes, courses, dbPayments, selectedMonth, selectedYear]);
 
   // Filtered Payments
   const filteredPayments = useMemo(() => {
@@ -302,6 +379,73 @@ export const FinancialManagementView = ({
     } catch (err) {
       console.error("Erro ao atualizar pagamento:", err);
       alert("Erro ao salvar status de pagamento.");
+    } finally {
+      setIsUpdatingPayment(null);
+    }
+  };
+
+  // Recalculate & Reset Payment Values for selected month/year
+  const handleResetPaymentValues = async () => {
+    if (!window.confirm(`Deseja recalcular e resetar todos os valores de mensalidades de ${MONTHS_PT[selectedMonth]} de ${selectedYear} com base nos cursos vinculados às turmas dos alunos?`)) {
+      return;
+    }
+    setIsResetting(true);
+    try {
+      const studentUsers = users.filter(u => u.role === "Aluno" && !u.inactive);
+      const promises = studentUsers.map(async (student) => {
+        const docId = `${student.id}_${selectedYear}_${selectedMonth + 1}`;
+        const { totalAmount, isAllExempt } = calculateStudentMonthlyFee(
+          student.id,
+          student.migratedFrom,
+          classes,
+          courses
+        );
+
+        const payRef = doc(db, "pagamentos", docId);
+        const currentSaved = dbPayments[docId] || {};
+        const newStatus = isAllExempt ? "Isento" : (currentSaved.status === "Pago" ? "Pago" : "Pendente");
+
+        await setDoc(payRef, {
+          studentId: student.id,
+          studentName: student.name,
+          month: selectedMonth,
+          year: selectedYear,
+          amount: totalAmount,
+          status: newStatus,
+          dueDate: currentSaved.dueDate || `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-10`,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      });
+
+      await Promise.all(promises);
+      alert(`Valores de mensalidades para ${MONTHS_PT[selectedMonth]} de ${selectedYear} recalculados e sincronizados com sucesso!`);
+    } catch (err) {
+      console.error("Erro ao resetar pagamentos:", err);
+      alert("Ocorreu um erro ao recalcular os valores das mensalidades.");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  // Save manual custom amount edit for a payment record
+  const handleSaveCustomAmount = async (record: PaymentRecord, newAmount: number) => {
+    try {
+      setIsUpdatingPayment(record.id);
+      const payRef = doc(db, "pagamentos", record.id);
+      await setDoc(payRef, {
+        studentId: record.studentId,
+        studentName: record.studentName,
+        month: record.month,
+        year: record.year,
+        amount: isNaN(newAmount) ? 0 : newAmount,
+        dueDate: record.dueDate,
+        status: record.status,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      setEditingAmountId(null);
+    } catch (err) {
+      console.error("Erro ao salvar valor customizado:", err);
+      alert("Erro ao salvar novo valor de mensalidade.");
     } finally {
       setIsUpdatingPayment(null);
     }
@@ -923,7 +1067,7 @@ export const FinancialManagementView = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                   <select
                     value={selectedMonth}
                     onChange={(e) => setSelectedMonth(Number(e.target.value))}
@@ -943,6 +1087,17 @@ export const FinancialManagementView = ({
                       <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
+
+                  <button
+                    type="button"
+                    onClick={handleResetPaymentValues}
+                    disabled={isResetting}
+                    className="px-4 py-2.5 bg-[#016a86]/10 hover:bg-[#016a86] text-[#016a86] hover:text-white rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 shadow-xs"
+                    title="Recalcular e sincronizar os valores das mensalidades com base nos valores dos cursos cadastrados"
+                  >
+                    <RefreshCw size={14} className={isResetting ? "animate-spin" : ""} />
+                    <span>{isResetting ? "Recalculando..." : "Resetar / Recalcular Valores"}</span>
+                  </button>
                 </div>
               </div>
 
@@ -1062,8 +1217,47 @@ export const FinancialManagementView = ({
 
                         <div className="flex items-center gap-6 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 justify-between md:justify-end">
                           <div className="text-left md:text-right">
-                            <div className="text-xs font-black text-slate-800">
-                              R$ {item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            <div className="text-xs font-black text-slate-800 flex items-center justify-start md:justify-end gap-1.5">
+                              {editingAmountId === item.id ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-slate-500 font-bold">R$</span>
+                                  <input
+                                    type="number"
+                                    value={tempAmountValue}
+                                    onChange={(e) => setTempAmountValue(e.target.value)}
+                                    className="w-20 px-2 py-0.5 border border-slate-300 rounded font-bold text-xs text-slate-800 focus:outline-none focus:border-[#016a86]"
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => handleSaveCustomAmount(item, Number(tempAmountValue))}
+                                    className="p-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors"
+                                    title="Salvar valor"
+                                  >
+                                    <Check size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingAmountId(null)}
+                                    className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
+                                    title="Cancelar"
+                                  >
+                                    <XCircle size={12} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span>R$ {item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                  <button
+                                    onClick={() => {
+                                      setEditingAmountId(item.id);
+                                      setTempAmountValue(String(item.amount));
+                                    }}
+                                    className="p-0.5 text-slate-400 hover:text-[#016a86] transition-colors cursor-pointer"
+                                    title="Editar valor de mensalidade"
+                                  >
+                                    <Edit3 size={12} />
+                                  </button>
+                                </>
+                              )}
                             </div>
                             <div className="text-[11px] font-bold text-slate-400 mt-0.5">
                               Vencimento: {item.dueDate ? item.dueDate.split("-").reverse().join("/") : "10/" + String(selectedMonth + 1).padStart(2, '0')}
