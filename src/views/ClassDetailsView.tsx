@@ -63,15 +63,28 @@ export const ClassDetailsView = ({
     return users
       .filter(u => {
         if (!targetClass?.studentIds) return false;
-        if (targetClass.studentIds.includes(u.id)) return true;
-        if (u.migratedFrom && targetClass.studentIds.includes(u.migratedFrom)) return true;
-        return targetClass.studentIds.some(sid => {
-          const matchingDoc = users.find(uDoc => uDoc.id === sid);
-          return matchingDoc && matchingDoc.email?.toLowerCase() === u.email?.toLowerCase();
-        });
+
+        const isInClass = targetClass.studentIds.includes(u.id) ||
+          (u.migratedFrom && targetClass.studentIds.includes(u.migratedFrom)) ||
+          targetClass.studentIds.some(sid => {
+            const matchingDoc = users.find(uDoc => uDoc.id === sid);
+            return matchingDoc && matchingDoc.email?.toLowerCase() === u.email?.toLowerCase();
+          });
+
+        if (!isInClass) return false;
+
+        // Check if student's enrollment status in this class is inactive or if user account is inactive
+        const status = targetClass.studentEnrollmentStatuses?.[u.id] ||
+                       (u.migratedFrom && targetClass.studentEnrollmentStatuses?.[u.migratedFrom]);
+
+        if (status === "Inativo" || u.inactive) {
+          return false;
+        }
+
+        return true;
       })
       .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
-  }, [users, targetClass?.studentIds]);
+  }, [users, targetClass?.studentIds, targetClass?.studentEnrollmentStatuses]);
 
   const availableStudents = useMemo(() => {
     if (!targetClass) return [];
@@ -386,7 +399,7 @@ export const ClassDetailsView = ({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
                     <div className="flex items-center gap-3 text-slate-400"><Users size={16} /><span className="text-[10px] font-black uppercase tracking-widest">Capacidade</span></div>
-                    <span className="text-sm font-black text-slate-700">{targetClass.studentIds?.length || 0} de 20</span>
+                    <span className="text-sm font-black text-slate-700">{classStudents.length} de 20</span>
                   </div>
                   <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
                     <div className="flex items-center gap-3 text-slate-400"><Calendar size={16} /><span className="text-[10px] font-black uppercase tracking-widest">Data de Início</span></div>

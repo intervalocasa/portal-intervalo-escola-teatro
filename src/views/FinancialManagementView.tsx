@@ -139,7 +139,12 @@ export const FinancialManagementView = ({
 
         const isStudentInactive = Boolean(student.inactive);
         const isClassActive = Boolean(c.isActive);
-        const isEnrollmentActive = !isStudentInactive && isClassActive;
+        const studentClassStatus = c.studentEnrollmentStatuses?.[sId] ||
+                                    (student.id && c.studentEnrollmentStatuses?.[student.id]) ||
+                                    (student.migratedFrom && c.studentEnrollmentStatuses?.[student.migratedFrom]);
+
+        const isStudentClassInactive = studentClassStatus === "Inativo" || studentClassStatus === "Trancado";
+        const isEnrollmentActive = !isStudentInactive && isClassActive && !isStudentClassInactive;
 
         const dateStr = c.enrollmentDates?.[sId] || 
                         (student.createdAt?.toDate ? student.createdAt.toDate().toISOString().split('T')[0] : "") || 
@@ -859,19 +864,41 @@ export const FinancialManagementView = ({
                             </button>
                           </div>
 
-                          {/* Status Badge */}
+                          {/* Status Badge & Toggle */}
                           <div className="shrink-0">
-                            {record.isEnrollmentActive ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-black text-xs">
-                                <CheckCircle2 size={14} className="text-emerald-600" />
-                                Ativa
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-600 font-black text-xs">
-                                <XCircle size={14} className="text-rose-500" />
-                                Inativa
-                              </span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const classRef = doc(db, "classes", record.classId);
+                                  const newStatus = record.isEnrollmentActive ? "Inativo" : "Ativo";
+                                  await updateDoc(classRef, {
+                                    [`studentEnrollmentStatuses.${record.studentId}`]: newStatus
+                                  });
+                                } catch (err) {
+                                  console.error("Erro ao alterar status da matrícula:", err);
+                                  alert("Erro ao alterar status da matrícula.");
+                                }
+                              }}
+                              title="Clique para alternar o status da matrícula (Ativa / Inativa)"
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-xs ${
+                                record.isEnrollmentActive
+                                  ? "bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                                  : "bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100"
+                              }`}
+                            >
+                              {record.isEnrollmentActive ? (
+                                <>
+                                  <CheckCircle2 size={14} className="text-emerald-600" />
+                                  Ativa
+                                </>
+                              ) : (
+                                <>
+                                  <XCircle size={14} className="text-rose-500" />
+                                  Inativa
+                                </>
+                              )}
+                            </button>
                           </div>
                         </div>
                       </div>
