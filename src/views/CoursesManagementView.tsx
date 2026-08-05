@@ -24,13 +24,14 @@ import {
   AlertCircle,
   FileCheck
 } from "lucide-react";
-import { Course, CourseSyllabusFile } from "../types";
+import { Course, CourseSyllabusFile, Class } from "../types";
 import { BackButton, Logo } from "../components/CommonComponents";
-import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
 interface CoursesManagementViewProps {
   courses: Course[];
+  classes?: Class[];
   setView: (view: any) => void;
   currentUser: any;
   showNotification?: (message: string, title?: string, type?: "success" | "warning" | "error") => void;
@@ -47,6 +48,7 @@ const AGE_GROUP_SUGGESTIONS = [
 
 export const CoursesManagementView = ({
   courses,
+  classes = [],
   setView,
   currentUser,
   showNotification
@@ -65,6 +67,7 @@ export const CoursesManagementView = ({
   const [formDurationType, setFormDurationType] = useState<"continua" | "meses">("continua");
   const [formDurationMonths, setFormDurationMonths] = useState<string>("6");
   const [formSyllabusFile, setFormSyllabusFile] = useState<CourseSyllabusFile | null>(null);
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [fileUploading, setFileUploading] = useState(false);
 
   // Open modal for new course
@@ -77,6 +80,7 @@ export const CoursesManagementView = ({
     setFormDurationType("continua");
     setFormDurationMonths("6");
     setFormSyllabusFile(null);
+    setSelectedClassIds([]);
     setSelectedCourse(null);
     setIsModalOpen(true);
   };
@@ -92,6 +96,16 @@ export const CoursesManagementView = ({
     setFormDurationType(course.durationType || "continua");
     setFormDurationMonths(course.durationMonths ? String(course.durationMonths) : "6");
     setFormSyllabusFile(course.syllabusFile || null);
+
+    const initiallyLinkedIds = (classes || [])
+      .filter(c => {
+        if (course.linkedClassIds && course.linkedClassIds.includes(c.id)) return true;
+        if (c.type && course.name && c.type.trim().toLowerCase() === course.name.trim().toLowerCase()) return true;
+        return false;
+      })
+      .map(c => c.id);
+
+    setSelectedClassIds(initiallyLinkedIds);
     setIsModalOpen(true);
   };
 
@@ -182,6 +196,7 @@ export const CoursesManagementView = ({
         durationType: formDurationType,
         durationMonths: durationMonthsNum,
         syllabusFile: cleanedSyllabusFile,
+        linkedClassIds: selectedClassIds,
         updatedAt: serverTimestamp()
       };
 
@@ -190,6 +205,14 @@ export const CoursesManagementView = ({
       }
 
       await setDoc(courseRef, courseData, { merge: true });
+
+      // Update class.type in Firestore for all selected classes
+      const newCourseName = formName.trim();
+      const updateClassPromises = selectedClassIds.map(classId => {
+        return updateDoc(doc(db, "classes", classId), { type: newCourseName });
+      });
+      await Promise.all(updateClassPromises);
+
       setIsModalOpen(false);
       if (showNotification) {
         showNotification("Curso salvo com sucesso!", "Sucesso", "success");
@@ -357,6 +380,32 @@ export const CoursesManagementView = ({
                             ? `${course.durationMonths || 6} meses` 
                             : "Contínua"}
                         </span>
+                      </div>
+
+                      {/* Linked Classes */}
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span className="font-semibold text-slate-400 flex items-center gap-1.5 text-[11px]">
+                          <Users size={14} className="text-[#016a86]" />
+                          Turmas Vinculadas:
+                        </span>
+                        {(() => {
+                          const linked = (classes || []).filter(c =>
+                            (course.linkedClassIds && course.linkedClassIds.includes(c.id)) ||
+                            (c.type && course.name && c.type.trim().toLowerCase() === course.name.trim().toLowerCase())
+                          );
+                          if (linked.length === 0) {
+                            return <span className="text-[11px] font-bold text-slate-400">Nenhuma</span>;
+                          }
+                          return (
+                            <div className="flex flex-wrap items-center gap-1 justify-end max-w-[170px]">
+                              {linked.map(lc => (
+                                <span key={lc.id} className="text-[10px] font-black text-[#016a86] bg-[#016a86]/10 px-2 py-0.5 rounded-md truncate">
+                                  {lc.code}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Syllabus status */}
@@ -563,6 +612,73 @@ export const CoursesManagementView = ({
                         className="w-24 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-black text-slate-800 text-center focus:outline-none focus:border-[#016a86]"
                       />
                       <span className="text-xs font-bold text-slate-700">meses</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Vincular Turmas ao Curso */}
+                <div className="space-y-3 bg-slate-50 p-4.5 rounded-2xl border border-slate-200/80">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                        Turmas Vinculadas a este Curso
+                      </label>
+                      <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                        Selecione as turmas da escola que pertencem a esta modalidade de ensino.
+                      </p>
+                    </div>
+                    <span className="text-xs font-black text-[#016a86] bg-[#016a86]/10 px-2.5 py-1 rounded-full shrink-0">
+                      {selectedClassIds.length} turma(s)
+                    </span>
+                  </div>
+
+                  {(!classes || classes.length === 0) ? (
+                    <div className="p-3 bg-white rounded-xl border border-slate-200 text-center text-xs text-slate-400 font-medium">
+                      Nenhuma turma cadastrada no sistema.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                      {classes.map((cls) => {
+                        const isChecked = selectedClassIds.includes(cls.id);
+                        return (
+                          <div
+                            key={cls.id}
+                            onClick={() => {
+                              setSelectedClassIds(prev =>
+                                prev.includes(cls.id) ? prev.filter(id => id !== cls.id) : [...prev, cls.id]
+                              );
+                            }}
+                            className={`p-3 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-all ${
+                              isChecked
+                                ? "bg-[#016a86]/10 border-[#016a86] text-slate-800 shadow-xs"
+                                : "bg-white border-slate-200 hover:border-slate-300 text-slate-600"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {}}
+                                className="accent-[#016a86] w-4 h-4 shrink-0 pointer-events-none"
+                              />
+                              <div className="min-w-0">
+                                <div className="text-xs font-black truncate text-slate-800">
+                                  {cls.code} {cls.type ? `- ${cls.type}` : ""}
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-medium truncate">
+                                  {cls.weekday || "Dia N/D"} • {cls.time || "Horário N/D"}
+                                </div>
+                              </div>
+                            </div>
+
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black shrink-0 ${
+                              cls.isActive !== false ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {cls.isActive !== false ? "Ativa" : "Inativa"}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

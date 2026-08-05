@@ -229,6 +229,7 @@ export interface Course {
   durationType?: "continua" | "meses"; // Contínua ou quantidade de meses
   durationMonths?: number; // Se durationType === "meses"
   syllabusFile?: CourseSyllabusFile | null; // Ementa pedagógica em PDF/doc
+  linkedClassIds?: string[]; // IDs das turmas vinculadas a este curso
   createdAt?: any;
   updatedAt?: any;
 }

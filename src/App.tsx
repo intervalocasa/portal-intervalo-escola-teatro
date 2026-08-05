@@ -2851,6 +2851,7 @@ export default function App() {
         ) : view === "courses" ? (
           <CoursesManagementView 
             courses={courses}
+            classes={classes}
             setView={setView}
             currentUser={currentUser}
             showNotification={showNotification}
