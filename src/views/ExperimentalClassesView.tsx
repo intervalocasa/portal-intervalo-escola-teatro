@@ -47,6 +47,8 @@ interface ExperimentalClassesViewProps {
   setView: (view: any) => void;
   courses?: Course[];
   classes?: Class[];
+  users?: any[];
+  currentUser?: any;
   showNotification?: (message: string, title?: string, type?: "success" | "error") => void;
 }
 
@@ -78,12 +80,50 @@ export function formatDateBR(dateString: string): string {
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
 
+export function formatCreationTimestamp(createdAt: any): string | null {
+  if (!createdAt) return null;
+  let dateObj: Date | null = null;
+  if (typeof createdAt.toDate === "function") {
+    dateObj = createdAt.toDate();
+  } else if (createdAt.seconds) {
+    dateObj = new Date(createdAt.seconds * 1000);
+  } else if (typeof createdAt === "string" || typeof createdAt === "number") {
+    dateObj = new Date(createdAt);
+  } else if (createdAt instanceof Date) {
+    dateObj = createdAt;
+  }
+
+  if (!dateObj || isNaN(dateObj.getTime())) return null;
+
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const year = dateObj.getFullYear();
+  const hours = String(dateObj.getHours()).padStart(2, "0");
+  const minutes = String(dateObj.getMinutes()).padStart(2, "0");
+
+  return `${day}/${month}/${year} às ${hours}:${minutes}`;
+}
+
 export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = ({
   setView,
   courses = [],
   classes = [],
+  users = [],
+  currentUser,
   showNotification
 }) => {
+  const loggedUser = useMemo(() => {
+    if (!currentUser) return null;
+    const found = users?.find(
+      (u) => u.id === currentUser.uid || u.uid === currentUser.uid || u.email === currentUser.email
+    );
+    return found || {
+      name: currentUser.displayName || currentUser.email?.split("@")[0] || "Usuário do Sistema",
+      role: "Gestor / Auxiliar",
+      uid: currentUser.uid
+    };
+  }, [currentUser, users]);
+
   const [bookings, setBookings] = useState<ExperimentalClassBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -204,6 +244,14 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setIsSubmitting(true);
     try {
       const computedDayOfWeek = dayOfWeek || getDayOfWeekInPortuguese(date);
+      const creatorName = loggedUser?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "Usuário do Sistema";
+      let creatorRole = "Gestor / Auxiliar";
+      if (loggedUser?.role) {
+        if (loggedUser.role === "GESTOR" || loggedUser.role === "gestor") creatorRole = "Gestor";
+        else if (loggedUser.role === "AUXILIAR" || loggedUser.role === "auxiliar") creatorRole = "Auxiliar Administrativo";
+        else creatorRole = loggedUser.role;
+      }
+
       const newDoc = {
         studentName: studentName.trim(),
         studentEmail: studentEmail.trim() || null,
@@ -219,6 +267,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         rescheduleCount: 0,
         rescheduleHistory: [],
         notes: notes.trim() || null,
+        createdByUid: currentUser?.uid || loggedUser?.id || null,
+        createdByName: creatorName,
+        createdByRole: creatorRole,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
@@ -555,6 +606,16 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                           {b.studentEmail && <span className="flex items-center gap-1"><Mail size={10} />{b.studentEmail}</span>}
                         </div>
                       )}
+                      {b.createdByName && (
+                        <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1 mt-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100 w-fit">
+                          <User size={10} className="text-slate-400 shrink-0" />
+                          <span>
+                            Agendado por <strong className="text-slate-700 font-bold">{b.createdByName}</strong>
+                            {b.createdByRole ? ` (${b.createdByRole})` : ""}
+                            {formatCreationTimestamp(b.createdAt) && ` em ${formatCreationTimestamp(b.createdAt)}`}
+                          </span>
+                        </div>
+                      )}
                       {(b.rescheduleCount || 0) > 0 && (
                         <span className="inline-flex items-center gap-1 mt-1 text-[9px] font-black uppercase text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
                           <History size={10} /> {b.rescheduleCount} reagendamento(s)
@@ -730,6 +791,17 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     {formatDateBR(b.date)} ({b.dayOfWeek})
                   </div>
                 </div>
+
+                {b.createdByName && (
+                  <div className="text-[10px] font-medium text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 flex items-center gap-1">
+                    <User size={12} className="text-slate-400 shrink-0" />
+                    <span>
+                      Agendado por <strong className="text-slate-700 font-bold">{b.createdByName}</strong>
+                      {b.createdByRole ? ` (${b.createdByRole})` : ""}
+                      {formatCreationTimestamp(b.createdAt) && ` em ${formatCreationTimestamp(b.createdAt)}`}
+                    </span>
+                  </div>
+                )}
 
                 {b.manualConfirmationReason && (
                   <div className="text-[10px] font-medium text-slate-600 bg-teal-50/60 p-2 rounded-lg border border-teal-100 italic">

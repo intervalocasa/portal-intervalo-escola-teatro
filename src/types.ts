@@ -260,5 +260,8 @@ export interface ExperimentalClassBooking {
   studentPhone?: string;
   notes?: string;
   manualConfirmationReason?: string | null;
+  createdByUid?: string;
+  createdByName?: string;
+  createdByRole?: string;
 }
 

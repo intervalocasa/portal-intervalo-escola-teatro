@@ -2859,6 +2859,8 @@ export default function App() {
             setView={setView}
             courses={courses}
             classes={classes}
+            users={users}
+            currentUser={currentUser}
             showNotification={showNotification}
           />
         ) : (
