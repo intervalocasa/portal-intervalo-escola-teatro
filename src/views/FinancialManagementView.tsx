@@ -273,7 +273,7 @@ export const FinancialManagementView = ({
 
     return studentUsers.map(student => {
       const docId = `${student.id}_${selectedYear}_${selectedMonth + 1}`;
-      const saved = dbPayments[docId];
+      const saved = dbPayments[docId] || (student.migratedFrom ? dbPayments[`${student.migratedFrom}_${selectedYear}_${selectedMonth + 1}`] : undefined);
 
       const { totalAmount: calculatedAmount, isAllExempt, activeClassesCount } = calculateStudentMonthlyFee(
         student.id,
@@ -402,7 +402,7 @@ export const FinancialManagementView = ({
         );
 
         const payRef = doc(db, "pagamentos", docId);
-        const currentSaved = dbPayments[docId] || {};
+        const currentSaved = dbPayments[docId] || (student.migratedFrom ? dbPayments[`${student.migratedFrom}_${selectedYear}_${selectedMonth + 1}`] : {}) || {};
         const newStatus = isAllExempt ? "Isento" : (currentSaved.status === "Pago" ? "Pago" : "Pendente");
 
         await setDoc(payRef, {

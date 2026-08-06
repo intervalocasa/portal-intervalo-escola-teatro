@@ -31,6 +31,7 @@ interface GestorDashboardProps {
   handleLogout: () => void;
   setView: (view: any) => void;
   handleResetUserForm: () => void;
+  handleResetClassForm?: () => void;
   filteredAnnouncements: any[];
   onAwardBadge?: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
   onHealDatabase?: () => Promise<void>;
@@ -42,6 +43,7 @@ export const GestorDashboard = ({
   handleLogout,
   setView,
   handleResetUserForm,
+  handleResetClassForm,
   filteredAnnouncements,
   onAwardBadge,
   onHealDatabase
@@ -150,7 +152,10 @@ export const GestorDashboard = ({
             </motion.button>
 
             <motion.button
-              onClick={() => setView("create_class")}
+              onClick={() => {
+                if (handleResetClassForm) handleResetClassForm();
+                setView("create_class");
+              }}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className={`w-full p-6 bg-white rounded-2xl flex items-center gap-5 text-pro-teal shadow-lg shadow-teal-900/5 transition-all text-left border-2 border-pro-teal/5 group`}

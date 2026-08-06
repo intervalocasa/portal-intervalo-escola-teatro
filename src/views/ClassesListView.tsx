@@ -5,7 +5,7 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, ChevronDown, Presentation, Edit, ArrowLeft } from "lucide-react";
+import { Search, ChevronDown, Presentation, Edit, ArrowLeft, Plus } from "lucide-react";
 import { Class, User } from "../types";
 import { Logo, BackButton } from "../components/CommonComponents";
 
@@ -17,6 +17,7 @@ interface ClassesListViewProps {
   setClassData: (data: any) => void;
   role?: string | null;
   currentUser?: any;
+  handleResetClassForm?: () => void;
 }
 
 export const ClassesListView = ({
@@ -26,7 +27,8 @@ export const ClassesListView = ({
   setView,
   setClassData,
   role,
-  currentUser
+  currentUser,
+  handleResetClassForm
 }: ClassesListViewProps) => {
   const [searchTerm, setSearchTerm] = React.useState("");
 
@@ -68,15 +70,28 @@ export const ClassesListView = ({
       </div>
 
       <div className="p-8 md:p-16 space-y-6 flex-1 flex flex-col max-w-7xl mx-auto w-full overflow-y-auto custom-scrollbar bg-slate-50">
-        <div className="relative">
-          <Search size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Pesquisar por turma, tipo ou professor..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-14 pr-6 py-4 bg-white border border-slate-200 rounded-[28px] text-sm text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:shadow-lg focus:shadow-teal-900/5 placeholder:text-slate-400 font-bold"
-          />
+        <div className="flex flex-col sm:flex-row gap-3 items-center">
+          <div className="relative flex-1 w-full">
+            <Search size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Pesquisar por turma, tipo ou professor..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-14 pr-6 py-4 bg-white border border-slate-200 rounded-[28px] text-sm text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:shadow-lg focus:shadow-teal-900/5 placeholder:text-slate-400 font-bold"
+            />
+          </div>
+          {(role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo") && (
+            <button
+              onClick={() => {
+                if (handleResetClassForm) handleResetClassForm();
+                setView("create_class");
+              }}
+              className="w-full sm:w-auto px-6 py-4 bg-pro-teal text-white font-black rounded-[28px] text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-teal-700 transition-all shadow-md shrink-0 active:scale-95"
+            >
+              <Plus size={18} /> Nova Turma
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar min-h-[400px]">

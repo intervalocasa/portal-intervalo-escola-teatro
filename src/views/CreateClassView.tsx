@@ -79,6 +79,15 @@ export const CreateClassView = ({
   };
 
   useEffect(() => {
+    if (!isEditing && classData.id) {
+      setClassData((prev: any) => {
+        const { id, ...clean } = prev;
+        return clean;
+      });
+    }
+  }, [isEditing, classData.id]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsDayDropdownOpen(false);
