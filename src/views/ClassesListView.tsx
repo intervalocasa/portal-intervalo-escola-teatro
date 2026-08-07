@@ -39,8 +39,8 @@ export const ClassesListView = ({
       c.teacherIds?.includes(currentUser?.uid) ||
       (matchedProfDoc && c.teacherIds?.includes(matchedProfDoc.id))
     );
-    const matchesSearch = c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = (c.code || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.type || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.teacherIds?.some(tid => (users.find(u => u.id === tid)?.name || "").toLowerCase().includes(searchTerm.toLowerCase()));
 
     if (role === "Professor") {

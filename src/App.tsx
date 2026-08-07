@@ -1869,8 +1869,6 @@ export default function App() {
 
     setIsAppLoading(true);
     try {
-      const existingClass = classes.find(c => (c.code || "").trim().toUpperCase() === normalizedCode);
-
       const { id, ...rawClassData } = classData as any;
 
       const payload = {
@@ -1884,26 +1882,12 @@ export default function App() {
         time: rawClassData.time || "",
         startDate: rawClassData.startDate || "",
         year: rawClassData.year || (rawClassData.startDate ? rawClassData.startDate.split("-")[0] : new Date().getFullYear().toString()),
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
 
-      if (existingClass) {
-        const mergedTeachers = Array.from(new Set([...(existingClass.teacherIds || []), ...(payload.teacherIds || [])]));
-        const mergedStudents = Array.from(new Set([...(existingClass.studentIds || []), ...(payload.studentIds || [])]));
-
-        await updateDoc(doc(db, "classes", existingClass.id), {
-          ...payload,
-          teacherIds: mergedTeachers,
-          studentIds: mergedStudents
-        });
-        showNotification(`A turma "${normalizedCode}" já existia e foi atualizada!`, "Sucesso");
-      } else {
-        await addDoc(collection(db, "classes"), {
-          ...payload,
-          createdAt: serverTimestamp()
-        });
-        showNotification("Turma criada com sucesso!", "Sucesso");
-      }
+      await addDoc(collection(db, "classes"), payload);
+      showNotification("Turma criada com sucesso!", "Sucesso");
 
       handleResetClassForm();
       setView("classes_list");
@@ -2027,44 +2011,9 @@ export default function App() {
     }
     setIsAppLoading(true);
     try {
-      // Get target class to find its code
-      const targetClass = classes.find(c => c.id === targetId);
-      const codeToFind = (targetClass?.code || classData?.code || "").trim().toUpperCase();
+      await deleteDoc(doc(db, "classes", targetId));
 
-      // Find all class documents with this ID or matching normalized code
-      const classesSnap = await getDocs(collection(db, "classes"));
-      const docsToDelete = new Set<string>();
-      docsToDelete.add(targetId);
-
-      classesSnap.docs.forEach(cDoc => {
-        const cData = cDoc.data();
-        const normCode = (cData.code || "").trim().toUpperCase();
-        if (cDoc.id === targetId || (codeToFind && normCode === codeToFind)) {
-          docsToDelete.add(cDoc.id);
-        }
-      });
-
-      for (const dId of Array.from(docsToDelete)) {
-        try {
-          await deleteDoc(doc(db, "classes", dId));
-        } catch (err) {
-          console.error(`Error deleting class doc ${dId}:`, err);
-        }
-      }
-
-      setSelectedClassId(null);
-      setClassData({
-        code: "",
-        type: "Curso Livre Adultos",
-        teacherIds: [],
-        studentIds: [],
-        isActive: true,
-        inactivationReason: "",
-        year: new Date().getFullYear().toString(),
-        weekday: "",
-        time: "",
-        startDate: ""
-      });
+      handleResetClassForm();
       showNotification("Turma excluída com sucesso!", "Sucesso");
       setView("classes_list");
     } catch (err) {
