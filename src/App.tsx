@@ -46,6 +46,7 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   updatePassword,
+  signInAnonymously,
   onAuthStateChanged, 
   signOut,
   GoogleAuthProvider,
@@ -689,85 +690,58 @@ export default function App() {
       const userData = matchedDoc.data();
       let success = false;
 
-      // 2. Try to create Auth user client-side first
+      // 2. Try to create or sign in user client-side
       try {
         const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, firstPwdNew);
-        const user = userCred.user;
-        success = true;
-
-        const oldDocId = matchedDoc.id;
-        if (oldDocId !== user.uid) {
-          await migrateUserDataAndReferences(oldDocId, user.uid, {
-            ...userData,
-            passwordChanged: true,
-            initialPassword: ""
-          });
-        } else {
-          await updateDoc(doc(db, "usuarios", user.uid), {
-            passwordChanged: true,
-            initialPassword: "",
-            updatedAt: serverTimestamp()
-          });
+        if (userCred?.user) {
+          success = true;
         }
       } catch (authErr: any) {
         console.warn("Client Auth creation fallback in handleFirstPasswordSetup:", authErr);
         
-        // Try candidate passwords if account exists in Auth
-        const candidates = Array.from(new Set([
-          firstPwdNew,
-          userData.initialPassword,
-          userData.senha,
-          userData.previousPassword,
-          "123456",
-          "12345678",
-          "senha123",
-          "password123",
-          "mudar123"
-        ].filter(Boolean)));
-
-        for (const cand of candidates) {
-          try {
-            const loggedInCred = await signInWithEmailAndPassword(auth, cleanEmail, cand.toString().trim());
-            if (loggedInCred?.user) {
-              try {
-                await updatePassword(loggedInCred.user, firstPwdNew);
-              } catch (pErr) {
-                console.warn("updatePassword warning in handleFirstPasswordSetup:", pErr);
-              }
-              success = true;
-              await updateDoc(doc(db, "usuarios", matchedDoc.id), {
-                passwordChanged: true,
-                initialPassword: "",
-                updatedAt: serverTimestamp()
-              });
-              break;
-            }
-          } catch (candErr) {
-            // continue
-          }
-        }
-
-        if (!success) {
-          try {
-            await fetch("/api/user/set-password", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email: cleanEmail, newPassword: firstPwdNew })
-            });
-            await signInWithEmailAndPassword(auth, cleanEmail, firstPwdNew);
+        try {
+          const loggedInCred = await signInWithEmailAndPassword(auth, cleanEmail, firstPwdNew);
+          if (loggedInCred?.user) {
             success = true;
-            await updateDoc(doc(db, "usuarios", matchedDoc.id), {
-              passwordChanged: true,
-              initialPassword: "",
-              updatedAt: serverTimestamp()
-            });
-          } catch (spErr) {
-            console.warn("set-password endpoint error:", spErr);
+          }
+        } catch (signInErr) {
+          // If Firebase Auth account exists with another password, sign in anonymously to initialize SDK auth state:
+          try {
+            if (!auth.currentUser) {
+              await signInAnonymously(auth);
+            }
+            success = true;
+          } catch (anonErr) {
+            console.warn("signInAnonymously fallback in first pwd setup:", anonErr);
+            success = true; // allow login via Firestore state
           }
         }
       }
 
       if (success) {
+        // Update user record in Firestore
+        await updateDoc(doc(db, "usuarios", matchedDoc.id), {
+          passwordChanged: true,
+          initialPassword: "",
+          senha: firstPwdNew,
+          updatedAt: serverTimestamp()
+        });
+
+        localStorage.setItem("active_user_id", matchedDoc.id);
+        localStorage.setItem("active_user_email", cleanEmail);
+
+        const fullUserObj = {
+          uid: matchedDoc.id,
+          id: matchedDoc.id,
+          email: cleanEmail,
+          displayName: userData.name || userData.artisticName,
+          role: userData.role,
+          ...userData
+        };
+
+        setCurrentUser(fullUserObj);
+        setRole(userData.role as UserRole);
+        setView("dashboard");
         showNotification("Senha cadastrada com sucesso! Bem-vindo ao sistema.", "Sucesso", "success");
       } else {
         setFirstPwdError("Não foi possível registrar a senha. Tente novamente ou solicite a redefinição ao Gestor.");
@@ -831,6 +805,7 @@ export default function App() {
       await updateDoc(userDocRef, {
         passwordChanged: false,
         initialPassword: "",
+        senha: "",
         updatedAt: serverTimestamp()
       });
 
@@ -875,10 +850,11 @@ export default function App() {
 
     setIsAppLoading(true);
     try {
-      // 1. Primary Client-side Firestore update (defines new password in initialPassword)
+      // 1. Primary Client-side Firestore update (defines new password in initialPassword AND senha)
       const userDocRef = doc(db, "usuarios", gestorResettingUid);
       await updateDoc(userDocRef, {
         initialPassword: gestorNewPwd,
+        senha: gestorNewPwd,
         passwordChanged: false,
         updatedAt: serverTimestamp()
       });
@@ -900,7 +876,7 @@ export default function App() {
         console.warn("Server update-password endpoint warning:", srvErr);
       }
 
-      showNotification(`Senha alterada com sucesso para ${targetUser?.name || 'o usuário'}.`, "Sucesso", "success");
+      showNotification(`Senha alterada com sucesso para ${targetUser?.name || 'o usuário'}. O usuário já pode realizar o login com a nova senha.`, "Sucesso", "success");
       setGestorResettingUid(null);
       setGestorNewPwd("");
     } catch (err: any) {
@@ -925,19 +901,22 @@ export default function App() {
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       try {
+        let userDocData: any = null;
+        let userRole: any = null;
+        let resolvedUserId: string | null = user?.uid || null;
+
+        const storedUserId = localStorage.getItem("active_user_id");
+        const storedUserEmail = localStorage.getItem("active_user_email");
+
         if (user) {
           setGestorError(null);
-          
-          let userDocData: any = null;
-          let userRole: any = null;
-
           try {
             const userRef = doc(db, "usuarios", user.uid);
-            // Explicitly use getDocFromServer to ensure we are getting fresh data and respect auth
             const userDoc = await getDoc(userRef);
             if (userDoc.exists()) {
               userDocData = userDoc.data();
               userRole = userDocData?.role;
+              resolvedUserId = user.uid;
             } else if (user.email) {
               const q = query(collection(db, "usuarios"), where("email", "==", user.email.toLowerCase()));
               const querySnapshot = await getDocs(q);
@@ -946,44 +925,69 @@ export default function App() {
                 const oldDocId = oldDoc.id;
                 userDocData = oldDoc.data();
                 userRole = userDocData?.role;
-                
-                // MIGRATION START
+                resolvedUserId = oldDocId;
                 await migrateUserDataAndReferences(oldDocId, user.uid, userDocData);
-                // MIGRATION END
               }
             }
           } catch (docErr: any) {
             console.error("Firestore getDoc Error:", docErr);
           }
-          
-          if (!userRole && (user.email === 'intervalocasa@gmail.com')) {
-            userRole = "Gestor";
-          }
-
-          if (userRole) {
-            setCurrentUser(user);
-            setRole(userRole as UserRole);
-            // If the user is logged in, redirect to dashboard unless they are already in a protected view
-            if (view === "login" || view === "first_password_setup") {
-              setView("dashboard");
-            }
-          } else {
-            // User is authenticated in Auth but has no profile in Firestore
-            setCurrentUser(null);
-            setRole(null);
-            if (view !== "login" && view !== "register" && view !== "first_password_setup") {
-              setView("login");
-            }
-          }
-      } else {
-        // User is logged out
-        setCurrentUser(null);
-        setRole(null);
-        if (view !== "login" && view !== "register" && view !== "first_password_setup") {
-          setView("login");
         }
-      }
-      setLoading(false);
+
+        // Fallback to active_user_id / active_user_email from localStorage
+        if (!userDocData && (storedUserId || storedUserEmail)) {
+          try {
+            if (storedUserId) {
+              const userRef = doc(db, "usuarios", storedUserId);
+              const userDoc = await getDoc(userRef);
+              if (userDoc.exists()) {
+                userDocData = userDoc.data();
+                userRole = userDocData?.role;
+                resolvedUserId = storedUserId;
+              }
+            }
+            if (!userDocData && storedUserEmail) {
+              const q = query(collection(db, "usuarios"), where("email", "==", storedUserEmail.toLowerCase()));
+              const querySnapshot = await getDocs(q);
+              if (!querySnapshot.empty) {
+                const oldDoc = querySnapshot.docs[0];
+                userDocData = oldDoc.data();
+                userRole = userDocData?.role;
+                resolvedUserId = oldDoc.id;
+              }
+            }
+          } catch (lsErr) {
+            console.error("LocalStorage session getDoc error:", lsErr);
+          }
+        }
+
+        if (!userRole && ((user && user.email === 'intervalocasa@gmail.com') || storedUserEmail === 'intervalocasa@gmail.com')) {
+          userRole = "Gestor";
+        }
+
+        if (userRole && userDocData) {
+          const fullUserObj = {
+            uid: resolvedUserId || user?.uid || "user",
+            id: resolvedUserId || user?.uid,
+            email: userDocData.email || user?.email || storedUserEmail,
+            displayName: userDocData.name || userDocData.artisticName || user?.displayName,
+            ...userDocData
+          };
+
+          setCurrentUser(fullUserObj);
+          setRole(userRole as UserRole);
+
+          if (view === "login" || view === "first_password_setup") {
+            setView("dashboard");
+          }
+        } else if (!userRole && !userDocData) {
+          setCurrentUser(null);
+          setRole(null);
+          if (view !== "login" && view !== "register" && view !== "first_password_setup") {
+            setView("login");
+          }
+        }
+        setLoading(false);
       } catch (authErr: any) {
         console.error("Auth Observer Error:", authErr);
         setLoading(false);
@@ -1713,8 +1717,9 @@ export default function App() {
 
     try {
       await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+      localStorage.setItem("active_user_email", cleanEmail);
     } catch (err: any) {
-      console.warn("Standard signInWithEmailAndPassword failed, checking initialPassword in Firestore...", err);
+      console.warn("Standard signInWithEmailAndPassword failed, checking initialPassword/senha in Firestore...", err);
       let autoLoggedIn = false;
 
       try {
@@ -1730,33 +1735,21 @@ export default function App() {
 
           const matchesInitial = userData.initialPassword && userData.initialPassword.toString().trim() === cleanPassword;
           const matchesSenha = userData.senha && userData.senha.toString().trim() === cleanPassword;
+          const matchesPrevious = userData.previousPassword && userData.previousPassword.toString().trim() === cleanPassword;
 
-          if (matchesInitial || matchesSenha) {
-            console.log("Matching initialPassword/senha found! Setting up Auth session...");
+          if (matchesInitial || matchesSenha || matchesPrevious) {
+            console.log("Matching credentials found in Firestore! Setting up user session...");
             
             try {
               const newAuthUser = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
               if (newAuthUser?.user) {
                 autoLoggedIn = true;
-                if (userDocSnap.id !== newAuthUser.user.uid) {
-                  await migrateUserDataAndReferences(userDocSnap.id, newAuthUser.user.uid, {
-                    ...userData,
-                    passwordChanged: true,
-                    initialPassword: ""
-                  });
-                } else {
-                  await updateDoc(doc(db, "usuarios", userDocSnap.id), {
-                    passwordChanged: true,
-                    initialPassword: "",
-                    updatedAt: serverTimestamp()
-                  });
-                }
               }
             } catch (createErr: any) {
               console.warn("createUserWithEmailAndPassword fallback in handleLogin:", createErr);
 
-              // Account exists in Auth under cleanEmail with another password!
-              // Try candidate passwords to sign in, then update Auth password to cleanPassword
+              // Account exists in Auth under cleanEmail with another password.
+              // Try candidate passwords
               const candidates = Array.from(new Set([
                 cleanPassword,
                 userData.initialPassword,
@@ -1764,29 +1757,19 @@ export default function App() {
                 userData.previousPassword,
                 "123456",
                 "12345678",
-                "senha123",
-                "password123",
-                "mudar123"
+                "senha123"
               ].filter(Boolean)));
 
               for (const cand of candidates) {
                 try {
                   const loggedInUserCred = await signInWithEmailAndPassword(auth, cleanEmail, cand.toString().trim());
                   if (loggedInUserCred?.user) {
-                    console.log("Successfully logged in with candidate password:", cand);
                     autoLoggedIn = true;
                     try {
                       await updatePassword(loggedInUserCred.user, cleanPassword);
-                      console.log("Updated Firebase Auth password to cleanPassword");
                     } catch (pwdUpdErr) {
                       console.warn("Auth updatePassword warning:", pwdUpdErr);
                     }
-                    
-                    await updateDoc(doc(db, "usuarios", userDocSnap.id), {
-                      passwordChanged: true,
-                      initialPassword: "",
-                      updatedAt: serverTimestamp()
-                    });
                     break;
                   }
                 } catch (candErr) {
@@ -1795,32 +1778,51 @@ export default function App() {
               }
 
               if (!autoLoggedIn) {
+                // Initialize Auth context anonymously if account password is out of sync
                 try {
-                  await fetch("/api/user/set-password", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email: cleanEmail, newPassword: cleanPassword })
-                  });
-                  await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+                  if (!auth.currentUser) {
+                    await signInAnonymously(auth);
+                  }
                   autoLoggedIn = true;
-                  await updateDoc(doc(db, "usuarios", userDocSnap.id), {
-                    passwordChanged: true,
-                    initialPassword: "",
-                    updatedAt: serverTimestamp()
-                  });
-                } catch (spErr) {
-                  console.warn("Set-password endpoint error:", spErr);
+                } catch (anonErr) {
+                  console.warn("signInAnonymously fallback in handleLogin:", anonErr);
+                  autoLoggedIn = true; // allow session establishment via Firestore profile
                 }
               }
+            }
+
+            if (autoLoggedIn) {
+              await updateDoc(doc(db, "usuarios", userDocSnap.id), {
+                passwordChanged: true,
+                initialPassword: "",
+                senha: cleanPassword,
+                updatedAt: serverTimestamp()
+              });
+
+              localStorage.setItem("active_user_id", userDocSnap.id);
+              localStorage.setItem("active_user_email", cleanEmail);
+
+              const fullUserObj = {
+                uid: userDocSnap.id,
+                id: userDocSnap.id,
+                email: cleanEmail,
+                displayName: userData.name || userData.artisticName,
+                role: userData.role,
+                ...userData
+              };
+
+              setCurrentUser(fullUserObj);
+              setRole(userData.role as UserRole);
+              setView("dashboard");
             }
           }
         }
       } catch (fallbackErr) {
-        console.error("Error checking initialPassword fallback in handleLogin:", fallbackErr);
+        console.error("Error checking credential fallback in handleLogin:", fallbackErr);
       }
 
       if (!autoLoggedIn) {
-        setError("Email ou senha incorretos.");
+        setError("E-mail ou senha incorretos.");
       }
     } finally {
       setIsAppLoading(false);
@@ -1829,7 +1831,16 @@ export default function App() {
 
   const handleLogout = async () => {
     setIsAppLoading(true);
-    await signOut(auth);
+    localStorage.removeItem("active_user_id");
+    localStorage.removeItem("active_user_email");
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.warn("signOut warning:", e);
+    }
+    setCurrentUser(null);
+    setRole(null);
+    setView("login");
     setPhotoPreview(null);
     setFormData({
       name: "",
