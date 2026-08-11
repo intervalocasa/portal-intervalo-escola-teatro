@@ -784,11 +784,23 @@ export default function App() {
     setIsAppLoading(true);
     setGestorResetError("");
     try {
+      // 1. Client-side Firestore update (using logged in Gestor's active auth token)
+      if (gestorResettingUid) {
+        const userDocRef = doc(db, "usuarios", gestorResettingUid);
+        await updateDoc(userDocRef, {
+          passwordChanged: false,
+          initialPassword: "",
+          updatedAt: serverTimestamp()
+        }).catch(e => console.warn("Client updateDoc warning in reset-user-access:", e));
+      }
+
+      // 2. Call server endpoint to handle Firebase Auth account reset
       const response = await fetch("/api/admin/reset-user-access", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           uid: gestorResettingUid,
+          targetEmail: targetUser?.email,
           adminUid: currentUser?.uid || auth.currentUser?.uid,
           adminEmail: currentUser?.email || auth.currentUser?.email
         })
@@ -798,13 +810,13 @@ export default function App() {
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text();
         console.error("Non-JSON response in reset-user-access:", text);
-        throw new Error(`Erro no servidor (${response.status}): Servidor indisponível ou reiniciando.`);
+        throw new Error(`Erro no servidor (${response.status}): Servidor indisponível.`);
       }
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Erro ao resetar acesso.");
 
-      showNotification(`Acesso de ${targetUser?.name || 'usuário'} resetado com sucesso! O usuário já pode criar uma nova senha acessando "Não possuo senha" na tela de login.`, "Sucesso", "success");
+      showNotification(`Acesso de ${targetUser?.name || 'usuário'} resetado com sucesso! O usuário já pode criar uma nova senha em "Não possuo senha".`, "Sucesso", "success");
       setGestorResettingUid(null);
       setGestorNewPwd("");
     } catch (err: any) {
@@ -824,13 +836,28 @@ export default function App() {
       return;
     }
 
+    if (!gestorResettingUid) return;
+    const targetUser = users.find(u => u.id === gestorResettingUid);
+
     setIsAppLoading(true);
     try {
+      // 1. Client-side Firestore update (using logged in Gestor's active auth token)
+      if (gestorResettingUid) {
+        const userDocRef = doc(db, "usuarios", gestorResettingUid);
+        await updateDoc(userDocRef, {
+          initialPassword: gestorNewPwd,
+          passwordChanged: false,
+          updatedAt: serverTimestamp()
+        }).catch(e => console.warn("Client updateDoc warning in update-password:", e));
+      }
+
+      // 2. Call server endpoint to update/create Firebase Auth user password
       const response = await fetch("/api/admin/update-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           uid: gestorResettingUid,
+          targetEmail: targetUser?.email,
           newPassword: gestorNewPwd,
           adminUid: currentUser?.uid || auth.currentUser?.uid,
           adminEmail: currentUser?.email || auth.currentUser?.email
@@ -841,11 +868,11 @@ export default function App() {
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text();
         console.error("Non-JSON response in update-password:", text);
-        throw new Error(`Erro no servidor (${response.status}): Servidor indisponível ou reiniciando.`);
+        throw new Error(`Erro no servidor (${response.status}): Servidor indisponível.`);
       }
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Falha ao atualizar senha");
+      if (!response.ok) throw new Error(data.error || "Falha ao atualizar senha.");
 
       showNotification("Senha alterada com sucesso pelo Gestor.", "Sucesso", "success");
       setGestorResettingUid(null);
