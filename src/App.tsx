@@ -671,29 +671,28 @@ export default function App() {
       return;
     }
 
+    const cleanEmail = firstPwdEmail.trim().toLowerCase();
     setIsAppLoading(true);
+
     try {
       // 1. Check if email exists in Firestore
-      const q = query(collection(db, "usuarios"), where("email", "==", firstPwdEmail.trim().toLowerCase()));
+      const q = query(collection(db, "usuarios"), where("email", "==", cleanEmail));
       const snap = await getDocs(q);
 
       if (snap.empty) {
-        setFirstPwdError("Este e-mail não está cadastrado no sistema. Por favor, solicite seu acesso.");
+        setFirstPwdError("Este e-mail não está cadastrado no sistema. Por favor, solicite seu acesso com a gestão.");
         return;
       }
 
       const userData = snap.docs[0].data();
+      let success = false;
 
-      // 2. Try to create Auth user
+      // 2. Try to create Auth user client-side first
       try {
-        const userCred = await createUserWithEmailAndPassword(auth, firstPwdEmail.trim().toLowerCase(), firstPwdNew);
+        const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, firstPwdNew);
         const user = userCred.user;
+        success = true;
 
-        // 3. Update Firestore with UID if it's different (link them)
-        // If the manager registered with email, we update the existing doc to have the UID as the ID
-        // Or if the doc ID is already the same as UID (not possible if not created in Auth yet)
-        
-        // Let's migrate the doc to use UID if it's currently using a random ID
         const oldDocId = snap.docs[0].id;
         if (oldDocId !== user.uid) {
           await migrateUserDataAndReferences(oldDocId, user.uid, {
@@ -706,20 +705,35 @@ export default function App() {
             updatedAt: serverTimestamp()
           });
         }
-
-        showNotification("Senha cadastrada com sucesso! Bem-vindo ao sistema.", "Sucesso");
-        // onAuthStateChanged will handle the view change
       } catch (authErr: any) {
-        console.error("Auth creation error:", authErr);
-        if (authErr.code === "auth/email-already-in-use") {
-          setFirstPwdError("Este e-mail já possui uma conta ativa. Tente fazer login ou redefinir sua senha.");
-        } else {
-          setFirstPwdError(`Erro ao criar conta: ${authErr.message}`);
+        console.warn("Client Auth creation error/fallback to server endpoint:", authErr);
+        
+        // Use server endpoint to set/update password for this user
+        const response = await fetch("/api/user/set-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: cleanEmail,
+            newPassword: firstPwdNew
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Erro ao definir senha no servidor.");
         }
+
+        // Try signing in with the newly set password
+        await signInWithEmailAndPassword(auth, cleanEmail, firstPwdNew);
+        success = true;
+      }
+
+      if (success) {
+        showNotification("Senha cadastrada com sucesso! Bem-vindo ao sistema.", "Sucesso", "success");
       }
     } catch (err: any) {
       console.error("Setup error:", err);
-      setFirstPwdError(`Erro no processo: ${err.message}`);
+      setFirstPwdError(`Erro no processo: ${err.message || "Não foi possível definir a senha."}`);
     } finally {
       setIsAppLoading(false);
     }
@@ -761,6 +775,35 @@ export default function App() {
     } finally {
       setIsAppLoading(false);
       setPasswordLoading(false);
+    }
+  };
+
+  const handleGestorResetUserAccess = async () => {
+    if (!gestorResettingUid) return;
+    const targetUser = users.find(u => u.id === gestorResettingUid);
+    setIsAppLoading(true);
+    setGestorResetError("");
+    try {
+      const response = await fetch("/api/admin/reset-user-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: gestorResettingUid,
+          adminUid: currentUser?.uid
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Erro ao resetar acesso.");
+
+      showNotification(`Acesso de ${targetUser?.name || 'usuário'} resetado com sucesso! O usuário já pode criar uma nova senha acessando "Não possuo senha" na tela de login.`, "Sucesso", "success");
+      setGestorResettingUid(null);
+      setGestorNewPwd("");
+    } catch (err: any) {
+      console.error("Gestor Reset Access Error:", err);
+      setGestorResetError(err.message || "Falha ao resetar acesso do usuário.");
+    } finally {
+      setIsAppLoading(false);
     }
   };
 
@@ -3058,22 +3101,41 @@ export default function App() {
                 <p className="text-orange-50/70 text-[10px] mt-1 uppercase tracking-widest font-bold">Ação de Administrador</p>
               </div>
 
-              <form onSubmit={handleGestorPasswordReset} className="p-10 space-y-6">
+              <form onSubmit={handleGestorPasswordReset} className="p-8 space-y-5">
                 <div className="space-y-4">
-                  <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest mb-4">
-                    Você está redefinindo a senha para: <br/>
-                    <span className="text-pro-teal">{users.find(u => u.id === gestorResettingUid)?.name}</span>
+                  <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest text-center">
+                    Redefinindo senha para: <br/>
+                    <span className="text-pro-teal font-extrabold text-sm">{users.find(u => u.id === gestorResettingUid)?.name}</span>
                   </p>
 
+                  <div className="p-4 bg-teal-50/60 rounded-2xl border border-teal-100/60 space-y-2">
+                    <p className="text-[10px] font-bold text-teal-900 uppercase tracking-wider">Opção 1: Reset de Acesso Livre</p>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Reseta o acesso do usuário para que ele mesmo crie uma nova senha acessando <strong>"Não possuo senha"</strong> na tela de login.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleGestorResetUserAccess}
+                      className="w-full mt-2 py-3 bg-[#014e63] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow"
+                    >
+                      Resetar Acesso (Liberar p/ Não Possuo Senha)
+                    </button>
+                  </div>
+
+                  <div className="relative flex py-1 items-center">
+                    <div className="flex-grow border-t border-slate-200"></div>
+                    <span className="flex-shrink mx-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">OU</span>
+                    <div className="flex-grow border-t border-slate-200"></div>
+                  </div>
+
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nova Senha Temporária</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Opção 2: Definir Nova Senha Direta</label>
                     <input
                       type="password"
-                      required
                       value={gestorNewPwd}
                       onChange={(e) => setGestorNewPwd(e.target.value)}
-                      placeholder="Mínimo 6 caracteres"
-                      className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-pro-orange outline-none font-bold text-sm transition-all"
+                      placeholder="Digite nova senha (mínimo 6 caracteres)"
+                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-pro-orange outline-none font-bold text-sm transition-all"
                     />
                   </div>
 
@@ -3089,7 +3151,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex gap-3 pt-4">
+                <div className="flex gap-3 pt-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -3097,15 +3159,16 @@ export default function App() {
                       setGestorNewPwd("");
                       setGestorResetError("");
                     }}
-                    className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                    className="flex-1 py-3.5 bg-slate-100 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
                   >
                     CANCELAR
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 py-4 bg-orange-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-orange-900/20"
+                    disabled={!gestorNewPwd || gestorNewPwd.length < 6}
+                    className="flex-1 py-3.5 bg-orange-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    REDEFINIR
+                    DEFINIR SENHA
                   </button>
                 </div>
               </form>

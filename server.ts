@@ -159,7 +159,7 @@ async function startServer() {
       if (userDoc.exists) {
         await userDocRef.update({
           initialPassword: newPassword,
-          passwordChanged: true,
+          passwordChanged: false,
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
       }
@@ -170,17 +170,9 @@ async function startServer() {
         if (authUidDoc.exists) {
           await authUidRef.update({
             initialPassword: newPassword,
-            passwordChanged: true,
+            passwordChanged: false,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           });
-        } else if (userDoc.exists) {
-          await authUidRef.set({
-            ...userDoc.data(),
-            id: targetAuthUser.uid,
-            initialPassword: newPassword,
-            passwordChanged: true,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
         }
       }
 
@@ -188,6 +180,144 @@ async function startServer() {
     } catch (error: any) {
       console.error("[SERVER] Error updating password:", error);
       res.status(500).json({ error: error.message || "Erro interno ao atualizar a senha." });
+    }
+  });
+
+  // API Route to reset user access (allows user to define password via "Não possuo senha")
+  app.post("/api/admin/reset-user-access", async (req, res) => {
+    console.log("[SERVER] Received reset-user-access request");
+    const { uid, adminUid } = req.body;
+
+    if (!uid || !adminUid) {
+      return res.status(400).json({ error: "Dados incompletos: ID do usuário e ID do administrador são obrigatórios." });
+    }
+
+    if (!admin.apps.length) {
+      return res.status(500).json({ error: "Firebase Admin não inicializado." });
+    }
+
+    try {
+      // 1. Security check
+      let isAuthorized = false;
+      const adminDoc = await admin.firestore().collection("usuarios").doc(adminUid).get();
+      if (adminDoc.exists) {
+        const role = adminDoc.data()?.role;
+        const email = adminDoc.data()?.email;
+        const allowedRoles = ["Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor", "Auxiliar Administrativo"];
+        if (allowedRoles.includes(role) || email === "intervalocasa@gmail.com") {
+          isAuthorized = true;
+        }
+      }
+
+      if (!isAuthorized) {
+        return res.status(403).json({ error: "Acesso negado: Apenas gestores podem redefinir acesso de usuários." });
+      }
+
+      // 2. Find target user doc in Firestore
+      const userDocRef = admin.firestore().collection("usuarios").doc(uid);
+      const userDoc = await userDocRef.get();
+      const userEmail = userDoc.exists ? userDoc.data()?.email : null;
+
+      // 3. Find and delete Auth account if exists so user can register fresh
+      if (userEmail) {
+        try {
+          const authUser = await admin.auth().getUserByEmail(userEmail.trim().toLowerCase());
+          if (authUser) {
+            await admin.auth().deleteUser(authUser.uid);
+            console.log(`[SERVER] Deleted Auth user ${authUser.uid} for fresh reset`);
+          }
+        } catch (e) {
+          // Ignore if user doesn't exist in Auth
+        }
+      }
+
+      try {
+        const authUserByUid = await admin.auth().getUser(uid);
+        if (authUserByUid) {
+          await admin.auth().deleteUser(uid);
+        }
+      } catch (e) {
+        // Ignore
+      }
+
+      // 4. Update Firestore doc to require new password setup
+      if (userDoc.exists) {
+        await userDocRef.update({
+          passwordChanged: false,
+          initialPassword: "",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+
+      res.status(200).json({ message: "Acesso resetado com sucesso. O usuário já pode criar uma nova senha em 'Não possuo senha' na tela de login." });
+    } catch (error: any) {
+      console.error("[SERVER] Error resetting user access:", error);
+      res.status(500).json({ error: error.message || "Erro ao resetar acesso do usuário." });
+    }
+  });
+
+  // Public API Route for users to set/update their password ("Não possuo senha" / "Primeiro Acesso")
+  app.post("/api/user/set-password", async (req, res) => {
+    console.log("[SERVER] Received set-password request");
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).json({ error: "E-mail e nova senha são obrigatórios." });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "A senha deve ter no mínimo 6 caracteres." });
+    }
+
+    if (!admin.apps.length) {
+      return res.status(500).json({ error: "Firebase Admin não inicializado." });
+    }
+
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+
+      // 1. Verify user exists in Firestore
+      const snap = await admin.firestore().collection("usuarios").where("email", "==", cleanEmail).get();
+      if (snap.empty) {
+        return res.status(404).json({ error: "Este e-mail não está cadastrado no sistema. Solicite seu cadastro à gestão." });
+      }
+
+      // 2. Find or create in Firebase Auth
+      let targetAuthUser: admin.auth.UserRecord | null = null;
+      try {
+        targetAuthUser = await admin.auth().getUserByEmail(cleanEmail);
+      } catch (e) {
+        // Not found in Auth
+      }
+
+      if (targetAuthUser) {
+        await admin.auth().updateUser(targetAuthUser.uid, {
+          password: newPassword
+        });
+        console.log(`[SERVER] Updated password via set-password for ${targetAuthUser.uid}`);
+      } else {
+        const userDocData = snap.docs[0].data();
+        targetAuthUser = await admin.auth().createUser({
+          email: cleanEmail,
+          password: newPassword,
+          displayName: userDocData.name || ""
+        });
+        console.log(`[SERVER] Created Auth user via set-password for ${cleanEmail}`);
+      }
+
+      // 3. Mark Firestore as passwordChanged = true
+      for (const docSnap of snap.docs) {
+        await docSnap.ref.update({
+          passwordChanged: true,
+          initialPassword: "",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+
+      res.status(200).json({ message: "Senha cadastrada com sucesso!" });
+    } catch (error: any) {
+      console.error("[SERVER] Error setting user password:", error);
+      res.status(500).json({ error: error.message || "Erro ao definir senha." });
     }
   });
 
