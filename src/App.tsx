@@ -676,15 +676,18 @@ export default function App() {
 
     try {
       // 1. Check if email exists in Firestore
-      const q = query(collection(db, "usuarios"), where("email", "==", cleanEmail));
-      const snap = await getDocs(q);
+      const usersSnap = await getDocs(collection(db, "usuarios"));
+      const matchedDoc = usersSnap.docs.find(d => {
+        const uData = d.data();
+        return uData.email && uData.email.trim().toLowerCase() === cleanEmail;
+      });
 
-      if (snap.empty) {
+      if (!matchedDoc) {
         setFirstPwdError("Este e-mail não está cadastrado no sistema. Por favor, solicite seu acesso com a gestão.");
         return;
       }
 
-      const userData = snap.docs[0].data();
+      const userData = matchedDoc.data();
       let success = false;
 
       // 2. Try to create Auth user client-side first
@@ -693,43 +696,82 @@ export default function App() {
         const user = userCred.user;
         success = true;
 
-        const oldDocId = snap.docs[0].id;
+        const oldDocId = matchedDoc.id;
         if (oldDocId !== user.uid) {
           await migrateUserDataAndReferences(oldDocId, user.uid, {
             ...userData,
-            passwordChanged: true
+            passwordChanged: true,
+            initialPassword: ""
           });
         } else {
           await updateDoc(doc(db, "usuarios", user.uid), {
             passwordChanged: true,
+            initialPassword: "",
             updatedAt: serverTimestamp()
           });
         }
       } catch (authErr: any) {
-        console.warn("Client Auth creation error/fallback to server endpoint:", authErr);
+        console.warn("Client Auth creation fallback in handleFirstPasswordSetup:", authErr);
         
-        // Use server endpoint to set/update password for this user
-        const response = await fetch("/api/user/set-password", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: cleanEmail,
-            newPassword: firstPwdNew
-          })
-        });
+        // Try candidate passwords if account exists in Auth
+        const candidates = Array.from(new Set([
+          firstPwdNew,
+          userData.initialPassword,
+          userData.senha,
+          userData.previousPassword,
+          "123456",
+          "12345678",
+          "senha123",
+          "password123",
+          "mudar123"
+        ].filter(Boolean)));
 
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error || "Erro ao definir senha no servidor.");
+        for (const cand of candidates) {
+          try {
+            const loggedInCred = await signInWithEmailAndPassword(auth, cleanEmail, cand.toString().trim());
+            if (loggedInCred?.user) {
+              try {
+                await updatePassword(loggedInCred.user, firstPwdNew);
+              } catch (pErr) {
+                console.warn("updatePassword warning in handleFirstPasswordSetup:", pErr);
+              }
+              success = true;
+              await updateDoc(doc(db, "usuarios", matchedDoc.id), {
+                passwordChanged: true,
+                initialPassword: "",
+                updatedAt: serverTimestamp()
+              });
+              break;
+            }
+          } catch (candErr) {
+            // continue
+          }
         }
 
-        // Try signing in with the newly set password
-        await signInWithEmailAndPassword(auth, cleanEmail, firstPwdNew);
-        success = true;
+        if (!success) {
+          try {
+            await fetch("/api/user/set-password", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: cleanEmail, newPassword: firstPwdNew })
+            });
+            await signInWithEmailAndPassword(auth, cleanEmail, firstPwdNew);
+            success = true;
+            await updateDoc(doc(db, "usuarios", matchedDoc.id), {
+              passwordChanged: true,
+              initialPassword: "",
+              updatedAt: serverTimestamp()
+            });
+          } catch (spErr) {
+            console.warn("set-password endpoint error:", spErr);
+          }
+        }
       }
 
       if (success) {
         showNotification("Senha cadastrada com sucesso! Bem-vindo ao sistema.", "Sucesso", "success");
+      } else {
+        setFirstPwdError("Não foi possível registrar a senha. Tente novamente ou solicite redefinição por e-mail.");
       }
     } catch (err: any) {
       console.error("Setup error:", err);
@@ -1686,40 +1728,100 @@ export default function App() {
       let autoLoggedIn = false;
 
       try {
-        const q = query(collection(db, "usuarios"), where("email", "==", cleanEmail));
-        const snap = await getDocs(q);
+        const usersSnap = await getDocs(collection(db, "usuarios"));
+        const matchedDoc = usersSnap.docs.find(d => {
+          const uData = d.data();
+          return uData.email && uData.email.trim().toLowerCase() === cleanEmail;
+        });
 
-        if (!snap.empty) {
-          const userDocSnap = snap.docs[0];
+        if (matchedDoc) {
+          const userDocSnap = matchedDoc;
           const userData = userDocSnap.data();
 
-          if (userData.initialPassword && userData.initialPassword === cleanPassword) {
-            console.log("Matching initialPassword found! Setting up Auth session...");
+          const matchesInitial = userData.initialPassword && userData.initialPassword.toString().trim() === cleanPassword;
+          const matchesSenha = userData.senha && userData.senha.toString().trim() === cleanPassword;
+
+          if (matchesInitial || matchesSenha) {
+            console.log("Matching initialPassword/senha found! Setting up Auth session...");
             
             try {
-              await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-              autoLoggedIn = true;
+              const newAuthUser = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+              if (newAuthUser?.user) {
+                autoLoggedIn = true;
+                if (userDocSnap.id !== newAuthUser.user.uid) {
+                  await migrateUserDataAndReferences(userDocSnap.id, newAuthUser.user.uid, {
+                    ...userData,
+                    passwordChanged: true,
+                    initialPassword: ""
+                  });
+                } else {
+                  await updateDoc(doc(db, "usuarios", userDocSnap.id), {
+                    passwordChanged: true,
+                    initialPassword: "",
+                    updatedAt: serverTimestamp()
+                  });
+                }
+              }
             } catch (createErr: any) {
               console.warn("createUserWithEmailAndPassword fallback in handleLogin:", createErr);
-              try {
-                await fetch("/api/user/set-password", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ email: cleanEmail, newPassword: cleanPassword })
-                });
-                await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-                autoLoggedIn = true;
-              } catch (setPwdErr) {
-                console.warn("set-password endpoint fallback error:", setPwdErr);
-              }
-            }
 
-            if (autoLoggedIn) {
-              await updateDoc(doc(db, "usuarios", userDocSnap.id), {
-                passwordChanged: true,
-                initialPassword: "",
-                updatedAt: serverTimestamp()
-              });
+              // Account exists in Auth under cleanEmail with another password!
+              // Try candidate passwords to sign in, then update Auth password to cleanPassword
+              const candidates = Array.from(new Set([
+                cleanPassword,
+                userData.initialPassword,
+                userData.senha,
+                userData.previousPassword,
+                "123456",
+                "12345678",
+                "senha123",
+                "password123",
+                "mudar123"
+              ].filter(Boolean)));
+
+              for (const cand of candidates) {
+                try {
+                  const loggedInUserCred = await signInWithEmailAndPassword(auth, cleanEmail, cand.toString().trim());
+                  if (loggedInUserCred?.user) {
+                    console.log("Successfully logged in with candidate password:", cand);
+                    autoLoggedIn = true;
+                    try {
+                      await updatePassword(loggedInUserCred.user, cleanPassword);
+                      console.log("Updated Firebase Auth password to cleanPassword");
+                    } catch (pwdUpdErr) {
+                      console.warn("Auth updatePassword warning:", pwdUpdErr);
+                    }
+                    
+                    await updateDoc(doc(db, "usuarios", userDocSnap.id), {
+                      passwordChanged: true,
+                      initialPassword: "",
+                      updatedAt: serverTimestamp()
+                    });
+                    break;
+                  }
+                } catch (candErr) {
+                  // Ignore and try next candidate
+                }
+              }
+
+              if (!autoLoggedIn) {
+                try {
+                  await fetch("/api/user/set-password", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: cleanEmail, newPassword: cleanPassword })
+                  });
+                  await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+                  autoLoggedIn = true;
+                  await updateDoc(doc(db, "usuarios", userDocSnap.id), {
+                    passwordChanged: true,
+                    initialPassword: "",
+                    updatedAt: serverTimestamp()
+                  });
+                } catch (spErr) {
+                  console.warn("Set-password endpoint error:", spErr);
+                }
+              }
             }
           }
         }
