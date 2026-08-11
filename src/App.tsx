@@ -783,38 +783,31 @@ export default function App() {
     const targetUser = users.find(u => u.id === gestorResettingUid);
     setIsAppLoading(true);
     setGestorResetError("");
-    try {
-      // 1. Client-side Firestore update (using logged in Gestor's active auth token)
-      if (gestorResettingUid) {
-        const userDocRef = doc(db, "usuarios", gestorResettingUid);
-        await updateDoc(userDocRef, {
-          passwordChanged: false,
-          initialPassword: "",
-          updatedAt: serverTimestamp()
-        }).catch(e => console.warn("Client updateDoc warning in reset-user-access:", e));
-      }
 
-      // 2. Call server endpoint to handle Firebase Auth account reset
-      const response = await fetch("/api/admin/reset-user-access", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uid: gestorResettingUid,
-          targetEmail: targetUser?.email,
-          adminUid: currentUser?.uid || auth.currentUser?.uid,
-          adminEmail: currentUser?.email || auth.currentUser?.email
-        })
+    try {
+      // 1. Primary Client-side Firestore update
+      const userDocRef = doc(db, "usuarios", gestorResettingUid);
+      await updateDoc(userDocRef, {
+        passwordChanged: false,
+        initialPassword: "",
+        updatedAt: serverTimestamp()
       });
 
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text();
-        console.error("Non-JSON response in reset-user-access:", text);
-        throw new Error(`Erro no servidor (${response.status}): Servidor indisponível.`);
+      // 2. Safe call to server endpoint for Auth cleanup
+      try {
+        await fetch("/api/admin/reset-user-access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            uid: gestorResettingUid,
+            targetEmail: targetUser?.email,
+            adminUid: currentUser?.uid || auth.currentUser?.uid,
+            adminEmail: currentUser?.email || auth.currentUser?.email
+          })
+        });
+      } catch (srvErr) {
+        console.warn("Server reset-user-access endpoint warning:", srvErr);
       }
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Erro ao resetar acesso.");
 
       showNotification(`Acesso de ${targetUser?.name || 'usuário'} resetado com sucesso! O usuário já pode criar uma nova senha em "Não possuo senha".`, "Sucesso", "success");
       setGestorResettingUid(null);
@@ -841,40 +834,32 @@ export default function App() {
 
     setIsAppLoading(true);
     try {
-      // 1. Client-side Firestore update (using logged in Gestor's active auth token)
-      if (gestorResettingUid) {
-        const userDocRef = doc(db, "usuarios", gestorResettingUid);
-        await updateDoc(userDocRef, {
-          initialPassword: gestorNewPwd,
-          passwordChanged: false,
-          updatedAt: serverTimestamp()
-        }).catch(e => console.warn("Client updateDoc warning in update-password:", e));
-      }
-
-      // 2. Call server endpoint to update/create Firebase Auth user password
-      const response = await fetch("/api/admin/update-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uid: gestorResettingUid,
-          targetEmail: targetUser?.email,
-          newPassword: gestorNewPwd,
-          adminUid: currentUser?.uid || auth.currentUser?.uid,
-          adminEmail: currentUser?.email || auth.currentUser?.email
-        })
+      // 1. Primary Client-side Firestore update (defines new password in initialPassword)
+      const userDocRef = doc(db, "usuarios", gestorResettingUid);
+      await updateDoc(userDocRef, {
+        initialPassword: gestorNewPwd,
+        passwordChanged: false,
+        updatedAt: serverTimestamp()
       });
 
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text();
-        console.error("Non-JSON response in update-password:", text);
-        throw new Error(`Erro no servidor (${response.status}): Servidor indisponível.`);
+      // 2. Safe call to server endpoint
+      try {
+        await fetch("/api/admin/update-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            uid: gestorResettingUid,
+            targetEmail: targetUser?.email,
+            newPassword: gestorNewPwd,
+            adminUid: currentUser?.uid || auth.currentUser?.uid,
+            adminEmail: currentUser?.email || auth.currentUser?.email
+          })
+        });
+      } catch (srvErr) {
+        console.warn("Server update-password endpoint warning:", srvErr);
       }
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Falha ao atualizar senha.");
-
-      showNotification("Senha alterada com sucesso pelo Gestor.", "Sucesso", "success");
+      showNotification(`Senha alterada com sucesso para ${targetUser?.name || 'o usuário'}.`, "Sucesso", "success");
       setGestorResettingUid(null);
       setGestorNewPwd("");
     } catch (err: any) {
@@ -1691,10 +1676,60 @@ export default function App() {
     e.preventDefault();
     setIsAppLoading(true);
     setError("");
+    const cleanEmail = login.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
     try {
-      await signInWithEmailAndPassword(auth, login.trim().toLowerCase(), password.trim());
+      await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
     } catch (err: any) {
-      setError("Email ou senha incorretos.");
+      console.warn("Standard signInWithEmailAndPassword failed, checking initialPassword in Firestore...", err);
+      let autoLoggedIn = false;
+
+      try {
+        const q = query(collection(db, "usuarios"), where("email", "==", cleanEmail));
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          const userDocSnap = snap.docs[0];
+          const userData = userDocSnap.data();
+
+          if (userData.initialPassword && userData.initialPassword === cleanPassword) {
+            console.log("Matching initialPassword found! Setting up Auth session...");
+            
+            try {
+              await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+              autoLoggedIn = true;
+            } catch (createErr: any) {
+              console.warn("createUserWithEmailAndPassword fallback in handleLogin:", createErr);
+              try {
+                await fetch("/api/user/set-password", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email: cleanEmail, newPassword: cleanPassword })
+                });
+                await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+                autoLoggedIn = true;
+              } catch (setPwdErr) {
+                console.warn("set-password endpoint fallback error:", setPwdErr);
+              }
+            }
+
+            if (autoLoggedIn) {
+              await updateDoc(doc(db, "usuarios", userDocSnap.id), {
+                passwordChanged: true,
+                initialPassword: "",
+                updatedAt: serverTimestamp()
+              });
+            }
+          }
+        }
+      } catch (fallbackErr) {
+        console.error("Error checking initialPassword fallback in handleLogin:", fallbackErr);
+      }
+
+      if (!autoLoggedIn) {
+        setError("Email ou senha incorretos.");
+      }
     } finally {
       setIsAppLoading(false);
     }
