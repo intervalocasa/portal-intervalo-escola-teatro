@@ -808,12 +808,19 @@ export default function App() {
 
   const handleAdminResetPassword = async (userEmail: string) => {
     if (!userEmail) return;
+    const cleanEmail = userEmail.trim().toLowerCase();
+    const targetUser = users.find(u => (u.email || "").trim().toLowerCase() === cleanEmail);
+    if (targetUser) {
+      setGestorResettingUid(targetUser.id);
+      return;
+    }
+
     setIsAppLoading(true);
     try {
-      await sendPasswordResetEmail(auth, userEmail.trim().toLowerCase());
-      showNotification(`Link de redefinição enviado para ${userEmail}`, "Sucesso");
+      await sendPasswordResetEmail(auth, cleanEmail);
+      showNotification(`Link de redefinição enviado para ${cleanEmail}`, "Sucesso");
     } catch (err: any) {
-      showNotification("Erro: " + err.message, "Erro");
+      showNotification("Erro: " + (err.message || "Falha ao enviar e-mail de redefinição."), "Erro");
     } finally {
       setIsAppLoading(false);
     }
@@ -1650,19 +1657,40 @@ export default function App() {
   };
 
   const handleForgotPassword = async (email: string) => {
-    if (!email) {
-      showNotification("Por favor, insira seu e-mail no campo acima.", "Alerta");
+    if (!email || !email.trim()) {
+      showNotification("Por favor, digite seu e-mail no campo de login antes de clicar em 'Esqueci minha senha'.", "Aviso", "warning");
       return;
     }
+    const cleanEmail = email.trim().toLowerCase();
     setIsAppLoading(true);
     try {
-      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
-      showNotification("Link de recuperação enviado para o seu e-mail!", "Sucesso");
+      // 1. Verify if the email is registered in Firestore
+      const q = query(collection(db, "usuarios"), where("email", "==", cleanEmail));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        showNotification("Este e-mail não está cadastrado na plataforma. Verifique o e-mail digitado ou solicite seu acesso à gestão.", "Aviso", "warning");
+        return;
+      }
+
+      // 2. Try sending password reset email via Firebase Auth
+      try {
+        await sendPasswordResetEmail(auth, cleanEmail);
+        showNotification(`Link de redefinição de senha enviado para ${cleanEmail}! Verifique sua caixa de entrada e spam.`, "Sucesso", "success");
+      } catch (authErr: any) {
+        console.warn("sendPasswordResetEmail Auth Error:", authErr);
+        if (authErr.code === "auth/user-not-found") {
+          // User exists in Firestore but hasn't created a Firebase Auth password yet
+          setFirstPwdEmail(cleanEmail);
+          _setView("first_password_setup");
+          showNotification("Seu cadastro foi localizado! Como este é seu primeiro acesso, crie sua senha abaixo para entrar.", "Sucesso", "success");
+        } else {
+          showNotification(`Aviso ao enviar e-mail: ${authErr.message || "Tente cadastrar sua senha no Primeiro Acesso."}`, "Aviso", "warning");
+        }
+      }
     } catch (err: any) {
-      console.error(err);
-      let msg = "Erro ao enviar e-mail de recuperação.";
-      if (err.code === "auth/user-not-found") msg = "Usuário não encontrado.";
-      showNotification(msg, "Erro");
+      console.error("Error in handleForgotPassword:", err);
+      showNotification("Erro ao processar recuperação de senha: " + err.message, "Erro", "error");
     } finally {
       setIsAppLoading(false);
     }

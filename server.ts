@@ -68,33 +68,126 @@ async function startServer() {
     });
   });
 
-  // API ROute to update user password (Gestor feature)
+  // API Route to update user password (Gestor feature)
   app.post("/api/admin/update-password", async (req, res) => {
     console.log("[SERVER] Received update-password request");
     const { uid, newPassword, adminUid } = req.body;
 
+    if (!uid || !newPassword || !adminUid) {
+      return res.status(400).json({ error: "Dados incompletos: ID do usuário, nova senha e ID do administrador são obrigatórios." });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "A nova senha deve ter pelo menos 6 caracteres." });
+    }
+
     if (!admin.apps.length) {
       console.error("[SERVER] Firebase Admin not initialized for update-password");
-      return res.status(500).json({ error: "Firebase Admin not initialized. Check your environment variables." });
+      return res.status(500).json({ error: "Firebase Admin não inicializado. Verifique as configurações do servidor." });
     }
 
     try {
-      // Security check: verify the requester is actually a Gestor
-      const adminUser = await admin.firestore().collection("usuarios").doc(adminUid).get();
-      if (!adminUser.exists || adminUser.data()?.role !== "Gestor") {
-        console.warn(`[SERVER] Unauthorized password update attempt by ${adminUid}`);
-        return res.status(403).json({ error: "Unauthorized: Only Gestors can reset passwords." });
+      // 1. Security check: verify the requester is actually an authorized Gestor
+      let isAuthorized = false;
+      const adminDoc = await admin.firestore().collection("usuarios").doc(adminUid).get();
+      if (adminDoc.exists) {
+        const role = adminDoc.data()?.role;
+        const email = adminDoc.data()?.email;
+        const allowedRoles = ["Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor", "Auxiliar Administrativo"];
+        if (allowedRoles.includes(role) || email === "intervalocasa@gmail.com") {
+          isAuthorized = true;
+        }
       }
 
-      await admin.auth().updateUser(uid, {
-        password: newPassword,
-      });
+      if (!isAuthorized) {
+        try {
+          const authAdmin = await admin.auth().getUser(adminUid);
+          if (authAdmin.email === "intervalocasa@gmail.com") {
+            isAuthorized = true;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
 
-      console.log(`[SERVER] Password updated for user ${uid}`);
-      res.status(200).json({ message: "Password updated successfully." });
+      if (!isAuthorized) {
+        console.warn(`[SERVER] Unauthorized password update attempt by ${adminUid}`);
+        return res.status(403).json({ error: "Acesso negado: Apenas gestores podem redefinir senhas de usuários." });
+      }
+
+      // 2. Find target user doc in Firestore
+      const userDocRef = admin.firestore().collection("usuarios").doc(uid);
+      const userDoc = await userDocRef.get();
+      const userEmail = userDoc.exists ? userDoc.data()?.email : null;
+
+      let targetAuthUser: admin.auth.UserRecord | null = null;
+
+      // Try finding in Auth by UID first
+      try {
+        targetAuthUser = await admin.auth().getUser(uid);
+      } catch (e) {
+        // Not found by doc ID
+      }
+
+      // If not found by UID, try by email
+      if (!targetAuthUser && userEmail) {
+        try {
+          targetAuthUser = await admin.auth().getUserByEmail(userEmail.trim().toLowerCase());
+        } catch (e) {
+          // Not found by email
+        }
+      }
+
+      // Update password in Auth or create Auth account if missing
+      if (targetAuthUser) {
+        await admin.auth().updateUser(targetAuthUser.uid, {
+          password: newPassword,
+        });
+        console.log(`[SERVER] Updated Auth password for user UID ${targetAuthUser.uid}`);
+      } else if (userEmail) {
+        targetAuthUser = await admin.auth().createUser({
+          email: userEmail.trim().toLowerCase(),
+          password: newPassword,
+          displayName: userDoc.exists ? (userDoc.data()?.name || "") : "",
+        });
+        console.log(`[SERVER] Created Auth user with new password for email ${userEmail}`);
+      } else {
+        return res.status(404).json({ error: "Usuário não encontrado no Firebase Auth e sem e-mail válido cadastrado." });
+      }
+
+      // 3. Update Firestore document(s)
+      if (userDoc.exists) {
+        await userDocRef.update({
+          initialPassword: newPassword,
+          passwordChanged: true,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+
+      if (targetAuthUser && targetAuthUser.uid !== uid) {
+        const authUidRef = admin.firestore().collection("usuarios").doc(targetAuthUser.uid);
+        const authUidDoc = await authUidRef.get();
+        if (authUidDoc.exists) {
+          await authUidRef.update({
+            initialPassword: newPassword,
+            passwordChanged: true,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        } else if (userDoc.exists) {
+          await authUidRef.set({
+            ...userDoc.data(),
+            id: targetAuthUser.uid,
+            initialPassword: newPassword,
+            passwordChanged: true,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        }
+      }
+
+      res.status(200).json({ message: "Senha redefinida com sucesso." });
     } catch (error: any) {
       console.error("[SERVER] Error updating password:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message || "Erro interno ao atualizar a senha." });
     }
   });
 
