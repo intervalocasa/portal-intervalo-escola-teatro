@@ -68,13 +68,46 @@ async function startServer() {
     });
   });
 
+  // Helper to check if requester is an authorized Gestor/Admin
+  async function checkIsAdminOrGestor(adminUid?: string, adminEmail?: string): Promise<boolean> {
+    const cleanEmail = adminEmail ? adminEmail.trim().toLowerCase() : "";
+    if (cleanEmail === "intervalocasa@gmail.com" || cleanEmail === "contato@intervalocasa.com") return true;
+
+    if (adminUid) {
+      try {
+        const authUser = await admin.auth().getUser(adminUid);
+        if (authUser.email === "intervalocasa@gmail.com" || authUser.email === "contato@intervalocasa.com") return true;
+      } catch (e) {
+        // ignore
+      }
+
+      const doc = await admin.firestore().collection("usuarios").doc(adminUid).get();
+      if (doc.exists) {
+        const role = doc.data()?.role;
+        const email = (doc.data()?.email || "").toLowerCase();
+        const allowedRoles = ["Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor", "Auxiliar Administrativo"];
+        if (allowedRoles.includes(role) || email === "intervalocasa@gmail.com" || email === "contato@intervalocasa.com") return true;
+      }
+    }
+
+    if (cleanEmail) {
+      const snap = await admin.firestore().collection("usuarios").where("email", "==", cleanEmail).get();
+      if (!snap.empty) {
+        const role = snap.docs[0].data()?.role;
+        const allowedRoles = ["Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor", "Auxiliar Administrativo"];
+        if (allowedRoles.includes(role)) return true;
+      }
+    }
+    return false;
+  }
+
   // API Route to update user password (Gestor feature)
   app.post("/api/admin/update-password", async (req, res) => {
     console.log("[SERVER] Received update-password request");
-    const { uid, newPassword, adminUid } = req.body;
+    const { uid, newPassword, adminUid, adminEmail } = req.body;
 
-    if (!uid || !newPassword || !adminUid) {
-      return res.status(400).json({ error: "Dados incompletos: ID do usuário, nova senha e ID do administrador são obrigatórios." });
+    if (!uid || !newPassword) {
+      return res.status(400).json({ error: "Dados incompletos: ID do usuário e nova senha são obrigatórios." });
     }
 
     if (newPassword.length < 6) {
@@ -87,31 +120,9 @@ async function startServer() {
     }
 
     try {
-      // 1. Security check: verify the requester is actually an authorized Gestor
-      let isAuthorized = false;
-      const adminDoc = await admin.firestore().collection("usuarios").doc(adminUid).get();
-      if (adminDoc.exists) {
-        const role = adminDoc.data()?.role;
-        const email = adminDoc.data()?.email;
-        const allowedRoles = ["Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor", "Auxiliar Administrativo"];
-        if (allowedRoles.includes(role) || email === "intervalocasa@gmail.com") {
-          isAuthorized = true;
-        }
-      }
-
+      const isAuthorized = await checkIsAdminOrGestor(adminUid, adminEmail);
       if (!isAuthorized) {
-        try {
-          const authAdmin = await admin.auth().getUser(adminUid);
-          if (authAdmin.email === "intervalocasa@gmail.com") {
-            isAuthorized = true;
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      if (!isAuthorized) {
-        console.warn(`[SERVER] Unauthorized password update attempt by ${adminUid}`);
+        console.warn(`[SERVER] Unauthorized password update attempt by ${adminUid} / ${adminEmail}`);
         return res.status(403).json({ error: "Acesso negado: Apenas gestores podem redefinir senhas de usuários." });
       }
 
@@ -186,10 +197,10 @@ async function startServer() {
   // API Route to reset user access (allows user to define password via "Não possuo senha")
   app.post("/api/admin/reset-user-access", async (req, res) => {
     console.log("[SERVER] Received reset-user-access request");
-    const { uid, adminUid } = req.body;
+    const { uid, adminUid, adminEmail } = req.body;
 
-    if (!uid || !adminUid) {
-      return res.status(400).json({ error: "Dados incompletos: ID do usuário e ID do administrador são obrigatórios." });
+    if (!uid) {
+      return res.status(400).json({ error: "Dados incompletos: ID do usuário é obrigatório." });
     }
 
     if (!admin.apps.length) {
@@ -197,18 +208,7 @@ async function startServer() {
     }
 
     try {
-      // 1. Security check
-      let isAuthorized = false;
-      const adminDoc = await admin.firestore().collection("usuarios").doc(adminUid).get();
-      if (adminDoc.exists) {
-        const role = adminDoc.data()?.role;
-        const email = adminDoc.data()?.email;
-        const allowedRoles = ["Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor", "Auxiliar Administrativo"];
-        if (allowedRoles.includes(role) || email === "intervalocasa@gmail.com") {
-          isAuthorized = true;
-        }
-      }
-
+      const isAuthorized = await checkIsAdminOrGestor(adminUid, adminEmail);
       if (!isAuthorized) {
         return res.status(403).json({ error: "Acesso negado: Apenas gestores podem redefinir acesso de usuários." });
       }

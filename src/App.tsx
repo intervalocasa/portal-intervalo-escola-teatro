@@ -789,9 +789,17 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           uid: gestorResettingUid,
-          adminUid: currentUser?.uid
+          adminUid: currentUser?.uid || auth.currentUser?.uid,
+          adminEmail: currentUser?.email || auth.currentUser?.email
         })
       });
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Non-JSON response in reset-user-access:", text);
+        throw new Error(`Erro no servidor (${response.status}): Servidor indisponível ou reiniciando.`);
+      }
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Erro ao resetar acesso.");
@@ -824,26 +832,27 @@ export default function App() {
         body: JSON.stringify({
           uid: gestorResettingUid,
           newPassword: gestorNewPwd,
-          adminUid: currentUser.uid
+          adminUid: currentUser?.uid || auth.currentUser?.uid,
+          adminEmail: currentUser?.email || auth.currentUser?.email
         })
       });
 
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text();
-        console.error("Non-JSON response received:", text);
-        throw new Error(`Erro no servidor (${response.status}): O servidor não retornou JSON. Verifique as configurações.`);
+        console.error("Non-JSON response in update-password:", text);
+        throw new Error(`Erro no servidor (${response.status}): Servidor indisponível ou reiniciando.`);
       }
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to update password");
+      if (!response.ok) throw new Error(data.error || "Falha ao atualizar senha");
 
-      showNotification("Senha alterada com sucesso pelo Gestor.", "Sucesso");
+      showNotification("Senha alterada com sucesso pelo Gestor.", "Sucesso", "success");
       setGestorResettingUid(null);
       setGestorNewPwd("");
     } catch (err: any) {
       console.error("Gestor Reset Error:", err);
-      setGestorResetError(err.message);
+      setGestorResetError(err.message || "Erro ao redefinir senha.");
     } finally {
       setIsAppLoading(false);
     }
