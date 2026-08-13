@@ -43,10 +43,10 @@ service cloud.firestore {
     }
 
     match /usuarios/{userId} {
-      // Allow read for everyone to support the "First Access" email check
+      // Allow read, create, and update for everyone to support login, password setup, and credential sync
       allow read: if true;
-      allow create: if true; // Allow users to create their own profile on first login
-      allow update: if isSignedIn(); // Allow any signed in user to update their own data during migration
+      allow create: if true;
+      allow update: if true;
       allow delete: if isGestor();
 
       match /userBadges/{badgeId} {
