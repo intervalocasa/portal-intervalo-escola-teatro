@@ -243,6 +243,12 @@ export interface RescheduleRecord {
   updatedAt: any;
 }
 
+export type ExperimentalTriageStatus = 
+  | "MATRICULADO" 
+  | "AGUARDANDO_RESPOSTA" 
+  | "NAO_MATRICULOU" 
+  | "NAO_COMPARECEU";
+
 export interface ExperimentalClassBooking {
   id: string;
   studentName: string;
@@ -264,5 +270,14 @@ export interface ExperimentalClassBooking {
   createdByUid?: string;
   createdByName?: string;
   createdByRole?: string;
+  // Triage pós-conclusão de agendamento
+  triageStatus?: ExperimentalTriageStatus | null;
+  attended?: boolean | null;
+  triageNotes?: string | null;
+  triageReason?: string | null;
+  triagedAt?: any;
+  triagedByUid?: string;
+  triagedByName?: string;
+  triagedByRole?: string;
 }
 

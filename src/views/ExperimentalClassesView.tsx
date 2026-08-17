@@ -26,7 +26,16 @@ import {
   History,
   Sparkles,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  UserCheck,
+  UserX,
+  HelpCircle,
+  XCircle,
+  ClipboardCheck,
+  RotateCcw,
+  Check,
+  MessageSquare,
+  ArrowRight
 } from "lucide-react";
 import { 
   collection, 
@@ -40,7 +49,7 @@ import {
   orderBy 
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { ExperimentalClassBooking, Course, Class } from "../types";
+import { ExperimentalClassBooking, ExperimentalTriageStatus, Course, Class } from "../types";
 import { BackButton } from "../components/CommonComponents";
 
 interface ExperimentalClassesViewProps {
@@ -128,6 +137,11 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"TODOS" | "PAGAMENTO_PENDENTE" | "AGENDAMENTO_CONFIRMADO">("TODOS");
+  
+  // Specific Tabs Filter
+  const [tabFilter, setTabFilter] = useState<
+    "TODOS" | "AGENDADOS" | "MATRICULADO" | "AGUARDANDO_RESPOSTA" | "NAO_MATRICULOU" | "NAO_COMPARECEU"
+  >("TODOS");
 
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -139,6 +153,12 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   // Manual Confirmation Modal State
   const [manualConfirmBooking, setManualConfirmBooking] = useState<ExperimentalClassBooking | null>(null);
   const [manualConfirmReasonInput, setManualConfirmReasonInput] = useState("");
+
+  // Post-Booking Triage Modal State
+  const [triageBooking, setTriageBooking] = useState<ExperimentalClassBooking | null>(null);
+  const [triageAttended, setTriageAttended] = useState<boolean | null>(null);
+  const [triageOutcome, setTriageOutcome] = useState<"MATRICULADO" | "AGUARDANDO_RESPOSTA" | "NAO_MATRICULOU" | null>(null);
+  const [triageNotesInput, setTriageNotesInput] = useState("");
 
   // Form State
   const [studentName, setStudentName] = useState("");
@@ -220,6 +240,106 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setIsCreateModalOpen(false);
   };
 
+  // Open Triage Modal
+  const openTriageModal = (booking: ExperimentalClassBooking) => {
+    setTriageBooking(booking);
+    if (booking.triageStatus === "NAO_COMPARECEU" || booking.attended === false) {
+      setTriageAttended(false);
+      setTriageOutcome(null);
+    } else if (booking.triageStatus) {
+      setTriageAttended(true);
+      setTriageOutcome(
+        booking.triageStatus === "MATRICULADO"
+          ? "MATRICULADO"
+          : booking.triageStatus === "AGUARDANDO_RESPOSTA"
+          ? "AGUARDANDO_RESPOSTA"
+          : "NAO_MATRICULOU"
+      );
+    } else {
+      setTriageAttended(null);
+      setTriageOutcome(null);
+    }
+    setTriageNotesInput(booking.triageNotes || "");
+  };
+
+  // Submit Post-Booking Triage
+  const handleSaveTriage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!triageBooking) return;
+
+    if (triageAttended === null) {
+      showNotification?.("Selecione se o aluno compareceu ou não à aula experimental.", "Campo Obrigatório", "error");
+      return;
+    }
+
+    if (triageAttended === true && !triageOutcome) {
+      showNotification?.("Selecione o desfecho da matrícula para o aluno que compareceu.", "Campo Obrigatório", "error");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const finalStatus: ExperimentalTriageStatus = triageAttended ? triageOutcome! : "NAO_COMPARECEU";
+      const triagerName = loggedUser?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "Usuário do Sistema";
+      let triagerRole = "Gestor / Auxiliar";
+      if (loggedUser?.role) {
+        if (loggedUser.role === "GESTOR" || loggedUser.role === "gestor") triagerRole = "Gestor";
+        else if (loggedUser.role === "AUXILIAR" || loggedUser.role === "auxiliar") triagerRole = "Auxiliar Administrativo";
+        else triagerRole = loggedUser.role;
+      }
+
+      await updateDoc(doc(db, "experimental_classes", triageBooking.id), {
+        attended: triageAttended,
+        triageStatus: finalStatus,
+        triageNotes: triageNotesInput.trim() || null,
+        triagedAt: serverTimestamp(),
+        triagedByUid: currentUser?.uid || loggedUser?.id || null,
+        triagedByName: triagerName,
+        triagedByRole: triagerRole,
+        updatedAt: serverTimestamp()
+      });
+
+      const messageMap: Record<ExperimentalTriageStatus, string> = {
+        MATRICULADO: "Triagem concluída: Aluno matriculado com sucesso!",
+        AGUARDANDO_RESPOSTA: "Triagem registrada: Aguardando resposta do aluno.",
+        NAO_MATRICULOU: "Triagem registrada: Aluno decidiu não se matricular.",
+        NAO_COMPARECEU: "Triagem registrada: Falta/Não comparecimento registrado."
+      };
+
+      showNotification?.(messageMap[finalStatus] || "Triagem salva com sucesso!", "Sucesso", "success");
+      setTriageBooking(null);
+    } catch (err) {
+      console.error("Error saving triage:", err);
+      showNotification?.("Erro ao salvar triagem.", "Erro", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Clear / Reset Triage back to Pending
+  const handleClearTriage = async (bookingId: string) => {
+    setIsSubmitting(true);
+    try {
+      await updateDoc(doc(db, "experimental_classes", bookingId), {
+        attended: null,
+        triageStatus: null,
+        triageNotes: null,
+        triagedAt: null,
+        triagedByUid: null,
+        triagedByName: null,
+        triagedByRole: null,
+        updatedAt: serverTimestamp()
+      });
+      showNotification?.("Triagem redefinida com sucesso. O agendamento voltou para 'A Realizar'.", "Sucesso", "success");
+      setTriageBooking(null);
+    } catch (err) {
+      console.error("Error clearing triage:", err);
+      showNotification?.("Erro ao redefinir triagem.", "Erro", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Submit New Booking
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -270,6 +390,10 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         createdByUid: currentUser?.uid || loggedUser?.id || null,
         createdByName: creatorName,
         createdByRole: creatorRole,
+        // Initial triage is null (scheduled)
+        triageStatus: null,
+        attended: null,
+        triageNotes: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
@@ -441,24 +565,47 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     }
   };
 
+  // Tab counts
+  const totalCount = bookings.length;
+  const agendadosCount = bookings.filter(b => !b.triageStatus).length;
+  const matriculadosCount = bookings.filter(b => b.triageStatus === "MATRICULADO").length;
+  const aguardandoCount = bookings.filter(b => b.triageStatus === "AGUARDANDO_RESPOSTA").length;
+  const naoMatriculadosCount = bookings.filter(b => b.triageStatus === "NAO_MATRICULOU").length;
+  const naoCompareceuCount = bookings.filter(b => b.triageStatus === "NAO_COMPARECEU" || b.attended === false).length;
+
+  const confirmedCount = bookings.filter(b => b.status === "AGENDAMENTO_CONFIRMADO").length;
+  const pendingCount = bookings.filter(b => b.status === "PAGAMENTO_PENDENTE").length;
+
   // Filtered List
   const filteredBookings = useMemo(() => {
     return bookings.filter(b => {
       const matchSearch = 
         (b.studentName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (b.course || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (b.classGroup || "").toLowerCase().includes(searchTerm.toLowerCase());
+        (b.classGroup || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (b.triageNotes || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (b.studentPhone || "").includes(searchTerm) ||
+        (b.studentEmail || "").toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchStatus = 
         statusFilter === "TODOS" || b.status === statusFilter;
 
-      return matchSearch && matchStatus;
-    });
-  }, [bookings, searchTerm, statusFilter]);
+      let matchTab = true;
+      if (tabFilter === "AGENDADOS") {
+        matchTab = !b.triageStatus;
+      } else if (tabFilter === "MATRICULADO") {
+        matchTab = b.triageStatus === "MATRICULADO";
+      } else if (tabFilter === "AGUARDANDO_RESPOSTA") {
+        matchTab = b.triageStatus === "AGUARDANDO_RESPOSTA";
+      } else if (tabFilter === "NAO_MATRICULOU") {
+        matchTab = b.triageStatus === "NAO_MATRICULOU";
+      } else if (tabFilter === "NAO_COMPARECEU") {
+        matchTab = b.triageStatus === "NAO_COMPARECEU" || b.attended === false;
+      }
 
-  const totalCount = bookings.length;
-  const confirmedCount = bookings.filter(b => b.status === "AGENDAMENTO_CONFIRMADO").length;
-  const pendingCount = bookings.filter(b => b.status === "PAGAMENTO_PENDENTE").length;
+      return matchSearch && matchStatus && matchTab;
+    });
+  }, [bookings, searchTerm, statusFilter, tabFilter]);
 
   return (
     <motion.div
@@ -477,7 +624,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               <h1 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Aulas Experimentais</h1>
             </div>
             <p className="text-slate-500 font-medium text-xs sm:text-sm mt-1">
-              Agendamentos de aulas de experiência para novos alunos
+              Agendamentos, controle de presença e triagem pós-aula com acompanhamento de matrículas
             </p>
           </div>
         </div>
@@ -491,36 +638,223 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         </button>
       </div>
 
-      {/* Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total de Agendamentos</p>
-            <p className="text-2xl font-black text-slate-800 mt-1">{totalCount}</p>
+      {/* Metrics Cards Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Total */}
+        <div 
+          onClick={() => setTabFilter("TODOS")}
+          className={`cursor-pointer bg-white p-4 rounded-2xl border transition-all hover:shadow-md ${
+            tabFilter === "TODOS" ? "border-slate-800 ring-2 ring-slate-800/10 shadow-sm" : "border-slate-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Total</span>
+            <div className="p-2 bg-slate-50 text-slate-600 rounded-xl">
+              <Calendar size={16} />
+            </div>
           </div>
-          <div className="p-3 bg-slate-50 text-slate-600 rounded-xl">
-            <Calendar size={22} />
-          </div>
+          <p className="text-2xl font-black text-slate-800 mt-2">{totalCount}</p>
+          <span className="text-[10px] text-slate-400 font-medium block mt-0.5">Todos registros</span>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-amber-500">Pagamento Pendente</p>
-            <p className="text-2xl font-black text-amber-600 mt-1">{pendingCount}</p>
+        {/* A Realizar / Agendados */}
+        <div 
+          onClick={() => setTabFilter("AGENDADOS")}
+          className={`cursor-pointer bg-white p-4 rounded-2xl border transition-all hover:shadow-md ${
+            tabFilter === "AGENDADOS" ? "border-amber-500 ring-2 ring-amber-500/10 shadow-sm" : "border-slate-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-black uppercase tracking-widest text-amber-600">A Realizar</span>
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+              <Clock size={16} />
+            </div>
           </div>
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-            <Clock size={22} />
-          </div>
+          <p className="text-2xl font-black text-amber-600 mt-2">{agendadosCount}</p>
+          <span className="text-[10px] text-amber-600/80 font-medium block mt-0.5">Sem triagem pós-aula</span>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-teal-600">Agendamentos Confirmados</p>
-            <p className="text-2xl font-black text-teal-700 mt-1">{confirmedCount}</p>
+        {/* Matriculados */}
+        <div 
+          onClick={() => setTabFilter("MATRICULADO")}
+          className={`cursor-pointer bg-white p-4 rounded-2xl border transition-all hover:shadow-md ${
+            tabFilter === "MATRICULADO" ? "border-emerald-500 ring-2 ring-emerald-500/10 shadow-sm" : "border-slate-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Matriculados</span>
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+              <UserCheck size={16} />
+            </div>
           </div>
-          <div className="p-3 bg-teal-50 text-teal-600 rounded-xl">
-            <CheckCircle2 size={22} />
+          <p className="text-2xl font-black text-emerald-600 mt-2">{matriculadosCount}</p>
+          <span className="text-[10px] text-emerald-600/80 font-bold block mt-0.5">
+            {totalCount > 0 ? `${Math.round((matriculadosCount / totalCount) * 100)}% de conversão` : "0%"}
+          </span>
+        </div>
+
+        {/* Aguardando Resposta */}
+        <div 
+          onClick={() => setTabFilter("AGUARDANDO_RESPOSTA")}
+          className={`cursor-pointer bg-white p-4 rounded-2xl border transition-all hover:shadow-md ${
+            tabFilter === "AGUARDANDO_RESPOSTA" ? "border-blue-500 ring-2 ring-blue-500/10 shadow-sm" : "border-slate-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-black uppercase tracking-widest text-blue-600">Em Decisão</span>
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+              <HelpCircle size={16} />
+            </div>
           </div>
+          <p className="text-2xl font-black text-blue-600 mt-2">{aguardandoCount}</p>
+          <span className="text-[10px] text-blue-600/80 font-medium block mt-0.5">Aguardando resposta</span>
+        </div>
+
+        {/* Não Matriculados */}
+        <div 
+          onClick={() => setTabFilter("NAO_MATRICULOU")}
+          className={`cursor-pointer bg-white p-4 rounded-2xl border transition-all hover:shadow-md ${
+            tabFilter === "NAO_MATRICULOU" ? "border-slate-500 ring-2 ring-slate-500/10 shadow-sm" : "border-slate-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Não Matr.</span>
+            <div className="p-2 bg-slate-100 text-slate-600 rounded-xl">
+              <XCircle size={16} />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-slate-700 mt-2">{naoMatriculadosCount}</p>
+          <span className="text-[10px] text-slate-400 font-medium block mt-0.5">Optou não matricular</span>
+        </div>
+
+        {/* Não Compareceu */}
+        <div 
+          onClick={() => setTabFilter("NAO_COMPARECEU")}
+          className={`cursor-pointer bg-white p-4 rounded-2xl border transition-all hover:shadow-md ${
+            tabFilter === "NAO_COMPARECEU" ? "border-rose-500 ring-2 ring-rose-500/10 shadow-sm" : "border-slate-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-black uppercase tracking-widest text-rose-600">Faltas</span>
+            <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+              <UserX size={16} />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-rose-600 mt-2">{naoCompareceuCount}</p>
+          <span className="text-[10px] text-rose-600/80 font-medium block mt-0.5">Não compareceu</span>
+        </div>
+      </div>
+
+      {/* SPECIFIC TABS NAV BAR */}
+      <div className="bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          {/* Aba Todos */}
+          <button
+            onClick={() => setTabFilter("TODOS")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+              tabFilter === "TODOS"
+                ? "bg-slate-800 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <Calendar size={14} />
+            <span>Todos</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              tabFilter === "TODOS" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+            }`}>
+              {totalCount}
+            </span>
+          </button>
+
+          {/* Aba A Realizar / Agendados */}
+          <button
+            onClick={() => setTabFilter("AGENDADOS")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+              tabFilter === "AGENDADOS"
+                ? "bg-amber-500 text-white shadow-xs shadow-amber-500/20"
+                : "text-slate-600 hover:bg-amber-50/70 hover:text-amber-700"
+            }`}
+          >
+            <Clock size={14} />
+            <span>A Realizar</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              tabFilter === "AGENDADOS" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-800"
+            }`}>
+              {agendadosCount}
+            </span>
+          </button>
+
+          {/* Aba Matriculados */}
+          <button
+            onClick={() => setTabFilter("MATRICULADO")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+              tabFilter === "MATRICULADO"
+                ? "bg-emerald-600 text-white shadow-xs shadow-emerald-600/20"
+                : "text-slate-600 hover:bg-emerald-50/70 hover:text-emerald-700"
+            }`}
+          >
+            <UserCheck size={14} />
+            <span>Matriculados</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              tabFilter === "MATRICULADO" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-800"
+            }`}>
+              {matriculadosCount}
+            </span>
+          </button>
+
+          {/* Aba Aguardando Resposta */}
+          <button
+            onClick={() => setTabFilter("AGUARDANDO_RESPOSTA")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+              tabFilter === "AGUARDANDO_RESPOSTA"
+                ? "bg-blue-600 text-white shadow-xs shadow-blue-600/20"
+                : "text-slate-600 hover:bg-blue-50/70 hover:text-blue-700"
+            }`}
+          >
+            <HelpCircle size={14} />
+            <span>Aguardando Resposta</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              tabFilter === "AGUARDANDO_RESPOSTA" ? "bg-white/20 text-white" : "bg-blue-100 text-blue-800"
+            }`}>
+              {aguardandoCount}
+            </span>
+          </button>
+
+          {/* Aba Não Matriculados */}
+          <button
+            onClick={() => setTabFilter("NAO_MATRICULOU")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+              tabFilter === "NAO_MATRICULOU"
+                ? "bg-slate-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-700"
+            }`}
+          >
+            <XCircle size={14} />
+            <span>Não Matriculados</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              tabFilter === "NAO_MATRICULOU" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+            }`}>
+              {naoMatriculadosCount}
+            </span>
+          </button>
+
+          {/* Aba Não Compareceu */}
+          <button
+            onClick={() => setTabFilter("NAO_COMPARECEU")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+              tabFilter === "NAO_COMPARECEU"
+                ? "bg-rose-600 text-white shadow-xs shadow-rose-600/20"
+                : "text-slate-600 hover:bg-rose-50/70 hover:text-rose-700"
+            }`}
+          >
+            <UserX size={14} />
+            <span>Não Compareceu</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              tabFilter === "NAO_COMPARECEU" ? "bg-white/20 text-white" : "bg-rose-100 text-rose-800"
+            }`}>
+              {naoCompareceuCount}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -530,27 +864,30 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input
             type="text"
-            placeholder="Buscar por aluno, curso ou turma..."
+            placeholder="Buscar por aluno, curso, turma ou telefone..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-pro-teal"
           />
         </div>
 
-        <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-          {(["TODOS", "PAGAMENTO_PENDENTE", "AGENDAMENTO_CONFIRMADO"] as const).map(f => (
-            <button
-              key={f}
-              onClick={() => setStatusFilter(f)}
-              className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
-                statusFilter === f
-                  ? "bg-slate-800 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {f === "TODOS" ? "Todos" : f === "PAGAMENTO_PENDENTE" ? "Pendentes" : "Confirmados"}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Status Pgto:</span>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            {(["TODOS", "PAGAMENTO_PENDENTE", "AGENDAMENTO_CONFIRMADO"] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setStatusFilter(f)}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                  statusFilter === f
+                    ? "bg-teal-700 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {f === "TODOS" ? "Todos" : f === "PAGAMENTO_PENDENTE" ? "Pendentes" : "Confirmados"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -563,18 +900,18 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       ) : filteredBookings.length === 0 ? (
         <div className="py-16 px-4 text-center bg-white rounded-2xl border border-slate-100 space-y-3">
           <Calendar className="mx-auto text-slate-300 h-12 w-12" />
-          <p className="text-base font-black text-slate-700">Nenhum agendamento encontrado</p>
+          <p className="text-base font-black text-slate-700">Nenhum agendamento nesta aba</p>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            {searchTerm || statusFilter !== "TODOS" 
-              ? "Tente ajustar seus filtros de busca." 
+            {searchTerm || statusFilter !== "TODOS" || tabFilter !== "TODOS"
+              ? "Nenhum agendamento corresponde aos filtros atuais." 
               : "Clique em 'Novo Agendamento' para registrar uma aula experimental."}
           </p>
-          {!searchTerm && statusFilter === "TODOS" && (
+          {tabFilter !== "TODOS" && (
             <button
-              onClick={openCreateModal}
-              className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-pro-teal text-white rounded-xl font-bold text-xs uppercase"
+              onClick={() => setTabFilter("TODOS")}
+              className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase"
             >
-              <Plus size={14} /> Cadastrar Agendamento
+              Ver Todos os Agendamentos
             </button>
           )}
         </div>
@@ -589,8 +926,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   <th className="py-4 px-6">Curso</th>
                   <th className="py-4 px-6">Turma & Horário</th>
                   <th className="py-4 px-6">Data & Dia</th>
-                  <th className="py-4 px-6">Status</th>
-                  <th className="py-4 px-6 text-center">Comprovante / Confirmação</th>
+                  <th className="py-4 px-6">Pagamento</th>
+                  <th className="py-4 px-6">Triagem Pós-Aula</th>
+                  <th className="py-4 px-6 text-center">Comprovante</th>
                   <th className="py-4 px-6 text-right">Ações</th>
                 </tr>
               </thead>
@@ -626,7 +964,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     {/* Curso */}
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-1.5 font-bold text-slate-700">
-                        <GraduationCap size={14} className="text-pro-teal" />
+                        <GraduationCap size={14} className="text-pro-teal shrink-0" />
                         {b.course}
                       </div>
                     </td>
@@ -634,7 +972,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     {/* Turma e Horário */}
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-1.5">
-                        <Presentation size={14} className="text-pro-orange" />
+                        <Presentation size={14} className="text-pro-orange shrink-0" />
                         <span>{b.classGroup}</span>
                       </div>
                       <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mt-0.5">
@@ -648,7 +986,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                       <div className="text-[11px] font-semibold text-teal-600">{b.dayOfWeek}</div>
                     </td>
 
-                    {/* Status Badge */}
+                    {/* Status de Pagamento */}
                     <td className="py-4 px-6">
                       {b.status === "AGENDAMENTO_CONFIRMADO" ? (
                         <div className="space-y-1">
@@ -663,8 +1001,92 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                         </div>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
-                          <Clock size={12} /> Pagamento Pendente
+                          <Clock size={12} /> Pendente
                         </span>
+                      )}
+                    </td>
+
+                    {/* Triagem Pós-Aula */}
+                    <td className="py-4 px-6">
+                      {b.triageStatus === "MATRICULADO" ? (
+                        <div className="space-y-1.5">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs">
+                            <UserCheck size={13} className="text-emerald-600" /> Compareceu e Matriculou
+                          </span>
+                          {b.triageNotes && (
+                            <p className="text-[10px] text-slate-600 italic line-clamp-1 max-w-[200px]" title={b.triageNotes}>
+                              "{b.triageNotes}"
+                            </p>
+                          )}
+                          <button
+                            onClick={() => openTriageModal(b)}
+                            className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 underline block"
+                          >
+                            Alterar Triagem
+                          </button>
+                        </div>
+                      ) : b.triageStatus === "AGUARDANDO_RESPOSTA" ? (
+                        <div className="space-y-1.5">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-300 shadow-xs">
+                            <HelpCircle size={13} className="text-blue-600" /> Compareceu (Aguardando)
+                          </span>
+                          {b.triageNotes && (
+                            <p className="text-[10px] text-slate-600 italic line-clamp-1 max-w-[200px]" title={b.triageNotes}>
+                              "{b.triageNotes}"
+                            </p>
+                          )}
+                          <button
+                            onClick={() => openTriageModal(b)}
+                            className="text-[10px] font-bold text-blue-700 hover:text-blue-900 underline block"
+                          >
+                            Definir Resposta / Matrícula
+                          </button>
+                        </div>
+                      ) : b.triageStatus === "NAO_MATRICULOU" ? (
+                        <div className="space-y-1.5">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-300">
+                            <XCircle size={13} className="text-slate-500" /> Decidiu Não Matricular
+                          </span>
+                          {b.triageNotes && (
+                            <p className="text-[10px] text-slate-500 italic line-clamp-1 max-w-[200px]" title={b.triageNotes}>
+                              "{b.triageNotes}"
+                            </p>
+                          )}
+                          <button
+                            onClick={() => openTriageModal(b)}
+                            className="text-[10px] font-bold text-slate-600 hover:text-slate-800 underline block"
+                          >
+                            Editar Triagem
+                          </button>
+                        </div>
+                      ) : b.triageStatus === "NAO_COMPARECEU" || b.attended === false ? (
+                        <div className="space-y-1.5">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-800 border border-rose-300">
+                            <UserX size={13} className="text-rose-600" /> Não Compareceu (Falta)
+                          </span>
+                          {b.triageNotes && (
+                            <p className="text-[10px] text-slate-500 italic line-clamp-1 max-w-[200px]" title={b.triageNotes}>
+                              "{b.triageNotes}"
+                            </p>
+                          )}
+                          <button
+                            onClick={() => openTriageModal(b)}
+                            className="text-[10px] font-bold text-rose-700 hover:text-rose-900 underline block"
+                          >
+                            Editar Triagem
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <button
+                            onClick={() => openTriageModal(b)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 bg-pro-teal/10 hover:bg-pro-teal hover:text-white text-pro-teal rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-pro-teal/20"
+                            title="Fazer triagem pós-aula: verificar comparecimento e matrícula"
+                          >
+                            <ClipboardCheck size={13} />
+                            Fazer Triagem
+                          </button>
+                        </div>
                       )}
                     </td>
 
@@ -687,7 +1109,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                               ) : (
                                 <Upload size={12} />
                               )}
-                              Enviar Comprovante
+                              Comprovante
                               <input
                                 type="file"
                                 accept="image/*,application/pdf"
@@ -704,12 +1126,12 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                               className="inline-flex items-center gap-1 px-2 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg text-[10px] font-black uppercase transition-all border border-teal-200"
                               title="Confirmar manualmente com justificativa por extenso"
                             >
-                              <CheckCircle size={12} className="text-teal-600" /> Confirmar Manualmente
+                              <CheckCircle size={12} className="text-teal-600" /> Manual
                             </button>
                           </div>
                         ) : (
                           <span className="text-[10px] text-slate-400 italic">
-                            Confirmado {b.manualConfirmationReason ? "manualmente" : "com comprovante"}
+                            Confirmado
                           </span>
                         )}
                       </div>
@@ -718,6 +1140,15 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     {/* Ações */}
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Triage Shortcut button */}
+                        <button
+                          onClick={() => openTriageModal(b)}
+                          className="p-2 bg-slate-50 hover:bg-teal-50 text-pro-teal rounded-xl transition-all"
+                          title="Triagem Pós-Aula / Matrícula"
+                        >
+                          <ClipboardCheck size={14} />
+                        </button>
+
                         {/* File Upload Shortcut */}
                         <label
                           className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-all cursor-pointer"
@@ -735,7 +1166,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                         {/* Edit */}
                         <button
                           onClick={() => openEditModal(b)}
-                          className="p-2 bg-slate-50 hover:bg-slate-100 text-pro-teal rounded-xl transition-all"
+                          className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl transition-all"
                           title="Editar / Reagendar"
                         >
                           <Pencil size={14} />
@@ -768,14 +1199,14 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                       <GraduationCap size={12} /> {b.course}
                     </p>
                   </div>
-                  <div>
+                  <div className="flex flex-col items-end gap-1">
                     {b.status === "AGENDAMENTO_CONFIRMADO" ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-teal-50 text-teal-700 border border-teal-200">
                         Confirmado
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200">
-                        Pendente
+                        Pgto Pendente
                       </span>
                     )}
                   </div>
@@ -790,6 +1221,49 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     <span className="text-[9px] text-slate-400 block uppercase font-black">Data & Dia</span>
                     {formatDateBR(b.date)} ({b.dayOfWeek})
                   </div>
+                </div>
+
+                {/* TRIAGE STATUS ON MOBILE */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Triagem Pós-Aula</span>
+                    <button
+                      onClick={() => openTriageModal(b)}
+                      className="text-[10px] font-black text-pro-teal flex items-center gap-1"
+                    >
+                      <ClipboardCheck size={12} /> {b.triageStatus ? "Alterar" : "Fazer Triagem"}
+                    </button>
+                  </div>
+
+                  <div>
+                    {b.triageStatus === "MATRICULADO" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800">
+                        <UserCheck size={12} /> Compareceu e Matriculou
+                      </span>
+                    ) : b.triageStatus === "AGUARDANDO_RESPOSTA" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800">
+                        <HelpCircle size={12} /> Compareceu (Aguardando Resposta)
+                      </span>
+                    ) : b.triageStatus === "NAO_MATRICULOU" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-slate-200 text-slate-700">
+                        <XCircle size={12} /> Decidiu Não se Matricular
+                      </span>
+                    ) : b.triageStatus === "NAO_COMPARECEU" || b.attended === false ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-rose-100 text-rose-800">
+                        <UserX size={12} /> Não Compareceu (Falta)
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400 font-medium italic">
+                        Agendamento a realizar (triagem pendente)
+                      </span>
+                    )}
+                  </div>
+
+                  {b.triageNotes && (
+                    <p className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-100 italic">
+                      "{b.triageNotes}"
+                    </p>
+                  )}
                 </div>
 
                 {b.createdByName && (
@@ -841,15 +1315,22 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                         }}
                         className="px-2.5 py-1.5 bg-teal-50 text-teal-800 rounded-lg text-[10px] font-black uppercase flex items-center gap-1 border border-teal-200"
                       >
-                        <CheckCircle size={12} /> Confirmar Manualmente
+                        <CheckCircle size={12} /> Manual
                       </button>
                     </div>
                   ) : null}
 
                   <div className="flex items-center gap-1 ml-auto">
                     <button
+                      onClick={() => openTriageModal(b)}
+                      className="p-2 bg-teal-50 text-pro-teal rounded-lg font-bold"
+                      title="Triagem"
+                    >
+                      <ClipboardCheck size={14} />
+                    </button>
+                    <button
                       onClick={() => openEditModal(b)}
-                      className="p-2 bg-slate-100 text-pro-teal rounded-lg font-bold"
+                      className="p-2 bg-slate-100 text-slate-700 rounded-lg font-bold"
                       title="Editar"
                     >
                       <Pencil size={14} />
@@ -1379,6 +1860,208 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   Excluir
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* TRIAGE POST-CLASS MODAL */}
+      <AnimatePresence>
+        {triageBooking && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl border border-slate-100 relative space-y-6 my-8"
+            >
+              <button
+                onClick={() => setTriageBooking(null)}
+                className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-all"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-teal-50 text-pro-teal rounded-2xl">
+                  <ClipboardCheck size={26} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">Triagem Pós-Aula Experimental</h3>
+                  <p className="text-xs font-bold text-slate-400">
+                    Aluno: <strong className="text-slate-700">{triageBooking.studentName}</strong> • {triageBooking.course} ({triageBooking.classGroup})
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs space-y-1">
+                <div className="flex justify-between font-bold text-slate-600">
+                  <span>Data da Aula: {formatDateBR(triageBooking.date)} ({triageBooking.dayOfWeek})</span>
+                  <span>Horário: {triageBooking.classTime}</span>
+                </div>
+                {triageBooking.studentPhone && (
+                  <p className="text-slate-500">Contato: {triageBooking.studentPhone}</p>
+                )}
+              </div>
+
+              <form onSubmit={handleSaveTriage} className="space-y-6">
+                {/* 1. Presença do Aluno */}
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-wider text-slate-700 block">
+                    1. O aluno compareceu à aula experimental? *
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setTriageAttended(true)}
+                      className={`p-4 rounded-2xl border-2 font-black text-xs uppercase flex items-center justify-center gap-2 transition-all ${
+                        triageAttended === true
+                          ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                      }`}
+                    >
+                      <UserCheck size={18} className={triageAttended === true ? "text-emerald-600" : "text-slate-400"} />
+                      <span>Sim, Compareceu</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setTriageAttended(false)}
+                      className={`p-4 rounded-2xl border-2 font-black text-xs uppercase flex items-center justify-center gap-2 transition-all ${
+                        triageAttended === false
+                          ? "border-rose-600 bg-rose-50 text-rose-800 shadow-sm"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                      }`}
+                    >
+                      <UserX size={18} className={triageAttended === false ? "text-rose-600" : "text-slate-400"} />
+                      <span>Não Compareceu (Falta)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Decisão de Matrícula (Se compareceu) */}
+                {triageAttended === true && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    className="space-y-2 pt-2 border-t border-slate-100"
+                  >
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-700 block">
+                      2. Qual foi a decisão sobre a matrícula? *
+                    </label>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setTriageOutcome("MATRICULADO")}
+                        className={`w-full p-3.5 rounded-2xl border-2 text-left flex items-start gap-3 transition-all ${
+                          triageOutcome === "MATRICULADO"
+                            ? "border-emerald-600 bg-emerald-50 text-emerald-900 shadow-xs"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                        }`}
+                      >
+                        <div className={`p-1.5 rounded-xl mt-0.5 ${triageOutcome === "MATRICULADO" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+                          <UserCheck size={16} />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black uppercase">Se Matriculou</div>
+                          <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                            O aluno decidiu fechar a matrícula e entrar no curso regular.
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTriageOutcome("AGUARDANDO_RESPOSTA")}
+                        className={`w-full p-3.5 rounded-2xl border-2 text-left flex items-start gap-3 transition-all ${
+                          triageOutcome === "AGUARDANDO_RESPOSTA"
+                            ? "border-blue-600 bg-blue-50 text-blue-900 shadow-xs"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                        }`}
+                      >
+                        <div className={`p-1.5 rounded-xl mt-0.5 ${triageOutcome === "AGUARDANDO_RESPOSTA" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+                          <HelpCircle size={16} />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black uppercase">Compareceu mas ainda não respondeu</div>
+                          <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                            O aluno assistiu à aula e está avaliando / aguardando retorno ou contato futuro.
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTriageOutcome("NAO_MATRICULOU")}
+                        className={`w-full p-3.5 rounded-2xl border-2 text-left flex items-start gap-3 transition-all ${
+                          triageOutcome === "NAO_MATRICULOU"
+                            ? "border-slate-600 bg-slate-100 text-slate-900 shadow-xs"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                        }`}
+                      >
+                        <div className={`p-1.5 rounded-xl mt-0.5 ${triageOutcome === "NAO_MATRICULOU" ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                          <XCircle size={16} />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black uppercase">Decidiu NÃO se matricular</div>
+                          <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                            O aluno compareceu mas informou que não deseja realizar a matrícula no momento.
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* 3. Observações da Triagem */}
+                <div className="space-y-1 pt-2 border-t border-slate-100">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">
+                    Observações / Feedback da Triagem (Opcional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Ex: Aluno elogiou a didática do professor, pediu para retornar contato na sexta-feira ou informou que o horário atual não atende..."
+                    value={triageNotesInput}
+                    onChange={(e) => setTriageNotesInput(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-pro-teal"
+                  />
+                </div>
+
+                {/* Botões de Ação */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                  {triageBooking.triageStatus ? (
+                    <button
+                      type="button"
+                      onClick={() => handleClearTriage(triageBooking.id)}
+                      className="text-xs text-rose-600 hover:text-rose-800 font-black uppercase tracking-wider underline w-full sm:w-auto text-left"
+                    >
+                      Redefinir / Desfazer Triagem
+                    </button>
+                  ) : <div />}
+
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setTriageBooking(null)}
+                      className="px-5 py-3 text-slate-500 hover:bg-slate-100 rounded-xl text-xs font-bold uppercase transition-all"
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-6 py-3 bg-pro-teal hover:bg-teal-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2 w-full sm:w-auto"
+                    >
+                      {isSubmitting ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <CheckCircle2 size={16} />
+                      )}
+                      Salvar Triagem
+                    </button>
+                  </div>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}
