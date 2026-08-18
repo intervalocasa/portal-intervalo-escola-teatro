@@ -7,6 +7,7 @@ export interface Post {
   id: string;
   authorId: string;
   authorName: string;
+  authorPhoto?: string;
   classId: string;
   content: string;
   imageUrl?: string;

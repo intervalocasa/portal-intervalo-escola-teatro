@@ -28,12 +28,12 @@ service cloud.firestore {
     }
 
     function isValidPost(data) {
-      return data.authorId is string && data.authorId == request.auth.uid
+      return data.authorId is string && data.authorId.size() > 0
           && data.classId is string && data.classId.size() > 0
-          && data.content is string && data.content.size() <= 2000
-          && data.get('likes', []) is list
+          && data.content is string && data.content.size() <= 4000
+          && (data.get('likes', []) is list)
           && (data.get('forces', []) is list)
-          && (data.get('imageUrl', null) == null || (data.imageUrl is string && data.imageUrl.size() <= 5000));
+          && (data.get('imageUrl', null) == null || (data.imageUrl is string && data.imageUrl.size() <= 1500000));
     }
 
     function isValidUser(data) {
@@ -86,13 +86,10 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidPost(request.resource.data);
       allow update: if isSignedIn() && (
-        isValidPost(request.resource.data) && (
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'forces'])
-          || resource.data.authorId == request.auth.uid 
-          || isGestor()
-        )
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'forces'])
+        || (isValidPost(request.resource.data) && (resource.data.authorId == request.auth.uid || isGestor()))
       );
-      allow delete: if isGestor() || (isSignedIn() && resource.data.authorId == request.auth.uid);
+      allow delete: if isGestor() || (isSignedIn() && (resource.data.authorId == request.auth.uid || resource.data.authorId == request.auth.token.email));
     }
 
     match /avisos/{avisoId} {
