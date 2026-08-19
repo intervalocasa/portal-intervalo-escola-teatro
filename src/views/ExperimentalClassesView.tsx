@@ -35,7 +35,9 @@ import {
   RotateCcw,
   Check,
   MessageSquare,
-  ArrowRight
+  ArrowRight,
+  Filter,
+  Users
 } from "lucide-react";
 import { 
   collection, 
@@ -137,6 +139,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"TODOS" | "PAGAMENTO_PENDENTE" | "AGENDAMENTO_CONFIRMADO">("TODOS");
+  const [classFilter, setClassFilter] = useState<string>("TODOS");
   
   // Specific Tabs Filter
   const [tabFilter, setTabFilter] = useState<
@@ -576,6 +579,33 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const confirmedCount = bookings.filter(b => b.status === "AGENDAMENTO_CONFIRMADO").length;
   const pendingCount = bookings.filter(b => b.status === "PAGAMENTO_PENDENTE").length;
 
+  // Available Turmas (Class Groups) for Filter Dropdown
+  const availableClassGroups = useMemo(() => {
+    const map = new Map<string, { code: string; label: string; count: number }>();
+    
+    // First, add all registered classes
+    classes?.forEach(c => {
+      if (c?.code) {
+        const label = c.weekday && c.time ? `${c.code} (${c.weekday} ${c.time})` : c.code;
+        map.set(c.code, { code: c.code, label, count: 0 });
+      }
+    });
+
+    // Also include any classGroup appearing in bookings and count occurrences
+    bookings.forEach(b => {
+      if (b.classGroup) {
+        const existing = map.get(b.classGroup);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          map.set(b.classGroup, { code: b.classGroup, label: b.classGroup, count: 1 });
+        }
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
+  }, [classes, bookings]);
+
   // Filtered List
   const filteredBookings = useMemo(() => {
     return bookings.filter(b => {
@@ -590,6 +620,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       const matchStatus = 
         statusFilter === "TODOS" || b.status === statusFilter;
 
+      const matchClass = 
+        classFilter === "TODOS" || b.classGroup === classFilter;
+
       let matchTab = true;
       if (tabFilter === "AGENDADOS") {
         matchTab = !b.triageStatus;
@@ -603,9 +636,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         matchTab = b.triageStatus === "NAO_COMPARECEU" || b.attended === false;
       }
 
-      return matchSearch && matchStatus && matchTab;
+      return matchSearch && matchStatus && matchClass && matchTab;
     });
-  }, [bookings, searchTerm, statusFilter, tabFilter]);
+  }, [bookings, searchTerm, statusFilter, classFilter, tabFilter]);
 
   return (
     <motion.div
@@ -859,26 +892,78 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input
-            type="text"
-            placeholder="Buscar por aluno, curso, turma ou telefone..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-pro-teal"
-          />
-        </div>
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Buscar por aluno, curso, turma ou telefone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-pro-teal"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                title="Limpar busca"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Status Pgto:</span>
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          {/* Turma (Class) Filter Dropdown */}
+          <div className="flex items-center gap-2 min-w-[220px]">
+            <div className="relative w-full">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-pro-teal pointer-events-none flex items-center gap-1">
+                <Users size={14} />
+              </div>
+              <select
+                value={classFilter}
+                onChange={(e) => setClassFilter(e.target.value)}
+                className={`w-full pl-9 pr-8 py-2.5 rounded-xl text-xs font-bold appearance-none transition-all cursor-pointer border focus:outline-none focus:border-pro-teal ${
+                  classFilter !== "TODOS"
+                    ? "bg-teal-50 border-teal-300 text-teal-900 font-black shadow-xs"
+                    : "bg-slate-50 border-slate-200 text-slate-700"
+                }`}
+              >
+                <option value="TODOS">Todas as Turmas ({bookings.length})</option>
+                {availableClassGroups.map((cg) => (
+                  <option key={cg.code} value={cg.code}>
+                    {cg.label} {cg.count > 0 ? `(${cg.count})` : ''}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                <Filter size={12} />
+              </div>
+            </div>
+            {classFilter !== "TODOS" && (
+              <button
+                type="button"
+                onClick={() => setClassFilter("TODOS")}
+                className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-all"
+                title="Limpar filtro de turma"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Payment Status Filter Buttons */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider whitespace-nowrap mr-1">
+              Status Pgto:
+            </span>
             {(["TODOS", "PAGAMENTO_PENDENTE", "AGENDAMENTO_CONFIRMADO"] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setStatusFilter(f)}
-                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                   statusFilter === f
                     ? "bg-teal-700 text-white shadow-xs"
                     : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -889,6 +974,67 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
             ))}
           </div>
         </div>
+
+        {/* Active Filters Summary Chips */}
+        {(searchTerm || classFilter !== "TODOS" || statusFilter !== "TODOS" || tabFilter !== "TODOS") && (
+          <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 text-xs flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Filtros Ativos ({filteredBookings.length} encontrados):
+              </span>
+              {classFilter !== "TODOS" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-100 text-teal-800 rounded-lg text-[11px] font-bold border border-teal-200">
+                  <Users size={12} /> Turma: {classFilter}
+                  <button type="button" onClick={() => setClassFilter("TODOS")} className="hover:text-teal-950 ml-0.5">
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+              {statusFilter !== "TODOS" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-200 text-slate-800 rounded-lg text-[11px] font-bold">
+                  Pgto: {statusFilter === "PAGAMENTO_PENDENTE" ? "Pendentes" : "Confirmados"}
+                  <button type="button" onClick={() => setStatusFilter("TODOS")} className="hover:text-slate-950 ml-0.5">
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+              {tabFilter !== "TODOS" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-900 rounded-lg text-[11px] font-bold border border-amber-200">
+                  Aba: {
+                    tabFilter === "AGENDADOS" ? "A Realizar" :
+                    tabFilter === "MATRICULADO" ? "Matriculados" :
+                    tabFilter === "AGUARDANDO_RESPOSTA" ? "Em Decisão" :
+                    tabFilter === "NAO_MATRICULOU" ? "Não Matriculou" : "Não Compareceu"
+                  }
+                  <button type="button" onClick={() => setTabFilter("TODOS")} className="hover:text-amber-950 ml-0.5">
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+              {searchTerm && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-[11px] font-medium border border-slate-200">
+                  Busca: "{searchTerm}"
+                  <button type="button" onClick={() => setSearchTerm("")} className="hover:text-slate-950 ml-0.5">
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setClassFilter("TODOS");
+                setStatusFilter("TODOS");
+                setTabFilter("TODOS");
+              }}
+              className="text-[10px] font-black uppercase tracking-wider text-rose-600 hover:text-rose-700 hover:underline shrink-0 ml-auto"
+            >
+              Limpar Todos os Filtros
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Table / List */}
@@ -900,18 +1046,24 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       ) : filteredBookings.length === 0 ? (
         <div className="py-16 px-4 text-center bg-white rounded-2xl border border-slate-100 space-y-3">
           <Calendar className="mx-auto text-slate-300 h-12 w-12" />
-          <p className="text-base font-black text-slate-700">Nenhum agendamento nesta aba</p>
+          <p className="text-base font-black text-slate-700">Nenhum agendamento encontrado</p>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            {searchTerm || statusFilter !== "TODOS" || tabFilter !== "TODOS"
-              ? "Nenhum agendamento corresponde aos filtros atuais." 
+            {searchTerm || statusFilter !== "TODOS" || classFilter !== "TODOS" || tabFilter !== "TODOS"
+              ? "Nenhum agendamento corresponde aos filtros selecionados." 
               : "Clique em 'Novo Agendamento' para registrar uma aula experimental."}
           </p>
-          {tabFilter !== "TODOS" && (
+          {(searchTerm || statusFilter !== "TODOS" || classFilter !== "TODOS" || tabFilter !== "TODOS") && (
             <button
-              onClick={() => setTabFilter("TODOS")}
-              className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase"
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setClassFilter("TODOS");
+                setStatusFilter("TODOS");
+                setTabFilter("TODOS");
+              }}
+              className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase transition-all"
             >
-              Ver Todos os Agendamentos
+              Limpar Filtros e Ver Todos
             </button>
           )}
         </div>
@@ -971,11 +1123,20 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
 
                     {/* Turma e Horário */}
                     <td className="py-4 px-6">
-                      <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setClassFilter(b.classGroup === classFilter ? "TODOS" : b.classGroup)}
+                        className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-bold text-left transition-all ${
+                          classFilter === b.classGroup
+                            ? "bg-teal-100 text-teal-900 ring-1 ring-teal-400"
+                            : "hover:bg-slate-100 text-slate-800"
+                        }`}
+                        title={classFilter === b.classGroup ? "Filtro ativo (clique para limpar)" : `Filtrar por turma: ${b.classGroup}`}
+                      >
                         <Presentation size={14} className="text-pro-orange shrink-0" />
                         <span>{b.classGroup}</span>
-                      </div>
-                      <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mt-0.5">
+                      </button>
+                      <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mt-0.5 px-2">
                         <Clock size={10} /> {b.classTime}
                       </div>
                     </td>
@@ -1214,11 +1375,21 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
 
                 <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-xl text-slate-600 font-bold">
                   <div>
-                    <span className="text-[9px] text-slate-400 block uppercase font-black">Turma & Horário</span>
-                    {b.classGroup} - {b.classTime}
+                    <span className="text-[9px] text-slate-400 block uppercase font-black mb-0.5">Turma & Horário</span>
+                    <button
+                      type="button"
+                      onClick={() => setClassFilter(b.classGroup === classFilter ? "TODOS" : b.classGroup)}
+                      className={`text-xs font-bold text-left transition-all ${
+                        classFilter === b.classGroup ? "text-pro-teal underline" : "text-slate-700 hover:text-pro-teal"
+                      }`}
+                      title={classFilter === b.classGroup ? "Filtro ativo (clique para limpar)" : `Filtrar por turma: ${b.classGroup}`}
+                    >
+                      {b.classGroup}
+                    </button>
+                    <span className="text-slate-400 font-normal ml-1">({b.classTime})</span>
                   </div>
                   <div>
-                    <span className="text-[9px] text-slate-400 block uppercase font-black">Data & Dia</span>
+                    <span className="text-[9px] text-slate-400 block uppercase font-black mb-0.5">Data & Dia</span>
                     {formatDateBR(b.date)} ({b.dayOfWeek})
                   </div>
                 </div>
