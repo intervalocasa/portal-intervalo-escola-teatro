@@ -22,22 +22,105 @@ import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandle
 import { LessonPlan, Skill, Class, User } from "../types";
 import { ADULT_COURSE_CRITERIA, PROFESSIONAL_COURSE_CRITERIA } from "../constants";
 
-// Seed skills if the collection is empty
-export const DEFAULT_SKILLS: Array<{ id: string; name: string; definition: string; category: string }> = [
-  { id: "presence", name: "Presença cênica", definition: "Capacidade de sustentar atenção, disponibilidade e impacto em cena.", category: "Interpretação" },
-  { id: "body", name: "Consciência corporal", definition: "Uso do corpo como instrumento expressivo, disponível e organizado em cena.", category: "Corpo & Movimento" },
-  { id: "vocal", name: "Expressividade vocal", definition: "Projeção, articulação, intenção e uso expressivo da voz.", category: "Voz & Fala" },
-  { id: "listening", name: "Escuta e prontidão cênica", definition: "Capacidade de reagir ao parceiro, ao jogo e aos estímulos da cena com atenção viva.", category: "Jogo Teatral" },
-  { id: "impro", name: "Improvisação e criatividade cênica", definition: "Capacidade de propor, imaginar e sustentar ações em situações abertas de criação.", category: "Criação" },
-  { id: "character", name: "Construção de personagem", definition: "Capacidade de compor identidade, intenção, comportamento e lógica de personagem.", category: "Interpretação" },
-  { id: "partner", name: "Relação com o parceiro e trabalho em grupo", definition: "Capacidade de atuar em relação, respeitar o coletivo e construir cena em conjunto.", category: "Coletivo" },
-  { id: "text", name: "Apropriação de texto e memorização cênica", definition: "Capacidade de memorizar, compreender e sustentar texto com intenção e organicidade.", category: "Dramaturgia" },
-  { id: "space", name: "Organização espacial e composição de cena", definition: "Uso do espaço, marcações, deslocamentos e leitura da cena como composição.", category: "Espaço" },
-  { id: "autonomy", name: "Autonomia e compromisso com o processo", definition: "Responsabilidade do aluno com o trabalho, prontidão para aula/ensaio e capacidade de avançar no processo com iniciativa.", category: "Pedagógico" },
-  { id: "discipline", name: "Disciplina de ensaio", definition: "Capacidade de manter foco, constância, organização e conduta adequada durante os ensaios.", category: "Montagem" },
-  { id: "direction", name: "Resposta à direção", definition: "Capacidade de escutar, compreender e incorporar orientações de direção de forma prática.", category: "Direção" },
-  { id: "dramaturgy", name: "Compreensão dramatúrgica da obra", definition: "Capacidade de compreender a estrutura da obra, os conflitos e a função da cena.", category: "Dramaturgia" }
+// Seed skills representing the exact 20 pedagogical criteria from Diário de Classe
+export const DEFAULT_SKILLS: Array<{ 
+  id: string; 
+  name: string; 
+  definition: string; 
+  category: string;
+  courseScope: "adult" | "professional" | "all";
+}> = [
+  // 10 Habilidades Básicas (Curso Livre Adultos / Adulto Amador e Prática Profissional)
+  { id: "presence", name: "Presença cênica", definition: "Capacidade de sustentar atenção, disponibilidade e impacto em cena.", category: "Interpretação", courseScope: "all" },
+  { id: "body", name: "Consciência corporal", definition: "Uso do corpo como instrumento expressivo, disponível e organizado em cena.", category: "Corpo & Movimento", courseScope: "all" },
+  { id: "vocal", name: "Expressividade vocal", definition: "Projeção, articulação, intenção e uso expressivo da voz.", category: "Voz & Fala", courseScope: "all" },
+  { id: "listening", name: "Escuta e prontidão cênica", definition: "Capacidade de reagir ao parceiro, ao jogo e aos estímulos da cena com atenção viva.", category: "Jogo & Escuta", courseScope: "all" },
+  { id: "impro", name: "Improvisação e criatividade cênica", definition: "Capacidade de propor, imaginar e sustentar ações em situações abertas de criação.", category: "Criação & Improviso", courseScope: "all" },
+  { id: "character", name: "Construção de personagem", definition: "Capacidade de compor identidade, intenção, comportamento e lógica de personagem.", category: "Interpretação", courseScope: "all" },
+  { id: "partner", name: "Relação com o parceiro e trabalho em grupo", definition: "Capacidade de atuar em relação, respeitar o coletivo e construir cena em conjunto.", category: "Trabalho Coletivo", courseScope: "all" },
+  { id: "text", name: "Apropriação de texto e memorização cênica", definition: "Capacidade de memorizar, compreender e sustentar texto com intenção e organicidade.", category: "Texto & Dramaturgia", courseScope: "all" },
+  { id: "space", name: "Organização espacial e composição de cena", definition: "Uso do espaço, marcações, deslocamentos e leitura da cena como composição.", category: "Espaço & Composição", courseScope: "all" },
+  { id: "autonomy", name: "Autonomia e compromisso com o processo", definition: "Responsabilidade do aluno com o trabalho, prontidão para aula/ensaio e capacidade de avançar no processo com iniciativa.", category: "Processo & Autonomia", courseScope: "all" },
+
+  // 10 Habilidades Adicionais Específicas da Prática Profissional de Montagem
+  { id: "discipline", name: "Disciplina de ensaio", definition: "Capacidade de manter foco, constância, organização e conduta adequada durante os ensaios.", category: "Montagem & Ensaio", courseScope: "professional" },
+  { id: "punctuality", name: "Pontualidade e preparação para o trabalho", definition: "Capacidade de chegar no horário e apresentar-se preparado para o ensaio, com prontidão física, mental e material.", category: "Postura Profissional", courseScope: "professional" },
+  { id: "continuity", name: "Continuidade processual entre ensaios", definition: "Capacidade de retomar, sustentar e desenvolver o trabalho de um encontro para o outro, sem romper o fluxo do processo.", category: "Montagem & Ensaio", courseScope: "professional" },
+  { id: "direction", name: "Resposta à direção", definition: "Capacidade de escutar, compreender e incorporar orientações de direção de forma prática e consistente na cena.", category: "Direção & Escuta", courseScope: "professional" },
+  { id: "precision", name: "Precisão de marcação cênica", definition: "Capacidade de memorizar e executar com segurança entradas, saídas, posições, deslocamentos e ações marcadas em cena.", category: "Espaço & Composição", courseScope: "professional" },
+  { id: "repetition", name: "Sustentação de cena em repetição", definition: "Capacidade de repetir uma cena mantendo sua lógica, qualidade, intenção e considerência ao longo dos ensaios.", category: "Interpretação", courseScope: "professional" },
+  { id: "dramaturgy", name: "Compreensão dramatúrgica da obra", definition: "Capacidade de compreender a estrutura da obra, as relações entre personagens, os conflitos e a função da cena no conjunto.", category: "Texto & Dramaturgia", courseScope: "professional" },
+  { id: "materials", name: "Responsabilidade com figurino, objeto e material de cena", definition: "Capacidade de cuidar, organizar e utilizar com responsabilidade os elementos materiais necessários ao processo de montagem.", category: "Montagem & Produção", courseScope: "professional" },
+  { id: "collective", name: "Capacidade de composição em cena coletiva", definition: "Capacidade de integrar-se ao conjunto, contribuindo para a unidade visual, espacial e expressiva das cenas coletivas.", category: "Trabalho Coletivo", courseScope: "professional" },
+  { id: "professionalism", name: "Postura profissional diante da montagem", definition: "Capacidade de assumir o processo de montagem com responsabilidade, maturidade, compromisso e compreensão do trabalho coletivo.", category: "Postura Profissional", courseScope: "professional" }
 ];
+
+/**
+ * Verifica se a turma é do curso Prática Profissional de Montagem
+ */
+export function isProfessionalClass(classType?: string, className?: string): boolean {
+  if (!classType && !className) return false;
+  const str = `${classType || ""} ${className || ""}`.toLowerCase();
+  return str.includes("profissional") || str.includes("montagem");
+}
+
+/**
+ * Retorna exatamente as habilidades e critérios de avaliação do Diário
+ * de acordo com o tipo de curso da turma:
+ * - Se for Adulto Amador / Curso Livre Adulto: 10 critérios
+ * - Se for Prática Profissional de Montagem: 20 critérios
+ */
+export function getSkillsForClass(
+  classTypeOrObject?: string | Class | null,
+  allSkills: Skill[] = []
+): {
+  skills: Skill[];
+  isProfessional: boolean;
+  totalOfficialCount: number;
+  courseLabel: string;
+  officialCriteriaIds: string[];
+} {
+  let typeStr = "";
+  if (typeof classTypeOrObject === "string") {
+    typeStr = classTypeOrObject;
+  } else if (classTypeOrObject) {
+    typeStr = `${classTypeOrObject.type || ""} ${classTypeOrObject.code || ""}`;
+  }
+
+  const isProf = isProfessionalClass(typeStr);
+  const targetOfficialCriteria = isProf ? PROFESSIONAL_COURSE_CRITERIA : ADULT_COURSE_CRITERIA;
+  const targetOfficialIds = new Set(targetOfficialCriteria.map(c => c.id));
+
+  // Matriz de habilidades oficiais sincronizadas com o Diário
+  const officialSkills: Skill[] = targetOfficialCriteria.map(c => {
+    const customMatch = allSkills.find(s => s.id === c.id || s.name === c.label);
+    const defaultMeta = DEFAULT_SKILLS.find(d => d.id === c.id);
+    return {
+      id: c.id,
+      name: c.label,
+      definition: customMatch?.definition || c.definition || defaultMeta?.definition || "",
+      category: customMatch?.category || defaultMeta?.category || (isProf && !ADULT_COURSE_CRITERIA.some(a => a.id === c.id) ? "Montagem & Ensaio" : "Interpretação"),
+      courseScope: isProf ? (ADULT_COURSE_CRITERIA.some(a => a.id === c.id) ? "all" : "professional") : "adult",
+      active: true
+    };
+  });
+
+  // Habilidades adicionais personalizadas cadastradas no banco
+  const additionalCustomSkills = allSkills.filter(s => {
+    if (targetOfficialIds.has(s.id)) return false;
+    if (s.active === false) return false;
+    if (s.courseScope === "professional" && !isProf) return false;
+    return true;
+  });
+
+  return {
+    skills: [...officialSkills, ...additionalCustomSkills],
+    isProfessional: isProf,
+    totalOfficialCount: targetOfficialCriteria.length,
+    courseLabel: isProf ? "Prática Profissional de Montagem" : "Curso Livre Adulto (Adulto Amador)",
+    officialCriteriaIds: targetOfficialCriteria.map(c => c.id)
+  };
+}
 
 /**
  * Busca todas as habilidades (skills) da coleção no Firestore.

@@ -28,7 +28,7 @@ import {
   X
 } from "lucide-react";
 import { Class, User, Skill, LessonPlan } from "../types";
-import { createSkill } from "../services/lessonPlanService";
+import { createSkill, getSkillsForClass, isProfessionalClass } from "../services/lessonPlanService";
 
 export interface LessonPlanFormValues {
   classId: string;
@@ -160,6 +160,21 @@ export const LessonPlanForm = ({
     return teacherClasses.find(c => c.id === watchedClassId);
   }, [teacherClasses, watchedClassId]);
 
+  // Determine exact skills corresponding to the class course type (10 for Adult, 20 for Professional)
+  const classSkillsData = useMemo(() => {
+    return getSkillsForClass(currentClass, skillsList);
+  }, [currentClass, skillsList]);
+
+  // Clean up incompatible skills if switched from professional to adult
+  useEffect(() => {
+    if (!watchedSkills || watchedSkills.length === 0) return;
+    const allowedIds = new Set(classSkillsData.skills.map(s => s.id));
+    const validSelected = watchedSkills.filter(id => allowedIds.has(id));
+    if (validSelected.length !== watchedSkills.length) {
+      setValue("skills", validSelected, { shouldValidate: true });
+    }
+  }, [classSkillsData, watchedSkills, setValue]);
+
   // Calculate total duration in minutes
   const totalDuration = useMemo(() => {
     return watchedActivities.reduce((sum, item) => sum + (Number(item?.duration) || 0), 0);
@@ -186,18 +201,25 @@ export const LessonPlanForm = ({
     }
   }, [watchedDate]);
 
-  // Categories of skills
+  // Categories of skills for the active class course
   const categories = useMemo(() => {
     const set = new Set<string>();
-    skillsList.forEach(s => {
+    classSkillsData.skills.forEach(s => {
       if (s.category) set.add(s.category);
     });
     return ["TODAS", ...Array.from(set).sort()];
-  }, [skillsList]);
+  }, [classSkillsData.skills]);
 
-  // Filtered skills
+  // Reset category filter if it doesn't exist in current categories
+  useEffect(() => {
+    if (selectedCategory !== "TODAS" && !categories.includes(selectedCategory)) {
+      setSelectedCategory("TODAS");
+    }
+  }, [categories, selectedCategory]);
+
+  // Filtered skills based on class course type, search, and category
   const filteredSkills = useMemo(() => {
-    return skillsList.filter(s => {
+    return classSkillsData.skills.filter(s => {
       if (s.active === false) return false;
       const matchesSearch = !skillSearch || 
         s.name.toLowerCase().includes(skillSearch.toLowerCase()) || 
@@ -205,7 +227,7 @@ export const LessonPlanForm = ({
       const matchesCat = selectedCategory === "TODAS" || s.category === selectedCategory;
       return matchesSearch && matchesCat;
     });
-  }, [skillsList, skillSearch, selectedCategory]);
+  }, [classSkillsData.skills, skillSearch, selectedCategory]);
 
   const handleToggleSkill = (skillIdOrName: string) => {
     const current = watchedSkills || [];
@@ -489,6 +511,52 @@ export const LessonPlanForm = ({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Banner Informativo da Matriz Pedagógica do Curso */}
+        <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          classSkillsData.isProfessional 
+            ? "bg-purple-900 text-white border-purple-800 shadow-sm" 
+            : "bg-indigo-50 border-indigo-200/80 text-indigo-950"
+        }`}>
+          <div className="flex items-start sm:items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base ${
+              classSkillsData.isProfessional ? "bg-purple-800 text-purple-200" : "bg-indigo-600 text-white"
+            }`}>
+              {classSkillsData.isProfessional ? "🎭" : "🎯"}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-xs font-black uppercase tracking-wider ${
+                  classSkillsData.isProfessional ? "text-purple-300" : "text-indigo-900"
+                }`}>
+                  Matriz do Diário: {classSkillsData.courseLabel}
+                </span>
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                  classSkillsData.isProfessional ? "bg-purple-800 text-purple-200" : "bg-indigo-200/80 text-indigo-800"
+                }`}>
+                  {classSkillsData.totalOfficialCount} Critérios Oficiais
+                </span>
+              </div>
+              <p className={`text-xs font-medium mt-0.5 ${
+                classSkillsData.isProfessional ? "text-purple-200" : "text-indigo-700"
+              }`}>
+                {classSkillsData.isProfessional 
+                  ? "Exibe os 20 critérios oficiais (10 de interpretação + 10 de montagem e ensaio) lançados no Diário de Classe desta turma."
+                  : "Exibe os 10 critérios pedagógicos oficiais lançados no Diário de Classe desta turma."}
+              </p>
+            </div>
+          </div>
+
+          <div className="shrink-0 flex items-center gap-2">
+            <span className={`text-[11px] font-bold px-3 py-1 rounded-xl ${
+              classSkillsData.isProfessional 
+                ? "bg-purple-800/80 text-purple-100" 
+                : "bg-white text-indigo-900 border border-indigo-200"
+            }`}>
+              {watchedSkills.length} de {classSkillsData.skills.length} selecionada(s)
+            </span>
+          </div>
+        </div>
 
         {/* Filtro e Busca de Habilidades */}
         <div className="space-y-3">

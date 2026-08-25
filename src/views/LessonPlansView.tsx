@@ -36,8 +36,10 @@ import {
   fetchLessonPlans, 
   saveLessonPlan, 
   deleteLessonPlan, 
-  getTeacherLinkedClasses 
+  getTeacherLinkedClasses,
+  DEFAULT_SKILLS
 } from "../services/lessonPlanService";
+import { PROFESSIONAL_COURSE_CRITERIA } from "../constants";
 import { generateLessonPlanPDF } from "../lib/pdfExporter";
 
 interface LessonPlansViewProps {
@@ -116,6 +118,18 @@ export const LessonPlansView = ({
       setSelectedClassId(teacherClasses[0].id);
     }
   }, [teacherClasses, selectedClassId]);
+
+  const resolveSkill = (skillId: string) => {
+    const found: any = skillsList.find(s => s.id === skillId || s.name === skillId)
+      || DEFAULT_SKILLS.find(d => d.id === skillId || d.name === skillId)
+      || PROFESSIONAL_COURSE_CRITERIA.find(p => p.id === skillId || p.label === skillId);
+    return {
+      id: skillId,
+      name: found?.name || found?.label || skillId,
+      definition: found?.definition || "",
+      category: found?.category || "Pedagógico"
+    };
+  };
 
   const showToast = (text: string, type: "success" | "error" = "success") => {
     setToastMessage({ text, type });
@@ -506,13 +520,13 @@ export const LessonPlansView = ({
                             Habilidades:
                           </span>
                           {(plan.skills || []).map(skillId => {
-                            const found = skillsList.find(s => s.id === skillId || s.name === skillId);
+                            const meta = resolveSkill(skillId);
                             return (
                               <span
                                 key={skillId}
                                 className="px-2.5 py-1 rounded-xl bg-purple-50 text-purple-800 text-[11px] font-bold border border-purple-100"
                               >
-                                {found?.name || skillId}
+                                {meta.name}
                               </span>
                             );
                           })}
@@ -595,12 +609,12 @@ export const LessonPlansView = ({
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {(viewingPlan.skills || []).map(skillId => {
-                      const found = skillsList.find(s => s.id === skillId || s.name === skillId);
+                      const meta = resolveSkill(skillId);
                       return (
                         <div key={skillId} className="p-3 bg-purple-50/70 border border-purple-100 rounded-xl">
-                          <p className="text-xs font-black text-purple-950">{found?.name || skillId}</p>
-                          {found?.definition && (
-                            <p className="text-[11px] text-purple-800/80 font-medium mt-0.5">{found.definition}</p>
+                          <p className="text-xs font-black text-purple-950">{meta.name}</p>
+                          {meta.definition && (
+                            <p className="text-[11px] text-purple-800/80 font-medium mt-0.5">{meta.definition}</p>
                           )}
                         </div>
                       );

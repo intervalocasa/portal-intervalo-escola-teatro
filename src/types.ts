@@ -293,6 +293,7 @@ export interface Skill {
   name: string;
   definition?: string;
   category?: string;
+  courseScope?: "adult" | "professional" | "all";
   active?: boolean;
   createdAt?: any;
 }

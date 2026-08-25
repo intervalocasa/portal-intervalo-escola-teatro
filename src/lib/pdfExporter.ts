@@ -648,10 +648,11 @@ export function generateLessonPlanPDF(plan: any, skillsList: any[]) {
   currentY += 4;
 
   const matchedSkills = (plan.skills || []).map((skillId: string) => {
-    const found = skillsList.find(s => s.id === skillId || s.name === skillId);
+    const found: any = skillsList.find(s => s.id === skillId || s.name === skillId)
+      || PROFESSIONAL_COURSE_CRITERIA.find(p => p.id === skillId || p.label === skillId);
     return [
-      found ? sanitizeText(found.name) : sanitizeText(skillId),
-      found ? sanitizeText(found.category || "Geral") : "Geral",
+      found ? sanitizeText(found.name || found.label || skillId) : sanitizeText(skillId),
+      found ? sanitizeText(found.category || "Pedagógico") : "Pedagógico",
       found?.definition ? sanitizeText(found.definition) : "-"
     ];
   });
