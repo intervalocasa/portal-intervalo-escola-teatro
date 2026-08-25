@@ -12,7 +12,8 @@ import {
   Calendar,
   Award,
   Layers,
-  UserCheck
+  UserCheck,
+  Clapperboard
 } from "lucide-react";
 import { THEME } from "../theme";
 import { Logo, Avatar } from "../components/CommonComponents";
@@ -81,6 +82,26 @@ export const ProfessorDashboard = ({
           />
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Montagens e Apresentações */}
+            <motion.button
+              onClick={() => setView("stage_productions")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full p-6 bg-gradient-to-r from-purple-700 to-indigo-800 rounded-2xl flex items-center gap-5 text-white shadow-xl shadow-purple-950/15 transition-all text-left group md:col-span-2 border border-purple-400/20 relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-36 h-36 bg-pro-yellow/10 rounded-full -mr-10 -mt-10 blur-xl group-hover:scale-110 transition-transform" />
+              <div className="bg-white/20 p-3.5 rounded-xl group-hover:scale-110 transition-transform text-white shadow-md relative z-10">
+                <Clapperboard size={26} />
+              </div>
+              <div className="relative z-10 flex-1">
+                <div className="font-black text-lg leading-none uppercase tracking-tight text-white flex items-center gap-2">
+                  Montagens e Apresentações
+                  <span className="px-2 py-0.5 bg-pro-yellow text-slate-900 text-[9px] font-black rounded-md">Novo</span>
+                </div>
+                <div className="text-xs text-purple-100/90 mt-1 font-medium">Submeter propostas de peças, espetáculos e mostras artísticas</div>
+              </div>
+            </motion.button>
+
             {/* Minhas Turmas */}
             <motion.button
               onClick={() => setView("classes_list")}

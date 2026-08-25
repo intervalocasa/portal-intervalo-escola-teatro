@@ -104,6 +104,7 @@ import { CoursesManagementView } from "./views/CoursesManagementView";
 import { ExperimentalClassesView } from "./views/ExperimentalClassesView";
 import { LessonPlansView } from "./views/LessonPlansView";
 import { ClassDiaryView } from "./views/ClassDiaryView";
+import { StageProductionsView } from "./views/StageProductionsView";
 import { getMonthlyDeadline } from "./lib/deadlineUtils";
 
 export default function App() {
@@ -2978,6 +2979,14 @@ export default function App() {
             classes={classes}
             setView={setView}
             userRole={role}
+          />
+        ) : view === "stage_productions" || view === "montagens_apresentacoes" ? (
+          <StageProductionsView 
+            currentUser={currentUser}
+            users={users}
+            userRole={role}
+            setView={setView}
+            showNotification={showNotification}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-20 bg-white rounded-3xl border border-white/50">

@@ -339,3 +339,51 @@ export interface ClassDailyDiary {
   updatedAt?: any;
 }
 
+export type StageProductionRole = "Professor" | "Diretor" | "Professor/Diretor" | "Outro";
+export type StageProductionGenre = "Drama" | "Comédia" | "Musical" | "Dança" | "Mostra de Artes Visuais" | "Outro";
+export type PriorityLevel = "Desejável" | "Indispensável";
+
+export interface PrioritizedField {
+  content: string;
+  priority: PriorityLevel;
+  indispensableReason?: string;
+}
+
+export interface StageProductionProposal {
+  id?: string;
+  // Seção 1: Dados do Proponente
+  proponentName: string;
+  proponentRole: StageProductionRole;
+  proponentEmail: string;
+  proponentPhone: string;
+  proponentUserId?: string;
+
+  // Seção 2: Identificação da Obra
+  title: string;
+  genre: StageProductionGenre;
+  synopsis: PrioritizedField;
+
+  // Seção 3: Proposta Pedagógica e Elenco
+  pedagogicalProposal: PrioritizedField;
+  castProfile: PrioritizedField;
+
+  // Seção 4: Necessidades de Produção
+  scenographyProps: PrioritizedField;
+  techNeeds: PrioritizedField;
+  otherNeeds: PrioritizedField;
+
+  // Seção 5: Termo de Aceite
+  termsAccepted: boolean;
+  termsAcceptedAt?: any;
+
+  // Metadados
+  status?: "pendente" | "em_analise" | "aprovada" | "ajustes_solicitados" | "rejeitada";
+  feedback?: string;
+  reviewedByUid?: string;
+  reviewedByName?: string;
+  reviewedAt?: any;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+
