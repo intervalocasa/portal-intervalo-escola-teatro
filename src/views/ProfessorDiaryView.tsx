@@ -80,7 +80,8 @@ export const ProfessorDiaryView = ({
 
         <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
            <Logo className="h-10 md:h-16 w-auto mb-1 brightness-0 invert" />
-           <h1 className="text-white text-xl md:text-3xl font-black uppercase tracking-tight">Diário de Classe</h1>
+           <h1 className="text-white text-xl md:text-3xl font-black uppercase tracking-tight">Diário de Notas</h1>
+           <p className="text-teal-50/80 text-xs font-bold uppercase tracking-widest">Avaliações e Critérios Pedagógicos</p>
            <div className="flex items-center gap-3 mt-2">
              <div className="px-4 py-1.5 bg-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white/90 border border-white/10 backdrop-blur-md flex items-center gap-2">
                 <UserCircle size={12} className="text-pro-yellow" />
@@ -91,6 +92,26 @@ export const ProfessorDiaryView = ({
 
         <div className="p-8 md:p-16 space-y-8 flex-1 overflow-y-auto custom-scrollbar bg-slate-50">
           <div className="max-w-7xl mx-auto w-full space-y-8">
+            {/* Shortcut to Diário de Aula */}
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 rounded-2xl border border-amber-400/30 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-3 text-left">
+                <div className="p-2 bg-amber-500 text-white rounded-xl shadow-sm shrink-0">
+                  <Clock size={16} />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-slate-800 uppercase tracking-tight">Lançar Chamada e Presença de Aula</p>
+                  <p className="text-[10px] font-bold text-slate-500">O registro de frequência e relato de aula agora possui uma página própria.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setView("class_diary")}
+                className="px-4 py-2 bg-pro-teal hover:bg-pro-teal/90 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-md shrink-0"
+              >
+                Abrir Diário de Aula
+              </button>
+            </div>
+
             {/* Filters & Deadline Info */}
             <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

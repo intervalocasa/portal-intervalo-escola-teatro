@@ -5,7 +5,7 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Save, HelpCircle, CheckCircle2, Download, Clock, Lock, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Save, HelpCircle, CheckCircle2, Download, Clock, Lock, AlertTriangle, Calendar, ChevronRight } from "lucide-react";
 import { User, Class } from "../types";
 import { Avatar, BackButton } from "../components/CommonComponents";
 import { 
@@ -289,133 +289,58 @@ export const StudentDiaryFormView = ({
             </div>
           </div>
           
-          {/* Section 1: Frequency */}
-          <div className="bg-white p-8 md:p-12 rounded-[40px] border border-slate-100 shadow-sm space-y-8">
-             <div className="flex items-center gap-4 border-l-4 border-pro-teal pl-6">
-                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Frequência e Assiduidade</h3>
-             </div>
-
-             <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-6">
-               <div className="flex items-center justify-between">
-                 <div>
-                   <h4 className="text-sm font-black text-slate-700 uppercase tracking-tight">Registro semanal</h4>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Marque a presença e adicione comentários específicos por aula</p>
-                 </div>
-               </div>
-
-               <div className="space-y-4">
-                 {[1, 2, 3, 4, 5].map((week) => {
-                   const weekData = diaryFormData.weeklyAttendance?.[`week${week}`] || { status: "", comment: "" };
-                   return (
-                     <div key={week} className="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-4 items-start md:items-center">
-                       <div className="flex items-center gap-4 shrink-0 min-w-[120px]">
-                         <div className="w-10 h-10 rounded-xl bg-pro-teal/10 flex items-center justify-center text-pro-teal font-black text-xs">
-                           S{week}
-                         </div>
-                         <div className="flex gap-1">
-                           <button
-                             onClick={() => {
-                               const newAttendance = { ...diaryFormData.weeklyAttendance || {} };
-                               newAttendance[`week${week}`] = { ...weekData, status: weekData.status === "presente" ? "" : "presente" };
-                               
-                               // Calculate total presences/absences
-                               let presences = 0;
-                               let absences = 0;
-                               Object.values(newAttendance).forEach((v: any) => {
-                                 if (v.status === "presente") presences++;
-                                 if (v.status === "falta") absences++;
-                               });
-
-                               setDiaryFormData({ 
-                                 ...diaryFormData, 
-                                 weeklyAttendance: newAttendance,
-                                 presences,
-                                 absences
-                               });
-                             }}
-                             className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all ${
-                               weekData.status === "presente" ? "bg-green-500 text-white shadow-lg shadow-green-500/20" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                             }`}
-                           >
-                             P
-                           </button>
-                           <button
-                             onClick={() => {
-                               const newAttendance = { ...diaryFormData.weeklyAttendance || {} };
-                               newAttendance[`week${week}`] = { ...weekData, status: weekData.status === "falta" ? "" : "falta" };
-                               
-                               // Calculate total presences/absences
-                               let presences = 0;
-                               let absences = 0;
-                               Object.values(newAttendance).forEach((v: any) => {
-                                 if (v.status === "presente") presences++;
-                                 if (v.status === "falta") absences++;
-                               });
-
-                               setDiaryFormData({ 
-                                 ...diaryFormData, 
-                                 weeklyAttendance: newAttendance,
-                                 presences,
-                                 absences
-                               });
-                             }}
-                             className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all ${
-                               weekData.status === "falta" ? "bg-red-500 text-white shadow-lg shadow-red-500/20" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                             }`}
-                           >
-                             F
-                           </button>
-                         </div>
-                       </div>
-                       <input 
-                         type="text"
-                         placeholder="Comentário sobre a frequência da semana..."
-                         value={weekData.comment}
-                         onChange={(e) => {
-                           const newAttendance = { ...diaryFormData.weeklyAttendance || {} };
-                           newAttendance[`week${week}`] = { ...weekData, comment: e.target.value };
-                           setDiaryFormData({ ...diaryFormData, weeklyAttendance: newAttendance });
-                         }}
-                         className="flex-1 w-full px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-pro-teal"
-                       />
-                     </div>
-                   );
-                 })}
-               </div>
+          {/* Section 1: Information banner regarding Diário de Aula */}
+          <div className="bg-white p-6 md:p-8 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
+             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-pro-teal/10 rounded-xl text-pro-teal">
+                    <Calendar size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Presenças e Frequência</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lançadas via Diário de Aula da turma</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setView("class_diary")}
+                  className="px-4 py-2 bg-pro-teal/10 hover:bg-pro-teal hover:text-white text-pro-teal text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5"
+                >
+                  Ir para Diário de Aula <ChevronRight size={14} />
+                </button>
              </div>
              
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Total de Presenças</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Total de Presenças (Mês)</label>
                     <input 
                       type="number"
-                      readOnly
-                      required
                       min="0"
                       value={diaryFormData.presences}
-                      className="w-full px-6 py-4 bg-slate-100 border border-slate-100 rounded-2xl text-lg font-black text-slate-400 cursor-not-allowed"
+                      onChange={(e) => setDiaryFormData({ ...diaryFormData, presences: parseInt(e.target.value) || 0 })}
+                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base font-black text-slate-700 focus:bg-white focus:border-pro-teal outline-none transition-all"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Total de Faltas</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Total de Faltas (Mês)</label>
                     <input 
                       type="number"
-                      readOnly
-                      required
                       min="0"
                       value={diaryFormData.absences}
-                      className="w-full px-6 py-4 bg-slate-100 border border-slate-100 rounded-2xl text-lg font-black text-slate-400 cursor-not-allowed"
+                      onChange={(e) => setDiaryFormData({ ...diaryFormData, absences: parseInt(e.target.value) || 0 })}
+                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base font-black text-slate-700 focus:bg-white focus:border-pro-teal outline-none transition-all"
                     />
                   </div>
                 </div>
                 <div className="space-y-1">
-                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Observações Gerais de Frequência</label>
-                   <textarea
-                     placeholder="Atrasos, saídas antecipadas, etc..."
-                     value={diaryFormData.frequencyObs}
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Observações de Assiduidade</label>
+                   <input
+                     type="text"
+                     placeholder="Pontualidade, justificativas ou observações gerais..."
+                     value={diaryFormData.frequencyObs || ""}
                      onChange={(e) => setDiaryFormData({ ...diaryFormData, frequencyObs: e.target.value })}
-                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold text-slate-700 min-h-[90px] focus:outline-none focus:border-pro-teal transition-all"
+                     className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 focus:bg-white focus:border-pro-teal outline-none transition-all"
                    />
                 </div>
              </div>

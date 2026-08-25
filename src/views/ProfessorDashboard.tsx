@@ -11,7 +11,8 @@ import {
   UserCircle,
   Calendar,
   Award,
-  Layers
+  Layers,
+  UserCheck
 } from "lucide-react";
 import { THEME } from "../theme";
 import { Logo, Avatar } from "../components/CommonComponents";
@@ -135,7 +136,27 @@ export const ProfessorDashboard = ({
               </div>
             </motion.button>
 
-            {/* Diário do Professor */}
+            {/* Diário de Aula (Chamadas e Presença) */}
+            <motion.button
+              onClick={() => setView("class_diary")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full p-6 bg-gradient-to-r from-[#016a86] to-[#014e63] rounded-2xl flex items-center gap-5 text-white shadow-xl shadow-teal-900/15 transition-all text-left border-2 border-pro-yellow/30 relative overflow-hidden group"
+            >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-pro-yellow/10 rounded-full -mr-10 -mt-10 blur-xl group-hover:scale-110 transition-transform" />
+              <div className="bg-pro-yellow p-3 rounded-xl text-slate-900 shadow-md group-hover:scale-110 transition-transform relative z-10">
+                <UserCheck size={24} />
+              </div>
+              <div className="relative z-10">
+                <div className="font-black text-lg leading-none uppercase tracking-tight text-white flex items-center gap-2">
+                  Diário de Aula
+                  <span className="px-2 py-0.5 bg-pro-yellow text-slate-900 text-[9px] font-black rounded-md">Novo</span>
+                </div>
+                <div className="text-xs text-teal-100/80 mt-1 font-bold">Lançar presença e relato da aula</div>
+              </div>
+            </motion.button>
+
+            {/* Diário de Notas */}
             <motion.button
               onClick={() => setView("professor_diary")}
               whileHover={{ scale: 1.02 }}
@@ -146,8 +167,8 @@ export const ProfessorDashboard = ({
                 <BookOpen size={24} />
               </div>
               <div>
-                <div className="font-bold text-lg leading-none uppercase tracking-tight">Diário de Classe</div>
-                <div className="text-xs opacity-70 mt-1 font-bold">Chamadas e Acompanhamento</div>
+                <div className="font-bold text-lg leading-none uppercase tracking-tight">Diário de Notas</div>
+                <div className="text-xs opacity-70 mt-1 font-bold">Avaliações e critérios pedagógicos</div>
               </div>
             </motion.button>
 

@@ -103,6 +103,7 @@ import { FinancialManagementView } from "./views/FinancialManagementView";
 import { CoursesManagementView } from "./views/CoursesManagementView";
 import { ExperimentalClassesView } from "./views/ExperimentalClassesView";
 import { LessonPlansView } from "./views/LessonPlansView";
+import { ClassDiaryView } from "./views/ClassDiaryView";
 import { getMonthlyDeadline } from "./lib/deadlineUtils";
 
 export default function App() {
@@ -505,7 +506,7 @@ export default function App() {
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
-  const [_view, _setView] = useState<"login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup" | "school_agenda" | "lesson_ratings" | "badges_manager">("login");
+  const [_view, _setView] = useState<"login" | "dashboard" | "register" | "edit_self" | "edit_user" | "first_login" | "users_list" | "user_details" | "create_class" | "classes_list" | "class_details" | "edit_class" | "self_assessment" | "evolution" | "professor_diary" | "manage_diaries" | "student_diary_form" | "first_password_setup" | "school_agenda" | "lesson_ratings" | "badges_manager" | "financial_management" | "courses" | "experimental_classes" | "lesson_plans" | "planos-de-aula" | "class_diary" | "diario_de_aula">("login");
   
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -2853,6 +2854,14 @@ export default function App() {
           />
         ) : view === "lesson_plans" || view === "planos-de-aula" ? (
           <LessonPlansView 
+            currentUser={currentUser}
+            users={users}
+            classes={classes}
+            setView={setView}
+            userRole={role}
+          />
+        ) : view === "class_diary" || view === "diario_de_aula" ? (
+          <ClassDiaryView 
             currentUser={currentUser}
             users={users}
             classes={classes}

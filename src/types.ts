@@ -315,3 +315,27 @@ export interface LessonPlan {
   updatedAt?: any;
 }
 
+export type ClassAttendanceStatus = "presente" | "falta" | "justificada";
+
+export interface ClassDailyDiary {
+  id?: string;
+  classId: string;
+  className?: string;
+  classCode?: string;
+  classType?: string;
+  date: string; // YYYY-MM-DD
+  teacherId: string;
+  teacherName?: string;
+  authorRole?: string;
+  attendances: Record<string, ClassAttendanceStatus>; // studentId -> status
+  studentObservations?: Record<string, string>; // studentId -> individual note
+  classComment: string; // Relato da aula / observações confidenciais do professor (NÃO visível para alunos)
+  isInternalPedagogicalOnly?: boolean; // Sempre true para proteção adicional
+  totalStudents: number;
+  presentCount: number;
+  absentCount: number;
+  justifiedCount: number;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
