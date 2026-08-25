@@ -553,3 +553,227 @@ export function generateDiaryPDF(data: PDFExportData) {
 
   doc.save(fileName);
 }
+
+export function generateLessonPlanPDF(plan: any, skillsList: any[]) {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+
+  const brandTeal = [1, 106, 134];
+  const darkSlate = [15, 23, 42];
+  const mutedSlate = [100, 116, 139];
+
+  // Header Box
+  doc.setFillColor(brandTeal[0], brandTeal[1], brandTeal[2]);
+  doc.rect(margin, 12, contentWidth, 24, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(255, 255, 255);
+  doc.text("PLANO DE AULA PEDAGÓGICO", margin + 8, 22);
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(230, 245, 250);
+  doc.text("INTERVALO ESCOLA DE TEATRO • PLANEJAMENTO DE ENSINO", margin + 8, 29);
+
+  let currentY = 42;
+
+  // Metadata Grid
+  const dateStr = typeof plan.date === "string" 
+    ? plan.date 
+    : (plan.date?.toDate ? plan.date.toDate().toLocaleDateString("pt-BR") : new Date(plan.date || 0).toLocaleDateString("pt-BR"));
+
+  autoTable(doc, {
+    startY: currentY,
+    margin: { left: margin, right: margin },
+    head: [["Informações da Aula", "Detalhes"]],
+    body: [
+      ["Turma / Curso", sanitizeText(plan.className || "Turma")],
+      ["Professor(a) Responsável", sanitizeText(plan.teacherName || "Professor")],
+      ["Data da Aula", sanitizeText(dateStr)],
+      ["Duração Total Prevista", `${plan.totalDuration || 0} minutos`]
+    ],
+    theme: "grid",
+    headStyles: {
+      fillColor: [1, 106, 134],
+      textColor: 255,
+      fontStyle: "bold",
+      fontSize: 9
+    },
+    styles: {
+      fontSize: 8.5,
+      cellPadding: 3.5,
+      textColor: [15, 23, 42]
+    },
+    columnStyles: {
+      0: { fontStyle: "bold", cellWidth: 50, fillColor: [248, 250, 252] },
+      1: { cellWidth: "auto" }
+    }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 8;
+
+  // Objetivo Geral
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(brandTeal[0], brandTeal[1], brandTeal[2]);
+  doc.text("1. Objetivo Geral da Aula", margin, currentY);
+  currentY += 4;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+  const splitObjective = doc.splitTextToSize(sanitizeText(plan.generalObjective), contentWidth - 4);
+  
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, currentY, contentWidth, splitObjective.length * 4.5 + 6, 2, 2, "FD");
+  doc.text(splitObjective, margin + 4, currentY + 5);
+
+  currentY += splitObjective.length * 4.5 + 12;
+
+  // Habilidades Trabalhadas
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(brandTeal[0], brandTeal[1], brandTeal[2]);
+  doc.text("2. Habilidades e Competências Trabalhadas", margin, currentY);
+  currentY += 4;
+
+  const matchedSkills = (plan.skills || []).map((skillId: string) => {
+    const found = skillsList.find(s => s.id === skillId || s.name === skillId);
+    return [
+      found ? sanitizeText(found.name) : sanitizeText(skillId),
+      found ? sanitizeText(found.category || "Geral") : "Geral",
+      found?.definition ? sanitizeText(found.definition) : "-"
+    ];
+  });
+
+  if (matchedSkills.length > 0) {
+    autoTable(doc, {
+      startY: currentY,
+      margin: { left: margin, right: margin },
+      head: [["Habilidade", "Categoria", "Descrição Pedagógica"]],
+      body: matchedSkills,
+      theme: "striped",
+      headStyles: {
+        fillColor: [100, 116, 139],
+        textColor: 255,
+        fontStyle: "bold",
+        fontSize: 8.5
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        textColor: [15, 23, 42]
+      },
+      columnStyles: {
+        0: { fontStyle: "bold", cellWidth: 50 },
+        1: { cellWidth: 35 },
+        2: { cellWidth: "auto" }
+      }
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // Atividades Práticas da Aula
+  if (currentY > pageHeight - 60) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(brandTeal[0], brandTeal[1], brandTeal[2]);
+  doc.text("3. Sequência de Atividades e Dinâmicas", margin, currentY);
+  currentY += 4;
+
+  const activitiesData = (plan.activities || []).map((act: any, idx: number) => [
+    `${idx + 1}`,
+    sanitizeText(act.objective),
+    sanitizeText(act.description),
+    `${act.duration || 0} min`
+  ]);
+
+  autoTable(doc, {
+    startY: currentY,
+    margin: { left: margin, right: margin },
+    head: [["#", "Objetivo da Atividade", "Descrição e Condução", "Duração"]],
+    body: activitiesData,
+    theme: "grid",
+    headStyles: {
+      fillColor: [1, 106, 134],
+      textColor: 255,
+      fontStyle: "bold",
+      fontSize: 8.5
+    },
+    styles: {
+      fontSize: 8,
+      cellPadding: 3.5,
+      textColor: [15, 23, 42]
+    },
+    columnStyles: {
+      0: { fontStyle: "bold", cellWidth: 10, halign: "center" },
+      1: { fontStyle: "bold", cellWidth: 48 },
+      2: { cellWidth: "auto" },
+      3: { cellWidth: 20, halign: "center", fontStyle: "bold" }
+    }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 8;
+
+  // Observações (se houver)
+  if (plan.observations) {
+    if (currentY > pageHeight - 40) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(brandTeal[0], brandTeal[1], brandTeal[2]);
+    doc.text("4. Observações / Materiais Necessários", margin, currentY);
+    currentY += 4;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+    const splitObs = doc.splitTextToSize(sanitizeText(plan.observations), contentWidth - 4);
+    
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(margin, currentY, contentWidth, splitObs.length * 4.5 + 6, 2, 2, "FD");
+    doc.text(splitObs, margin + 4, currentY + 5);
+  }
+
+  // Footer & Page numbering
+  const totalPages = doc.getNumberOfPages();
+  const dateFormatted = new Date().toLocaleDateString("pt-BR");
+
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    doc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+
+    const footerText = sanitizeText(`Intervalo Casa de Artes • Plano de Aula • Gerado em ${dateFormatted}`);
+    doc.text(footerText, margin, pageHeight - 6);
+    doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 6, { align: "right" });
+  }
+
+  const cleanClassName = sanitizeText(plan.className || "turma").toLowerCase().replace(/[^a-z0-9]/g, "_");
+  const fileName = `plano_aula_${cleanClassName}_${dateStr.replace(/[^0-9]/g, "")}.pdf`;
+  doc.save(fileName);
+}
+

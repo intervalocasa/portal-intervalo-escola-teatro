@@ -257,9 +257,62 @@
         "timestamp": { "type": "object" }
       },
       "required": ["studentId", "studentName", "classId", "status"]
+    },
+    "Skill": {
+      "title": "Habilidade / Critério",
+      "description": "Definição de habilidade pedagógica trabalhada em aula e avaliada nos diários",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "definition": { "type": "string" },
+        "category": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "object" }
+      },
+      "required": ["name"]
+    },
+    "LessonPlan": {
+      "title": "Plano de Aula",
+      "description": "Planejamento pedagógico de uma aula elaborado pelo professor",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "classType": { "type": "string" },
+        "date": { "type": "object" },
+        "generalObjective": { "type": "string" },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "activities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "objective": { "type": "string" },
+              "description": { "type": "string" },
+              "duration": { "type": "number" }
+            },
+            "required": ["objective", "description", "duration"]
+          }
+        },
+        "totalDuration": { "type": "number" },
+        "observations": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["teacherId", "classId", "date", "generalObjective", "skills", "activities"]
     }
   },
   "firestore": {
+    "lesson_plans/{planId}": {
+      "schema": "LessonPlan",
+      "description": "Coleção de planos de aula cadastrados pelos professores"
+    },
+    "skills/{skillId}": {
+      "schema": "Skill",
+      "description": "Coleção de habilidades e competências pedagógicas"
+    },
     "pedagogical-requests/{requestId}": {
       "schema": "PedagogicalMeetingRequest",
       "description": "Solicitações de agendamento pedagógico"

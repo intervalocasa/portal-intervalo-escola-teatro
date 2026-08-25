@@ -282,3 +282,35 @@ export interface ExperimentalClassBooking {
   triagedByRole?: string;
 }
 
+export interface LessonPlanActivity {
+  objective: string;
+  description: string;
+  duration: number; // in minutes
+}
+
+export interface Skill {
+  id: string;
+  name: string;
+  definition?: string;
+  category?: string;
+  active?: boolean;
+  createdAt?: any;
+}
+
+export interface LessonPlan {
+  id?: string;
+  teacherId: string;
+  teacherName?: string;
+  classId: string;
+  className?: string;
+  classType?: string;
+  date: any; // Timestamp or ISO/YYYY-MM-DD
+  generalObjective: string;
+  skills: string[]; // array of skill IDs or skill names
+  activities: LessonPlanActivity[];
+  totalDuration?: number; // calculated sum of activities duration
+  observations?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+

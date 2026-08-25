@@ -19,7 +19,8 @@ import {
   Database,
   Wallet,
   GraduationCap,
-  Sparkles
+  Sparkles,
+  Layers
 } from "lucide-react";
 import { Logo, Avatar } from "../components/CommonComponents";
 import { AnnouncementPanel } from "../components/AnnouncementPanel";
@@ -229,6 +230,22 @@ export const GestorDashboard = ({
               <div>
                 <div className="font-bold text-lg leading-none">Diário de Classe</div>
                 <div className="text-xs opacity-70 mt-1">Acompanhamento Pedagógico</div>
+              </div>
+            </motion.button>
+
+            {/* Planos de Aula */}
+            <motion.button
+              onClick={() => setView("lesson_plans")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className={`w-full p-6 bg-gradient-to-r from-emerald-600 to-teal-700 rounded-2xl flex items-center gap-5 text-white shadow-lg shadow-emerald-900/10 transition-all text-left group`}
+            >
+              <div className="bg-white/20 p-3 rounded-xl group-hover:scale-110 transition-transform">
+                <Layers size={24} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-none">Planos de Aula</div>
+                <div className="text-xs text-emerald-100/80 mt-1">Planejamento e Habilidades</div>
               </div>
             </motion.button>
 

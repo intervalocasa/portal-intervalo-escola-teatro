@@ -116,6 +116,17 @@ service cloud.firestore {
       allow update, delete: if isGestor();
     }
 
+    match /lesson_plans/{planId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isGestor() || isProfessor();
+    }
+
+    match /skills/{skillId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isGestor() || isProfessor();
+    }
+
     match /system/{docId} {
       allow read: if true;
     }

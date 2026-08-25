@@ -10,7 +10,8 @@ import {
   LogOut, 
   UserCircle,
   Calendar,
-  Award
+  Award,
+  Layers
 } from "lucide-react";
 import { THEME } from "../theme";
 import { Logo, Avatar } from "../components/CommonComponents";
@@ -147,6 +148,22 @@ export const ProfessorDashboard = ({
               <div>
                 <div className="font-bold text-lg leading-none uppercase tracking-tight">Diário de Classe</div>
                 <div className="text-xs opacity-70 mt-1 font-bold">Chamadas e Acompanhamento</div>
+              </div>
+            </motion.button>
+
+            {/* Planos de Aula */}
+            <motion.button
+              onClick={() => setView("lesson_plans")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full p-6 bg-gradient-to-r from-emerald-600 to-teal-700 rounded-2xl flex items-center gap-5 text-white shadow-lg shadow-emerald-900/10 transition-all text-left"
+            >
+              <div className="bg-white/20 p-3 rounded-xl">
+                <Layers size={24} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-none uppercase tracking-tight">Planos de Aula</div>
+                <div className="text-xs text-emerald-100/90 mt-1 font-bold">Planejamento e Habilidades</div>
               </div>
             </motion.button>
 

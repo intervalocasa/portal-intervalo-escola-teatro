@@ -102,6 +102,7 @@ import { BadgesManagerView } from "./views/BadgesManagerView";
 import { FinancialManagementView } from "./views/FinancialManagementView";
 import { CoursesManagementView } from "./views/CoursesManagementView";
 import { ExperimentalClassesView } from "./views/ExperimentalClassesView";
+import { LessonPlansView } from "./views/LessonPlansView";
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
@@ -2834,6 +2835,14 @@ export default function App() {
             users={users}
             currentUser={currentUser}
             showNotification={showNotification}
+          />
+        ) : view === "lesson_plans" || view === "planos-de-aula" ? (
+          <LessonPlansView 
+            currentUser={currentUser}
+            users={users}
+            classes={classes}
+            setView={setView}
+            userRole={role}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-20 bg-white rounded-3xl border border-white/50">

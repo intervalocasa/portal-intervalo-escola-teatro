@@ -27,6 +27,7 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-easy-crop": "^5.5.7",
+    "react-hook-form": "^7.86.0",
     "recharts": "^3.8.1",
     "vite": "^6.2.3"
   },
