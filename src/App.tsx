@@ -111,6 +111,11 @@ export default function App() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const migrateUserDataAndReferences = async (oldDocId: string, newUid: string, userData: any) => {
+    if (!oldDocId || !newUid || oldDocId === newUid) {
+      console.log(`[Migration] Skipped migration: oldDocId (${oldDocId}) and newUid (${newUid}) are identical or invalid.`);
+      return;
+    }
+
     console.log(`[Migration] Starting total migration from ${oldDocId} to ${newUid} for email ${userData.email}`);
     
     // 1. Create/Set the doc at the new uid location
@@ -152,11 +157,15 @@ export default function App() {
 
         if (studentIds.includes(oldDocId)) {
           studentIds = studentIds.map((id: string) => id === oldDocId ? newUid : id);
+          // Remove duplicates in studentIds if any
+          studentIds = Array.from(new Set(studentIds));
           updated = true;
         }
 
         if (teacherIds.includes(oldDocId)) {
           teacherIds = teacherIds.map((id: string) => id === oldDocId ? newUid : id);
+          // Remove duplicates in teacherIds if any
+          teacherIds = Array.from(new Set(teacherIds));
           updated = true;
         }
 
@@ -202,7 +211,7 @@ export default function App() {
           if (scalarTId && !teacherIds.includes(scalarTId)) {
             teacherIds.push(scalarTId);
           }
-          updatedPayload.teacherIds = teacherIds;
+          updatedPayload.teacherIds = Array.from(new Set(teacherIds));
           updatedPayload.teacherId = deleteField();
           updated = true;
         }
@@ -327,16 +336,24 @@ export default function App() {
       console.error("[Migration] Error migrating posts:", postErr);
     }
 
-    // 11. Safely mark the old user document as inactive / migrated
+    // 11. Delete the old user document completely to avoid duplicate users in the database
     try {
-      await updateDoc(doc(db, "usuarios", oldDocId), { 
-        migratedTo: newUid, 
-        inactive: true,
-        updatedAt: serverTimestamp() 
-      });
-      console.log(`[Migration] Old user document ${oldDocId} safely marked as migrated to ${newUid}.`);
+      await deleteDoc(doc(db, "usuarios", oldDocId));
+      console.log(`[Migration] Old user document ${oldDocId} deleted successfully to prevent duplicates.`);
     } catch (oldDocErr) {
-      console.error("[Migration] Error updating old user doc status:", oldDocErr);
+      console.error("[Migration] Error deleting old user doc, marking inactive as fallback:", oldDocErr);
+      try {
+        await updateDoc(doc(db, "usuarios", oldDocId), { 
+          migratedTo: newUid, 
+          inactive: true,
+          updatedAt: serverTimestamp() 
+        });
+      } catch (e) {}
+    }
+
+    // 12. Update active_user_id in localStorage if needed
+    if (localStorage.getItem("active_user_id") === oldDocId) {
+      localStorage.setItem("active_user_id", newUid);
     }
     
     console.log(`[Migration] User migration completed with full integrity for ${userData.email}`);
@@ -349,33 +366,52 @@ export default function App() {
       const usersSnap = await getDocs(collection(db, "usuarios"));
       const allUsersData = usersSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
       
-      const emailToActiveUser: Record<string, any> = {};
+      const emailGroups: Record<string, any[]> = {};
       
       allUsersData.forEach(u => {
         if (!u.email) return;
         const emailLower = u.email.trim().toLowerCase();
-        
-        const isProperUid = u.id.length === 28;
-        
-        if (isProperUid && !u.inactive) {
-          const currentActive = emailToActiveUser[emailLower];
-          if (!currentActive || u.passwordChanged || !currentActive.passwordChanged) {
-            emailToActiveUser[emailLower] = u;
-          }
+        if (!emailGroups[emailLower]) {
+          emailGroups[emailLower] = [];
         }
+        emailGroups[emailLower].push(u);
       });
 
-      for (const oldUser of allUsersData) {
-        if (!oldUser.email) continue;
-        const emailLower = oldUser.email.trim().toLowerCase();
-        const activeUser = emailToActiveUser[emailLower];
-        
-        if (activeUser && oldUser.id !== activeUser.id && !oldUser.inactive) {
-          const oldId = oldUser.id;
-          const newId = activeUser.id;
-          console.log(`Healing: Migrating historical duplicate/unmigrated references for email ${emailLower} from ${oldId} to ${newId}`);
-          
-          await migrateUserDataAndReferences(oldId, newId, activeUser);
+      for (const [emailLower, group] of Object.entries(emailGroups)) {
+        if (group.length > 1) {
+          // Sort to find the primary document to keep
+          const sorted = [...group].sort((a, b) => {
+            // 1. Prefer Auth UID length (28)
+            const aUid = (a.id || "").length === 28 ? 1 : 0;
+            const bUid = (b.id || "").length === 28 ? 1 : 0;
+            if (aUid !== bUid) return bUid - aUid;
+
+            // 2. Prefer passwordChanged = true
+            const aPwd = a.passwordChanged ? 1 : 0;
+            const bPwd = b.passwordChanged ? 1 : 0;
+            if (aPwd !== bPwd) return bPwd - aPwd;
+
+            // 3. Prefer non-inactive
+            const aActive = !a.inactive ? 1 : 0;
+            const bActive = !b.inactive ? 1 : 0;
+            if (aActive !== bActive) return bActive - aActive;
+
+            return (a.id || "").localeCompare(b.id || "");
+          });
+
+          const primaryUser = sorted[0];
+          const duplicates = sorted.slice(1);
+
+          console.log(`[Healing] Found ${duplicates.length} duplicate(s) for email ${emailLower}. Primary doc: ${primaryUser.id}`);
+
+          for (const dup of duplicates) {
+            await migrateUserDataAndReferences(dup.id, primaryUser.id, primaryUser);
+          }
+        } else if (group[0]?.inactive && group[0]?.migratedTo) {
+          // Clean up leftover inactive marker docs
+          try {
+            await deleteDoc(doc(db, "usuarios", group[0].id));
+          } catch (e) {}
         }
       }
 
@@ -680,16 +716,17 @@ export default function App() {
     try {
       // 1. Check if email exists in Firestore
       const usersSnap = await getDocs(collection(db, "usuarios"));
-      const matchedDoc = usersSnap.docs.find(d => {
+      const matchedDocs = usersSnap.docs.filter(d => {
         const uData = d.data();
         return uData.email && uData.email.trim().toLowerCase() === cleanEmail;
       });
 
-      if (!matchedDoc) {
+      if (matchedDocs.length === 0) {
         setFirstPwdError("Este e-mail não está cadastrado no sistema. Por favor, solicite seu acesso com a gestão.");
         return;
       }
 
+      const matchedDoc = matchedDocs[0];
       const userData = matchedDoc.data();
       let success = false;
 
@@ -722,24 +759,39 @@ export default function App() {
       }
 
       if (success) {
-        // Update user record in Firestore
-        await updateDoc(doc(db, "usuarios", matchedDoc.id), {
+        // 3. Determine canonical UID
+        const finalUid = auth.currentUser?.uid || matchedDoc.id;
+
+        // 4. Save/merge user record at final canonical UID
+        await setDoc(doc(db, "usuarios", finalUid), {
+          ...userData,
+          email: cleanEmail,
           passwordChanged: true,
           initialPassword: "",
           senha: firstPwdNew,
           updatedAt: serverTimestamp()
-        });
+        }, { merge: true });
 
-        localStorage.setItem("active_user_id", matchedDoc.id);
+        // 5. Migrate all references and delete old/duplicate pre-registration documents
+        for (const docItem of matchedDocs) {
+          if (docItem.id !== finalUid) {
+            await migrateUserDataAndReferences(docItem.id, finalUid, userData);
+          }
+        }
+
+        localStorage.setItem("active_user_id", finalUid);
         localStorage.setItem("active_user_email", cleanEmail);
 
         const fullUserObj = {
-          uid: matchedDoc.id,
-          id: matchedDoc.id,
+          uid: finalUid,
+          id: finalUid,
           email: cleanEmail,
           displayName: userData.name || userData.artisticName,
           role: userData.role,
-          ...userData
+          ...userData,
+          senha: firstPwdNew,
+          passwordChanged: true,
+          initialPassword: ""
         };
 
         setCurrentUser(fullUserObj);
@@ -929,7 +981,8 @@ export default function App() {
                 const oldDocId = oldDoc.id;
                 userDocData = oldDoc.data();
                 userRole = userDocData?.role;
-                resolvedUserId = oldDocId;
+                resolvedUserId = user.uid;
+                localStorage.setItem("active_user_id", user.uid);
                 await migrateUserDataAndReferences(oldDocId, user.uid, userDocData);
               }
             }
@@ -1041,9 +1094,36 @@ export default function App() {
     if (!currentUser) return;
 
     const unsubscribeUsers = onSnapshot(collection(db, "usuarios"), (snapshot) => {
-      const sortedUsers = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || "", 'pt-BR'));
+      const emailMap = new Map<string, any>();
+      
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        const docId = docSnap.id;
+        if (data.inactive && data.migratedTo) {
+          return; // Skip inactive legacy marker docs
+        }
+        const email = (data.email || "").trim().toLowerCase();
+        if (email) {
+          const existing = emailMap.get(email);
+          if (!existing) {
+            emailMap.set(email, { id: docId, ...data });
+          } else {
+            // Keep the primary one: UID length 28 or passwordChanged
+            const existingIsUid = (existing.id || "").length === 28;
+            const currentIsUid = docId.length === 28;
+            if (!existingIsUid && currentIsUid) {
+              emailMap.set(email, { id: docId, ...data });
+            } else if (existingIsUid === currentIsUid && !existing.passwordChanged && data.passwordChanged) {
+              emailMap.set(email, { id: docId, ...data });
+            }
+          }
+        } else {
+          emailMap.set(docId, { id: docId, ...data });
+        }
+      });
+
+      const sortedUsers = Array.from(emailMap.values())
+        .sort((a: any, b: any) => (a.name || a.artisticName || "").localeCompare(b.name || b.artisticName || "", 'pt-BR'));
       setUsers(sortedUsers);
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, "usuarios");
@@ -1774,25 +1854,33 @@ export default function App() {
               console.warn("Auth setup warning in handleLogin:", aErr);
             }
 
-            // Non-blocking Firestore record update
+            const finalUid = auth.currentUser?.uid || userDocSnap.id;
+
+            // Firestore record update & migration to canonical UID
             try {
-              await updateDoc(doc(db, "usuarios", userDocSnap.id), {
+              await setDoc(doc(db, "usuarios", finalUid), {
+                ...userData,
+                email: cleanEmail,
                 passwordChanged: true,
                 initialPassword: "",
                 senha: cleanPassword,
                 updatedAt: serverTimestamp()
-              });
+              }, { merge: true });
+
+              if (userDocSnap.id !== finalUid) {
+                await migrateUserDataAndReferences(userDocSnap.id, finalUid, userData);
+              }
             } catch (fsUpdErr) {
               console.warn("Firestore updateDoc warning in handleLogin:", fsUpdErr);
             }
 
             // Set session state and view transition GUARANTEED
-            localStorage.setItem("active_user_id", userDocSnap.id);
+            localStorage.setItem("active_user_id", finalUid);
             localStorage.setItem("active_user_email", cleanEmail);
 
             const fullUserObj = {
-              uid: userDocSnap.id,
-              id: userDocSnap.id,
+              uid: finalUid,
+              id: finalUid,
               email: cleanEmail,
               displayName: userData.name || userData.artisticName,
               role: userData.role,
@@ -1883,8 +1971,31 @@ export default function App() {
       let studentId = "";
 
       if (view === "register") {
+        const cleanEmail = (formData.email || "").trim().toLowerCase();
+        if (!cleanEmail) {
+          showNotification("Por favor, informe o e-mail do usuário.", "Aviso", "warning");
+          setIsAppLoading(false);
+          return;
+        }
+
+        // Check if user already exists with this email
+        const existingInState = users.find(u => u.email && u.email.trim().toLowerCase() === cleanEmail);
+        if (existingInState) {
+          showNotification("Já existe um usuário cadastrado com este e-mail no sistema.", "E-mail já Cadastrado", "warning");
+          setIsAppLoading(false);
+          return;
+        }
+
+        const existingSnap = await getDocs(query(collection(db, "usuarios"), where("email", "==", cleanEmail)));
+        if (!existingSnap.empty) {
+          showNotification("Já existe um usuário cadastrado com este e-mail no sistema.", "E-mail já Cadastrado", "warning");
+          setIsAppLoading(false);
+          return;
+        }
+
         const docRef = await addDoc(collection(db, "usuarios"), {
           ...dataToSave,
+          email: cleanEmail,
           createdAt: serverTimestamp()
         });
         studentId = docRef.id;
