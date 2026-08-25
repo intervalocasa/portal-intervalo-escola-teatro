@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, FormEvent } from "react";
+import React, { useState, useEffect, FormEvent, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Clapperboard, 
@@ -23,23 +23,30 @@ import {
   Trash2, 
   Plus, 
   Search, 
-  Filter, 
-  ArrowLeft,
   ChevronDown,
   ChevronUp,
+  Upload,
+  FileCheck,
+  Download,
+  ExternalLink,
+  Info,
+  Boxes,
+  Volume2,
+  Brush,
   Clock,
   Check,
   X,
   MessageSquare,
   ShieldCheck,
-  Award
+  AlertTriangle
 } from "lucide-react";
 import { 
   StageProductionProposal, 
   StageProductionRole, 
   StageProductionGenre, 
   PriorityLevel, 
-  PrioritizedField, 
+  ProductionNeedItem,
+  TechnicalDocumentAttachment,
   UserRole 
 } from "../types";
 import { 
@@ -77,11 +84,12 @@ const ROLE_OPTIONS: StageProductionRole[] = [
   "Outro"
 ];
 
-const INITIAL_PRIORITIZED_FIELD: PrioritizedField = {
-  content: "",
+const createEmptyItem = (): ProductionNeedItem => ({
+  id: Math.random().toString(36).substring(2, 9),
+  item: "",
   priority: "Desejável",
   indispensableReason: ""
-};
+});
 
 export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
   currentUser,
@@ -114,17 +122,23 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     proponentUserId: currentUser?.uid || "",
     title: "",
     genre: "Drama",
-    synopsis: { ...INITIAL_PRIORITIZED_FIELD },
-    pedagogicalProposal: { ...INITIAL_PRIORITIZED_FIELD },
-    castProfile: { ...INITIAL_PRIORITIZED_FIELD },
-    scenographyProps: { ...INITIAL_PRIORITIZED_FIELD },
-    techNeeds: { ...INITIAL_PRIORITIZED_FIELD },
-    otherNeeds: { ...INITIAL_PRIORITIZED_FIELD },
+    synopsis: "",
+    pedagogicalProposal: "",
+    castProfile: "",
+    scenographyItems: [createEmptyItem()],
+    scenographyNotes: "",
+    techItems: [createEmptyItem()],
+    techNotes: "",
+    otherNeedsItems: [createEmptyItem()],
+    otherNeedsNotes: "",
+    scenographyPdf: null,
+    costumePdf: null,
+    lightingPdf: null,
     termsAccepted: false,
     status: "pendente"
   });
 
-  // Check Permissions: Only Gestor, Diretor Pedagógico, or Professor can access
+  // Check Permissions: Gestor, Diretor Pedagógico, or Professor
   const isGestor = 
     userRole === "Gestor" || 
     userRole === "Diretor Pedagógico" || 
@@ -170,34 +184,123 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     }
   }, [userProfile]);
 
-  const handlePrioritizedChange = (
-    field: keyof Pick<StageProductionProposal, "synopsis" | "pedagogicalProposal" | "castProfile" | "scenographyProps" | "techNeeds" | "otherNeeds">,
-    key: "content" | "priority" | "indispensableReason",
-    value: string
-  ) => {
+  // Handlers for item lists
+  const handleAddItem = (field: "scenographyItems" | "techItems" | "otherNeedsItems") => {
     setFormData(prev => ({
       ...prev,
-      [field]: {
-        ...prev[field],
-        [key]: value
-      }
+      [field]: [...prev[field], createEmptyItem()]
     }));
+  };
 
-    // Clear related error
-    if (errors[field]) {
+  const handleRemoveItem = (field: "scenographyItems" | "techItems" | "otherNeedsItems", index: number) => {
+    setFormData(prev => {
+      const current = [...prev[field]];
+      if (current.length <= 1) {
+        return {
+          ...prev,
+          [field]: [createEmptyItem()]
+        };
+      }
+      current.splice(index, 1);
+      return {
+        ...prev,
+        [field]: current
+      };
+    });
+  };
+
+  const handleUpdateItem = (
+    field: "scenographyItems" | "techItems" | "otherNeedsItems",
+    index: number,
+    key: keyof ProductionNeedItem,
+    value: any
+  ) => {
+    setFormData(prev => {
+      const current = [...prev[field]];
+      current[index] = {
+        ...current[index],
+        [key]: value
+      };
+      if (key === "priority" && value === "Desejável") {
+        current[index].indispensableReason = "";
+      }
+      return {
+        ...prev,
+        [field]: current
+      };
+    });
+
+    // Clear item errors
+    const errorKeyItem = `${field.replace("Items", "Item")}_${index}`;
+    const errorKeyReason = `${field.replace("Items", "Reason")}_${index}`;
+    if (errors[errorKeyItem] || errors[errorKeyReason] || errors[field]) {
       setErrors(prev => {
         const next = { ...prev };
+        delete next[errorKeyItem];
+        delete next[errorKeyReason];
         delete next[field];
         return next;
       });
     }
-    if (key === "indispensableReason" && errors[`${field}Reason`]) {
-      setErrors(prev => {
-        const next = { ...prev };
-        delete next[`${field}Reason`];
-        return next;
-      });
+  };
+
+  // PDF File Upload Handler
+  const handleFileUpload = (
+    docType: "scenographyPdf" | "costumePdf" | "lightingPdf",
+    file: File
+  ) => {
+    if (!file) return;
+
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      if (showNotification) {
+        showNotification("Apenas arquivos no formato PDF são aceitos.", "Formato Inválido", "error");
+      }
+      return;
     }
+
+    if (file.size > 15 * 1024 * 1024) {
+      if (showNotification) {
+        showNotification("O arquivo deve ter no máximo 15 MB.", "Arquivo muito grande", "error");
+      }
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      const attachment: TechnicalDocumentAttachment = {
+        name: file.name,
+        size: file.size,
+        dataUrl,
+        uploadedAt: new Date().toISOString()
+      };
+
+      setFormData(prev => ({
+        ...prev,
+        [docType]: attachment
+      }));
+
+      // Clear error for this docType
+      if (errors[docType]) {
+        setErrors(prev => {
+          const next = { ...prev };
+          delete next[docType];
+          return next;
+        });
+      }
+
+      if (showNotification) {
+        showNotification(`Arquivo "${file.name}" carregado com sucesso.`, "PDF Anexado", "success");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePdf = (docType: "scenographyPdf" | "costumePdf" | "lightingPdf") => {
+    setFormData(prev => ({
+      ...prev,
+      [docType]: null
+    }));
   };
 
   const resetForm = () => {
@@ -209,12 +312,18 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
       proponentUserId: currentUser?.uid || "",
       title: "",
       genre: "Drama",
-      synopsis: { ...INITIAL_PRIORITIZED_FIELD },
-      pedagogicalProposal: { ...INITIAL_PRIORITIZED_FIELD },
-      castProfile: { ...INITIAL_PRIORITIZED_FIELD },
-      scenographyProps: { ...INITIAL_PRIORITIZED_FIELD },
-      techNeeds: { ...INITIAL_PRIORITIZED_FIELD },
-      otherNeeds: { ...INITIAL_PRIORITIZED_FIELD },
+      synopsis: "",
+      pedagogicalProposal: "",
+      castProfile: "",
+      scenographyItems: [createEmptyItem()],
+      scenographyNotes: "",
+      techItems: [createEmptyItem()],
+      techNotes: "",
+      otherNeedsItems: [createEmptyItem()],
+      otherNeedsNotes: "",
+      scenographyPdf: null,
+      costumePdf: null,
+      lightingPdf: null,
       termsAccepted: false,
       status: "pendente"
     });
@@ -232,7 +341,6 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
       if (showNotification) {
         showNotification(firstError, "Atenção no Preenchimento", "warning");
       }
-      // Scroll to first error
       window.scrollTo({ top: 200, behavior: "smooth" });
       return;
     }
@@ -285,6 +393,9 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
       if (showNotification) {
         showNotification(`Status da proposta alterado para "${newStatus}".`, "Status Atualizado", "success");
       }
+      if (selectedProposalForFicha?.id === proposalId) {
+        setSelectedProposalForFicha(prev => prev ? { ...prev, status: newStatus, feedback } : null);
+      }
     } catch (err) {
       console.error("Error updating status:", err);
       if (showNotification) {
@@ -309,6 +420,22 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
         showNotification("Erro ao excluir proposta.", "Erro", "error");
       }
     }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return "0 KB";
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const countTotalIndispensables = (proposal: StageProductionProposal) => {
+    let count = 0;
+    proposal.scenographyItems?.forEach(i => { if (i.priority === "Indispensável") count++; });
+    proposal.techItems?.forEach(i => { if (i.priority === "Indispensável") count++; });
+    proposal.otherNeedsItems?.forEach(i => { if (i.priority === "Indispensável") count++; });
+    return count;
   };
 
   if (!hasAccess) {
@@ -363,7 +490,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
               Montagens e Apresentações
             </h1>
             <p className="text-teal-100/80 text-xs md:text-sm font-medium max-w-2xl leading-relaxed">
-              Submissão e curadoria de propostas de peças, espetáculos e mostras artísticas da Intervalo Escola de Teatro.
+              Submissão detalhada de necessidades de produção item a item, upload obrigatório de projetos técnicos em PDF e emissão da Ficha de Inscrição.
             </p>
           </div>
 
@@ -411,7 +538,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     Ficha de Inscrição de Montagem e Espetáculo
                   </h2>
                   <p className="text-slate-500 text-xs font-medium mt-1">
-                    Preencha com atenção todos os campos. Campos marcados com (*) possuem seletor de prioridade (Desejável ou Indispensável).
+                    Cadastre a obra, insira os itens de produção com sua prioridade individual e anexe os projetos técnicos em PDF.
                   </p>
                 </div>
                 <div className="bg-teal-50 border border-teal-200/60 px-4 py-2 rounded-2xl text-[11px] font-bold text-pro-teal">
@@ -569,19 +696,27 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Sinopse da Obra + Priorizador */}
-                  <PrioritizedTextarea
-                    label="Sinopse da Obra *"
-                    placeholder="Descreva a premissa dramática, narrativa ou poética do espetáculo/mostra..."
-                    value={formData.synopsis.content}
-                    priority={formData.synopsis.priority}
-                    reason={formData.synopsis.indispensableReason || ""}
-                    errorContent={errors.synopsis}
-                    errorReason={errors.synopsisReason}
-                    onContentChange={(val) => handlePrioritizedChange("synopsis", "content", val)}
-                    onPriorityChange={(val) => handlePrioritizedChange("synopsis", "priority", val)}
-                    onReasonChange={(val) => handlePrioritizedChange("synopsis", "indispensableReason", val)}
-                  />
+                  {/* Sinopse da Obra (sem prioridade, apenas campo descritivo normal) */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText size={13} className="text-pro-teal" />
+                      Sinopse da Obra *
+                    </label>
+                    <textarea
+                      required
+                      rows={4}
+                      value={formData.synopsis}
+                      onChange={(e) => {
+                        setFormData(p => ({ ...p, synopsis: e.target.value }));
+                        if (errors.synopsis) setErrors(p => { const n = { ...p }; delete n.synopsis; return n; });
+                      }}
+                      placeholder="Descreva a premissa dramática, narrativa ou poética do espetáculo/mostra..."
+                      className={`w-full p-4 bg-slate-50 border rounded-2xl text-sm font-medium outline-none transition-all resize-y ${
+                        errors.synopsis ? "border-red-400 bg-red-50/20" : "border-slate-200 focus:border-pro-teal focus:bg-white"
+                      }`}
+                    />
+                    {errors.synopsis && <p className="text-xs text-red-500 font-bold">{errors.synopsis}</p>}
+                  </div>
                 </div>
 
                 {/* SEÇÃO 3: PROPOSTA PEDAGÓGICA E ELENCO */}
@@ -595,94 +730,185 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     </h3>
                   </div>
 
-                  {/* Proposta Didática */}
-                  <PrioritizedTextarea
-                    label="Proposta Didática / Pedagógica *"
-                    placeholder="Como esta montagem se conecta com o plano de ensino, desenvolvimento dos alunos, habilidades teatrais trabalhadas e objetivos de aprendizagem..."
-                    value={formData.pedagogicalProposal.content}
-                    priority={formData.pedagogicalProposal.priority}
-                    reason={formData.pedagogicalProposal.indispensableReason || ""}
-                    errorContent={errors.pedagogicalProposal}
-                    errorReason={errors.pedagogicalProposalReason}
-                    onContentChange={(val) => handlePrioritizedChange("pedagogicalProposal", "content", val)}
-                    onPriorityChange={(val) => handlePrioritizedChange("pedagogicalProposal", "priority", val)}
-                    onReasonChange={(val) => handlePrioritizedChange("pedagogicalProposal", "indispensableReason", val)}
-                  />
-
-                  {/* Elenco Previsto */}
-                  <PrioritizedTextarea
-                    label="Elenco Previsto (Quantidade, Faixa Etária e Perfil) *"
-                    placeholder="Especifique o número previsto de atores/atrizes, perfil dos personagens, distribuição por turma/nível e dinâmica de ensaios..."
-                    value={formData.castProfile.content}
-                    priority={formData.castProfile.priority}
-                    reason={formData.castProfile.indispensableReason || ""}
-                    errorContent={errors.castProfile}
-                    errorReason={errors.castProfileReason}
-                    onContentChange={(val) => handlePrioritizedChange("castProfile", "content", val)}
-                    onPriorityChange={(val) => handlePrioritizedChange("castProfile", "priority", val)}
-                    onReasonChange={(val) => handlePrioritizedChange("castProfile", "indispensableReason", val)}
-                  />
-                </div>
-
-                {/* SEÇÃO 4: NECESSIDADES DE PRODUÇÃO */}
-                <div className="space-y-4 pt-4 border-t border-slate-100">
-                  <div className="flex items-center gap-3 pb-2 border-b border-slate-100">
-                    <div className="w-8 h-8 rounded-xl bg-pro-teal/10 text-pro-teal flex items-center justify-center font-black text-sm">
-                      4
-                    </div>
-                    <h3 className="text-base md:text-lg font-black text-slate-800 tracking-tight">
-                      Necessidades de Produção
-                    </h3>
+                  {/* Proposta Didática (sem prioridade) */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles size={13} className="text-pro-teal" />
+                      Proposta Didática / Pedagógica *
+                    </label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={formData.pedagogicalProposal}
+                      onChange={(e) => {
+                        setFormData(p => ({ ...p, pedagogicalProposal: e.target.value }));
+                        if (errors.pedagogicalProposal) setErrors(p => { const n = { ...p }; delete n.pedagogicalProposal; return n; });
+                      }}
+                      placeholder="Como esta montagem se conecta com o desenvolvimento dos alunos, habilidades teatrais trabalhadas e objetivos de aprendizagem..."
+                      className={`w-full p-4 bg-slate-50 border rounded-2xl text-sm font-medium outline-none transition-all resize-y ${
+                        errors.pedagogicalProposal ? "border-red-400 bg-red-50/20" : "border-slate-200 focus:border-pro-teal focus:bg-white"
+                      }`}
+                    />
+                    {errors.pedagogicalProposal && <p className="text-xs text-red-500 font-bold">{errors.pedagogicalProposal}</p>}
                   </div>
 
-                  {/* Cenografia e Adereços */}
-                  <PrioritizedTextarea
-                    label="Proposta de Cenografia e Adereços *"
-                    placeholder="Descreva o conceito espacial, elementos de palco, mobiliário necessário, objetos de cena e adereços..."
-                    value={formData.scenographyProps.content}
-                    priority={formData.scenographyProps.priority}
-                    reason={formData.scenographyProps.indispensableReason || ""}
-                    errorContent={errors.scenographyProps}
-                    errorReason={errors.scenographyPropsReason}
-                    onContentChange={(val) => handlePrioritizedChange("scenographyProps", "content", val)}
-                    onPriorityChange={(val) => handlePrioritizedChange("scenographyProps", "priority", val)}
-                    onReasonChange={(val) => handlePrioritizedChange("scenographyProps", "indispensableReason", val)}
+                  {/* Elenco Previsto (sem prioridade) */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <User size={13} className="text-pro-teal" />
+                      Elenco Previsto (Quantidade, Faixa Etária e Perfil) *
+                    </label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={formData.castProfile}
+                      onChange={(e) => {
+                        setFormData(p => ({ ...p, castProfile: e.target.value }));
+                        if (errors.castProfile) setErrors(p => { const n = { ...p }; delete n.castProfile; return n; });
+                      }}
+                      placeholder="Especifique o número previsto de atores/atrizes, perfil dos personagens, distribuição por turma/nível e dinâmica de ensaios..."
+                      className={`w-full p-4 bg-slate-50 border rounded-2xl text-sm font-medium outline-none transition-all resize-y ${
+                        errors.castProfile ? "border-red-400 bg-red-50/20" : "border-slate-200 focus:border-pro-teal focus:bg-white"
+                      }`}
+                    />
+                    {errors.castProfile && <p className="text-xs text-red-500 font-bold">{errors.castProfile}</p>}
+                  </div>
+                </div>
+
+                {/* SEÇÃO 4: NECESSIDADES DE PRODUÇÃO (ITENS UM POR UM COM SELETOR DESEJÁVEL/INDISPENSÁVEL) */}
+                <div className="space-y-6 pt-4 border-t border-slate-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-pro-teal/10 text-pro-teal flex items-center justify-center font-black text-sm">
+                        4
+                      </div>
+                      <div>
+                        <h3 className="text-base md:text-lg font-black text-slate-800 tracking-tight">
+                          Necessidades de Produção
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          Adicione os itens de necessidade individualmente em cada subseção e marque a prioridade de cada um.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 flex items-start gap-3 text-amber-900">
+                    <Info size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div className="text-xs font-medium leading-relaxed">
+                      <strong>Atenção à Classificação de Prioridade:</strong> Itens marcados como <strong>"Indispensável"</strong> exigem obrigatoriamente a justificativa do porquê a montagem não pode ser realizada sem o recurso. Itens como <strong>"Desejável"</strong> serão atendidos mediante disponibilidade orçamentária e técnica.
+                    </div>
+                  </div>
+
+                  {/* Subseção A: Cenografia e Adereços */}
+                  <ItemizedSection
+                    title="Cenografia e Adereços"
+                    icon={<Boxes size={18} className="text-pro-teal" />}
+                    items={formData.scenographyItems}
+                    notes={formData.scenographyNotes || ""}
+                    fieldKey="scenographyItems"
+                    notesKey="scenographyNotes"
+                    itemPlaceholder="Ex: Mesa de madeira rústica, 4 cadeiras de época, tapete vermelho, adereço espada..."
+                    errors={errors}
+                    onAddItem={() => handleAddItem("scenographyItems")}
+                    onRemoveItem={(idx) => handleRemoveItem("scenographyItems", idx)}
+                    onUpdateItem={(idx, key, val) => handleUpdateItem("scenographyItems", idx, key, val)}
+                    onUpdateNotes={(val) => setFormData(p => ({ ...p, scenographyNotes: val }))}
                   />
 
-                  {/* Necessidades Técnicas de Iluminação, Som e Vídeo */}
-                  <PrioritizedTextarea
-                    label="Necessidades Técnicas de Iluminação, Som e Vídeo *"
-                    placeholder="Descreva o mapa de luz desejado, efeitos sonoros/música ao vivo/trilha gravada, microfonação, projeção de vídeo..."
-                    value={formData.techNeeds.content}
-                    priority={formData.techNeeds.priority}
-                    reason={formData.techNeeds.indispensableReason || ""}
-                    errorContent={errors.techNeeds}
-                    errorReason={errors.techNeedsReason}
-                    onContentChange={(val) => handlePrioritizedChange("techNeeds", "content", val)}
-                    onPriorityChange={(val) => handlePrioritizedChange("techNeeds", "priority", val)}
-                    onReasonChange={(val) => handlePrioritizedChange("techNeeds", "indispensableReason", val)}
+                  {/* Subseção B: Iluminação, Som e Vídeo */}
+                  <ItemizedSection
+                    title="Iluminação, Som e Vídeo (Necessidades Técnicas)"
+                    icon={<Lightbulb size={18} className="text-pro-teal" />}
+                    items={formData.techItems}
+                    notes={formData.techNotes || ""}
+                    fieldKey="techItems"
+                    notesKey="techNotes"
+                    itemPlaceholder="Ex: 2 microfones headset, projetor HDMI, foco de luz azul suave, efeito máquina de fumaça..."
+                    errors={errors}
+                    onAddItem={() => handleAddItem("techItems")}
+                    onRemoveItem={(idx) => handleRemoveItem("techItems", idx)}
+                    onUpdateItem={(idx, key, val) => handleUpdateItem("techItems", idx, key, val)}
+                    onUpdateNotes={(val) => setFormData(p => ({ ...p, techNotes: val }))}
                   />
 
-                  {/* Outras Necessidades (Figurino, Maquiagem, Logística) */}
-                  <PrioritizedTextarea
-                    label="Outras Necessidades (Figurino, Maquiagem, Logística) *"
-                    placeholder="Concepção visual dos figurinos, visagismo/maquiagem, transporte, cronograma de ensaios gerais e montagem..."
-                    value={formData.otherNeeds.content}
-                    priority={formData.otherNeeds.priority}
-                    reason={formData.otherNeeds.indispensableReason || ""}
-                    errorContent={errors.otherNeeds}
-                    errorReason={errors.otherNeedsReason}
-                    onContentChange={(val) => handlePrioritizedChange("otherNeeds", "content", val)}
-                    onPriorityChange={(val) => handlePrioritizedChange("otherNeeds", "priority", val)}
-                    onReasonChange={(val) => handlePrioritizedChange("otherNeeds", "indispensableReason", val)}
+                  {/* Subseção C: Outras Necessidades (Figurino, Maquiagem, Logística) */}
+                  <ItemizedSection
+                    title="Outras Necessidades (Figurino, Maquiagem e Logística)"
+                    icon={<Shirt size={18} className="text-pro-teal" />}
+                    items={formData.otherNeedsItems}
+                    notes={formData.otherNeedsNotes || ""}
+                    fieldKey="otherNeedsItems"
+                    notesKey="otherNeedsNotes"
+                    itemPlaceholder="Ex: 5 capas medievais, tinta facial artística para 8 alunos, transporte de praticáveis..."
+                    errors={errors}
+                    onAddItem={() => handleAddItem("otherNeedsItems")}
+                    onRemoveItem={(idx) => handleRemoveItem("otherNeedsItems", idx)}
+                    onUpdateItem={(idx, key, val) => handleUpdateItem("otherNeedsItems", idx, key, val)}
+                    onUpdateNotes={(val) => setFormData(p => ({ ...p, otherNeedsNotes: val }))}
                   />
                 </div>
 
-                {/* SEÇÃO 5: TERMO DE ACEITE */}
-                <div className="space-y-4 pt-4 border-t border-slate-100">
+                {/* SEÇÃO 5: ENVIO OBRIGATÓRIO DOS PROJETOS TÉCNICOS (PDFs) */}
+                <div className="space-y-6 pt-4 border-t border-slate-100">
                   <div className="flex items-center gap-3 pb-2 border-b border-slate-100">
                     <div className="w-8 h-8 rounded-xl bg-pro-teal/10 text-pro-teal flex items-center justify-center font-black text-sm">
                       5
+                    </div>
+                    <div>
+                      <h3 className="text-base md:text-lg font-black text-slate-800 tracking-tight">
+                        Projetos Técnicos Obrigatórios (Arquivos PDF)
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        O envio dos 3 arquivos PDF abaixo é obrigatório para validação da Ficha de Inscrição da Montagem.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* PDF 1: Projeto de Cenografia */}
+                    <PdfUploadCard
+                      title="Projeto de Cenografia"
+                      description="Planta baixa, croqui dos elementos cenográficos e mapa de palco."
+                      docType="scenographyPdf"
+                      attachment={formData.scenographyPdf}
+                      error={errors.scenographyPdf}
+                      onUpload={(file) => handleFileUpload("scenographyPdf", file)}
+                      onRemove={() => handleRemovePdf("scenographyPdf")}
+                      formatFileSize={formatFileSize}
+                    />
+
+                    {/* PDF 2: Projeto de Figurino */}
+                    <PdfUploadCard
+                      title="Projeto de Figurino"
+                      description="Pranchas de figurino, cartela de cores, visagismo e maquiagem."
+                      docType="costumePdf"
+                      attachment={formData.costumePdf}
+                      error={errors.costumePdf}
+                      onUpload={(file) => handleFileUpload("costumePdf", file)}
+                      onRemove={() => handleRemovePdf("costumePdf")}
+                      formatFileSize={formatFileSize}
+                    />
+
+                    {/* PDF 3: Projeto de Iluminação */}
+                    <PdfUploadCard
+                      title="Projeto de Iluminação"
+                      description="Mapa de luz, afinação dos refletores, canais e roteiro de cenas de luz."
+                      docType="lightingPdf"
+                      attachment={formData.lightingPdf}
+                      error={errors.lightingPdf}
+                      onUpload={(file) => handleFileUpload("lightingPdf", file)}
+                      onRemove={() => handleRemovePdf("lightingPdf")}
+                      formatFileSize={formatFileSize}
+                    />
+                  </div>
+                </div>
+
+                {/* SEÇÃO 6: TERMO DE ACEITE */}
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-3 pb-2 border-b border-slate-100">
+                    <div className="w-8 h-8 rounded-xl bg-pro-teal/10 text-pro-teal flex items-center justify-center font-black text-sm">
+                      6
                     </div>
                     <h3 className="text-base md:text-lg font-black text-slate-800 tracking-tight">
                       Termo de Aceite e Compromisso
@@ -703,7 +929,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                         className="mt-1 w-5 h-5 rounded-lg text-pro-teal focus:ring-pro-teal border-slate-300 transition-all cursor-pointer accent-[#016a86]"
                       />
                       <span className="text-xs md:text-sm font-bold text-slate-700 leading-relaxed group-hover:text-slate-900 transition-colors">
-                        Confirmo a veracidade das informações para a Ficha de Inscrição da Montagem e estou ciente de que as necessidades assinaladas como "Indispensáveis" serão analisadas pedagogicamente e tecnicamente pela coordenação. *
+                        Confirmo a veracidade das informações da Ficha de Inscrição da Montagem, o envio dos projetos técnicos em PDF e estou ciente de que as necessidades assinaladas como "Indispensáveis" serão analisadas detalhadamente pela coordenação técnica e pedagógica. *
                       </span>
                     </label>
                     {errors.termsAccepted && (
@@ -829,6 +1055,8 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     rejeitada: "Não Aprovada"
                   };
 
+                  const indispCount = countTotalIndispensables(proposal);
+
                   return (
                     <div 
                       key={proposal.id}
@@ -857,19 +1085,25 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                         </div>
 
                         <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
-                          {proposal.synopsis?.content}
+                          {proposal.synopsis}
                         </p>
 
-                        {/* Indispensables Counter Badge */}
-                        <div className="flex items-center gap-2 text-[11px] font-bold">
-                          {getIndispensableCount(proposal) > 0 ? (
+                        {/* Badges Info */}
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
+                          {indispCount > 0 ? (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-200/60">
                               <AlertCircle size={12} />
-                              {getIndispensableCount(proposal)} item(ns) indispensável(is) assinalado(s)
+                              {indispCount} item(ns) indispensável(is)
                             </span>
                           ) : (
-                            <span className="text-slate-400">Todos os itens marcados como desejáveis</span>
+                            <span className="text-slate-400">Todos os itens desejáveis</span>
                           )}
+
+                          {/* PDF Status */}
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200/60">
+                            <FileCheck size={12} />
+                            3 Projetos em PDF Anexados
+                          </span>
                         </div>
                       </div>
 
@@ -913,7 +1147,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
         )}
       </div>
 
-      {/* MODAL: SUCESSO DO ENVIO COM ATALHO PARA A FICHA */}
+      {/* MODAL: SUCESSO DO ENVIO */}
       <AnimatePresence>
         {showSuccessModal && lastCreatedProposal && (
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -932,7 +1166,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                   Proposta Inscrita com Sucesso!
                 </h3>
                 <p className="text-xs md:text-sm text-slate-500 font-medium leading-relaxed">
-                  A Ficha de Inscrição da Montagem para o espetáculo <strong>"{lastCreatedProposal.title}"</strong> foi gerada e registrada no sistema da escola.
+                  A Ficha de Inscrição da Montagem para o espetáculo <strong>"{lastCreatedProposal.title}"</strong> foi gerada com todos os projetos anexados.
                 </p>
               </div>
 
@@ -998,15 +1232,15 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 <div className="flex items-center gap-2 print:hidden">
                   <button
                     onClick={() => window.print()}
-                    className="p-3 bg-slate-100 hover:bg-pro-teal hover:text-white text-slate-700 rounded-2xl transition-all"
-                    title="Imprimir Ficha"
+                    className="p-3 bg-slate-100 hover:bg-pro-teal hover:text-white text-slate-700 rounded-xl font-bold text-xs transition-all flex items-center gap-2"
+                    title="Imprimir Ficha Oficial"
                   >
-                    <Printer size={18} />
+                    <Printer size={16} />
+                    <span className="hidden sm:inline">Imprimir Ficha</span>
                   </button>
                   <button
                     onClick={() => setSelectedProposalForFicha(null)}
-                    className="p-3 bg-slate-100 hover:bg-rose-500 hover:text-white text-slate-700 rounded-2xl transition-all"
-                    title="Fechar"
+                    className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-all"
                   >
                     <X size={18} />
                   </button>
@@ -1014,132 +1248,190 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
               </div>
 
               {/* Status Banner */}
-              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Status da Curadoria</span>
-                  <span className="text-sm font-black text-slate-800 uppercase tracking-tight">
+              <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200 print:bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-500">Status da Proposta:</span>
+                  <span className="px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider bg-pro-teal text-white">
                     {selectedProposalForFicha.status || "Pendente"}
                   </span>
                 </div>
+                <div className="text-xs text-slate-500 font-semibold">
+                  Submetido em: {selectedProposalForFicha.createdAt?.toDate ? selectedProposalForFicha.createdAt.toDate().toLocaleString("pt-BR") : "Data de submissão"}
+                </div>
+              </div>
 
-                {isGestor && (
-                  <div className="flex flex-wrap items-center gap-2 print:hidden">
-                    <span className="text-xs font-bold text-slate-500">Alterar Status:</span>
+              {/* Bloco 1: Proponente e Identificação */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="border border-slate-200 rounded-2xl p-5 space-y-3 bg-slate-50/50">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-pro-teal flex items-center gap-2 border-b border-slate-200 pb-2">
+                    <User size={14} /> Dados do Proponente
+                  </h4>
+                  <div className="text-xs space-y-1.5 font-medium text-slate-700">
+                    <p><strong>Nome:</strong> {selectedProposalForFicha.proponentName}</p>
+                    <p><strong>Função / Cargo:</strong> {selectedProposalForFicha.proponentRole}</p>
+                    <p><strong>E-mail:</strong> {selectedProposalForFicha.proponentEmail}</p>
+                    <p><strong>Telefone / WhatsApp:</strong> {selectedProposalForFicha.proponentPhone}</p>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl p-5 space-y-3 bg-slate-50/50">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-pro-teal flex items-center gap-2 border-b border-slate-200 pb-2">
+                    <Theater size={14} /> Identificação da Obra
+                  </h4>
+                  <div className="text-xs space-y-1.5 font-medium text-slate-700">
+                    <p><strong>Título:</strong> {selectedProposalForFicha.title}</p>
+                    <p><strong>Gênero:</strong> {selectedProposalForFicha.genre}</p>
+                    <p className="pt-1 text-slate-600 italic">"{selectedProposalForFicha.synopsis}"</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloco 2: Proposta Pedagógica e Elenco */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                  <Sparkles size={14} className="text-pro-teal" />
+                  Proposta Pedagógica e Elenco
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Proposta Didática / Pedagógica</span>
+                    <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{selectedProposalForFicha.pedagogicalProposal}</p>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Elenco Previsto (Quantidade & Perfil)</span>
+                    <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{selectedProposalForFicha.castProfile}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloco 3: Necessidades de Produção (Itemizadas) */}
+              <div className="space-y-6">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                  <Boxes size={14} className="text-pro-teal" />
+                  Necessidades de Produção Detalhadas
+                </h4>
+
+                {/* Tabela de Cenografia e Adereços */}
+                <DisplayItemsTable
+                  title="Cenografia e Adereços"
+                  items={selectedProposalForFicha.scenographyItems}
+                  notes={selectedProposalForFicha.scenographyNotes}
+                />
+
+                {/* Tabela de Iluminação, Som e Vídeo */}
+                <DisplayItemsTable
+                  title="Iluminação, Som e Vídeo (Necessidades Técnicas)"
+                  items={selectedProposalForFicha.techItems}
+                  notes={selectedProposalForFicha.techNotes}
+                />
+
+                {/* Tabela de Outras Necessidades */}
+                <DisplayItemsTable
+                  title="Outras Necessidades (Figurino, Maquiagem e Logística)"
+                  items={selectedProposalForFicha.otherNeedsItems}
+                  notes={selectedProposalForFicha.otherNeedsNotes}
+                />
+              </div>
+
+              {/* Bloco 4: Projetos Técnicos Anexados (PDFs) */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                  <FileCheck size={14} className="text-pro-teal" />
+                  Projetos Técnicos Anexados (Arquivos PDF)
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <DisplayPdfCard
+                    title="Projeto de Cenografia"
+                    attachment={selectedProposalForFicha.scenographyPdf}
+                    formatFileSize={formatFileSize}
+                  />
+                  <DisplayPdfCard
+                    title="Projeto de Figurino"
+                    attachment={selectedProposalForFicha.costumePdf}
+                    formatFileSize={formatFileSize}
+                  />
+                  <DisplayPdfCard
+                    title="Projeto de Iluminação"
+                    attachment={selectedProposalForFicha.lightingPdf}
+                    formatFileSize={formatFileSize}
+                  />
+                </div>
+              </div>
+
+              {/* Bloco 5: Parecer / Feedback da Curadoria (Se houver) */}
+              {selectedProposalForFicha.feedback && (
+                <div className="p-5 bg-purple-50 border border-purple-200 rounded-2xl space-y-2">
+                  <span className="text-xs font-black uppercase tracking-wider text-purple-900 flex items-center gap-2">
+                    <MessageSquare size={14} />
+                    Parecer da Coordenação / Curadoria:
+                  </span>
+                  <p className="text-xs text-purple-950 font-medium whitespace-pre-wrap">
+                    {selectedProposalForFicha.feedback}
+                  </p>
+                  {selectedProposalForFicha.reviewedByName && (
+                    <p className="text-[10px] text-purple-700 font-bold">
+                      Avaliador: {selectedProposalForFicha.reviewedByName}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Área de Gestão de Status (Apenas Gestor) */}
+              {isGestor && (
+                <div className="p-6 bg-slate-100 rounded-2xl border border-slate-200 space-y-4 print:hidden">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                    <ShieldCheck size={16} className="text-pro-teal" />
+                    Painel de Avaliação da Gestão
+                  </h4>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-600 uppercase">Parecer / Feedback para o Proponente:</label>
+                    <textarea
+                      rows={2}
+                      defaultValue={selectedProposalForFicha.feedback || ""}
+                      onChange={(e) => setFeedbackInput(p => ({ ...p, [selectedProposalForFicha.id!]: e.target.value }))}
+                      placeholder="Insira as observações da curadoria ou justificativas de ajustes..."
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-pro-teal font-medium"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
                     <button
                       onClick={() => handleUpdateStatus(selectedProposalForFicha.id!, "aprovada")}
-                      className="px-3 py-1.5 bg-emerald-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-emerald-700 transition-all flex items-center gap-1"
+                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
                     >
-                      <Check size={12} /> Aprovar
+                      <Check size={14} /> Aprovar Montagem
                     </button>
+
                     <button
                       onClick={() => handleUpdateStatus(selectedProposalForFicha.id!, "em_analise")}
-                      className="px-3 py-1.5 bg-blue-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-blue-700 transition-all flex items-center gap-1"
+                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
                     >
-                      <Clock size={12} /> Em Análise
+                      <Clock size={14} /> Em Curadoria
                     </button>
+
                     <button
                       onClick={() => handleUpdateStatus(selectedProposalForFicha.id!, "ajustes_solicitados")}
-                      className="px-3 py-1.5 bg-purple-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-purple-700 transition-all flex items-center gap-1"
+                      className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
                     >
-                      Ajustes
+                      <AlertCircle size={14} /> Solicitar Ajustes
+                    </button>
+
+                    <button
+                      onClick={() => handleUpdateStatus(selectedProposalForFicha.id!, "rejeitada")}
+                      className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
+                    >
+                      <X size={14} /> Não Aprovar
                     </button>
                   </div>
-                )}
-              </div>
-
-              {/* Seção 1: Proponente */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-black uppercase tracking-widest text-pro-teal border-b border-slate-100 pb-1">
-                  1. Dados do Proponente
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                  <div className="bg-slate-50 p-3 rounded-xl">
-                    <span className="text-slate-400 block font-bold text-[10px] uppercase">Nome</span>
-                    <span className="font-bold text-slate-800">{selectedProposalForFicha.proponentName}</span>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl">
-                    <span className="text-slate-400 block font-bold text-[10px] uppercase">Função</span>
-                    <span className="font-bold text-slate-800">{selectedProposalForFicha.proponentRole}</span>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl">
-                    <span className="text-slate-400 block font-bold text-[10px] uppercase">E-mail</span>
-                    <span className="font-bold text-slate-800">{selectedProposalForFicha.proponentEmail}</span>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl">
-                    <span className="text-slate-400 block font-bold text-[10px] uppercase">WhatsApp</span>
-                    <span className="font-bold text-slate-800">{selectedProposalForFicha.proponentPhone}</span>
-                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Seção 2: Identificação da Obra */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-black uppercase tracking-widest text-pro-teal border-b border-slate-100 pb-1">
-                  2. Identificação da Obra
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs mb-3">
-                  <div className="md:col-span-2 bg-slate-50 p-3 rounded-xl">
-                    <span className="text-slate-400 block font-bold text-[10px] uppercase">Título do Espetáculo</span>
-                    <span className="font-black text-slate-900 text-sm">{selectedProposalForFicha.title}</span>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl">
-                    <span className="text-slate-400 block font-bold text-[10px] uppercase">Gênero</span>
-                    <span className="font-bold text-slate-800">{selectedProposalForFicha.genre}</span>
-                  </div>
-                </div>
-
-                <FichaFieldBlock
-                  title="Sinopse da Obra"
-                  field={selectedProposalForFicha.synopsis}
-                />
-              </div>
-
-              {/* Seção 3: Proposta Pedagógica e Elenco */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-black uppercase tracking-widest text-pro-teal border-b border-slate-100 pb-1">
-                  3. Proposta Pedagógica e Elenco
-                </h4>
-                <FichaFieldBlock
-                  title="Proposta Didática / Pedagógica"
-                  field={selectedProposalForFicha.pedagogicalProposal}
-                />
-                <FichaFieldBlock
-                  title="Elenco Previsto (Quantidade, Faixa Etária e Perfil)"
-                  field={selectedProposalForFicha.castProfile}
-                />
-              </div>
-
-              {/* Seção 4: Necessidades de Produção */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-black uppercase tracking-widest text-pro-teal border-b border-slate-100 pb-1">
-                  4. Necessidades de Produção
-                </h4>
-                <FichaFieldBlock
-                  title="Proposta de Cenografia e Adereços"
-                  field={selectedProposalForFicha.scenographyProps}
-                />
-                <FichaFieldBlock
-                  title="Necessidades Técnicas (Iluminação, Som e Vídeo)"
-                  field={selectedProposalForFicha.techNeeds}
-                />
-                <FichaFieldBlock
-                  title="Outras Necessidades (Figurino, Maquiagem, Logística)"
-                  field={selectedProposalForFicha.otherNeeds}
-                />
-              </div>
-
-              {/* Seção 5: Termo de Aceite */}
-              <div className="p-4 bg-emerald-50 border border-emerald-200/80 rounded-2xl flex items-center gap-3">
-                <ShieldCheck size={20} className="text-emerald-700 shrink-0" />
-                <p className="text-xs text-emerald-900 font-bold">
-                  Termo de Confirmação e Veracidade Aceito pelo proponente em {selectedProposalForFicha.createdAt?.toDate ? selectedProposalForFicha.createdAt.toDate().toLocaleString("pt-BR") : "data de registro"}.
-                </p>
-              </div>
-
-              {/* Modal footer / Print info */}
-              <div className="pt-6 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-medium">
-                <span>Intervalo Escola de Teatro — Sistema de Gestão e Montagens</span>
-                <span className="font-mono">Documento Autenticado Digitalmente</span>
+              {/* Footer da Ficha */}
+              <div className="pt-6 border-t-2 border-slate-900 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                <p>Intervalo Escola de Teatro • Todos os direitos reservados</p>
+                <p className="font-mono">Ficha de Inscrição Oficial</p>
               </div>
             </motion.div>
           </div>
@@ -1149,158 +1441,406 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
   );
 };
 
-// Helper: Prioritized Textarea component
-interface PrioritizedTextareaProps {
-  label: string;
-  placeholder: string;
-  value: string;
-  priority: PriorityLevel;
-  reason: string;
-  errorContent?: string;
-  errorReason?: string;
-  onContentChange: (value: string) => void;
-  onPriorityChange: (value: PriorityLevel) => void;
-  onReasonChange: (value: string) => void;
+/* COMPONENTE: SEÇÃO DE ITENS COM ADIÇÃO E PRIORIZAÇÃO INDIVIDUAL */
+interface ItemizedSectionProps {
+  title: string;
+  icon: React.ReactNode;
+  items: ProductionNeedItem[];
+  notes: string;
+  fieldKey: "scenographyItems" | "techItems" | "otherNeedsItems";
+  notesKey: "scenographyNotes" | "techNotes" | "otherNeedsNotes";
+  itemPlaceholder: string;
+  errors: Record<string, string>;
+  onAddItem: () => void;
+  onRemoveItem: (index: number) => void;
+  onUpdateItem: (index: number, key: keyof ProductionNeedItem, value: any) => void;
+  onUpdateNotes: (value: string) => void;
 }
 
-const PrioritizedTextarea: React.FC<PrioritizedTextareaProps> = ({
-  label,
-  placeholder,
-  value,
-  priority,
-  reason,
-  errorContent,
-  errorReason,
-  onContentChange,
-  onPriorityChange,
-  onReasonChange
+const ItemizedSection: React.FC<ItemizedSectionProps> = ({
+  title,
+  icon,
+  items,
+  notes,
+  fieldKey,
+  itemPlaceholder,
+  errors,
+  onAddItem,
+  onRemoveItem,
+  onUpdateItem,
+  onUpdateNotes
 }) => {
-  return (
-    <div className="space-y-2 bg-slate-50/50 p-4 md:p-5 rounded-2xl border border-slate-200/80">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
-          {label}
-        </label>
+  const prefix = fieldKey.replace("Items", "");
 
-        {/* Priority Selector Pills */}
-        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm self-start sm:self-auto">
-          <span className="text-[10px] font-black uppercase text-slate-400 px-1.5">
-            Prioridade:
-          </span>
-          <button
-            type="button"
-            onClick={() => onPriorityChange("Desejável")}
-            className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-              priority === "Desejável"
-                ? "bg-slate-800 text-white shadow-sm"
-                : "text-slate-500 hover:bg-slate-100"
-            }`}
-          >
-            Desejável
-          </button>
-          <button
-            type="button"
-            onClick={() => onPriorityChange("Indispensável")}
-            className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 ${
-              priority === "Indispensável"
-                ? "bg-amber-500 text-white shadow-sm"
-                : "text-slate-500 hover:bg-amber-50"
-            }`}
-          >
-            <AlertCircle size={10} />
-            Indispensável
-          </button>
+  return (
+    <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-5 md:p-6 space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/70 pb-3">
+        <div className="flex items-center gap-2">
+          {icon}
+          <h4 className="text-sm font-black text-slate-800 tracking-tight">{title}</h4>
         </div>
+        <button
+          type="button"
+          onClick={onAddItem}
+          className="px-3.5 py-1.5 bg-pro-teal text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-[#014e63] transition-all flex items-center gap-1.5 self-start sm:self-auto shadow-sm"
+        >
+          <Plus size={14} /> Adicionar Item
+        </button>
       </div>
 
-      {/* Main Textarea */}
-      <textarea
-        rows={3}
-        value={value}
-        onChange={(e) => onContentChange(e.target.value)}
-        placeholder={placeholder}
-        className={`w-full p-4 bg-white border rounded-2xl text-xs md:text-sm font-semibold outline-none transition-all resize-y ${
-          errorContent ? "border-red-400 bg-red-50/20" : "border-slate-200 focus:border-pro-teal"
-        }`}
-      />
-      {errorContent && <p className="text-xs text-red-500 font-bold">{errorContent}</p>}
+      {errors[fieldKey] && (
+        <p className="text-xs text-red-500 font-bold">{errors[fieldKey]}</p>
+      )}
 
-      {/* Dynamic Required Reason Field if Indispensável is chosen */}
-      <AnimatePresence>
-        {priority === "Indispensável" && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden pt-2"
-          >
-            <div className="bg-amber-50/70 border-2 border-amber-200 p-4 rounded-2xl space-y-2">
-              <label className="text-[11px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                <AlertCircle size={14} className="text-amber-600" />
-                Motivo da Indispensabilidade * (Obrigatório para itens indispensáveis)
-              </label>
-              <textarea
-                rows={2}
-                required
-                value={reason}
-                onChange={(e) => onReasonChange(e.target.value)}
-                placeholder="Explique detalhadamente por que este item é indispensável para a realização do espetáculo/mostra..."
-                className={`w-full p-3 bg-white border rounded-xl text-xs font-semibold outline-none transition-all ${
-                  errorReason ? "border-red-400 bg-red-50/30" : "border-amber-200 focus:border-amber-500"
-                }`}
-              />
-              {errorReason && <p className="text-xs text-red-600 font-bold">{errorReason}</p>}
+      {/* Lista de Itens */}
+      <div className="space-y-4">
+        {items.map((item, index) => {
+          const itemErrorKey = `${prefix}Item_${index}`;
+          const reasonErrorKey = `${prefix}Reason_${index}`;
+          const isIndispensable = item.priority === "Indispensável";
+
+          return (
+            <div 
+              key={item.id || index}
+              className={`p-4 rounded-2xl border transition-all ${
+                isIndispensable 
+                  ? "bg-amber-50/50 border-amber-300 shadow-sm" 
+                  : "bg-white border-slate-200"
+              }`}
+            >
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <span className="w-6 h-6 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-black shrink-0">
+                  {index + 1}
+                </span>
+
+                {/* Descrição do Item */}
+                <div className="flex-1 w-full">
+                  <input
+                    type="text"
+                    value={item.item}
+                    onChange={(e) => onUpdateItem(index, "item", e.target.value)}
+                    placeholder={itemPlaceholder}
+                    className={`w-full p-3 bg-slate-50 border rounded-xl text-xs font-semibold outline-none transition-all ${
+                      errors[itemErrorKey] ? "border-red-400 bg-red-50/20" : "border-slate-200 focus:border-pro-teal focus:bg-white"
+                    }`}
+                  />
+                  {errors[itemErrorKey] && (
+                    <p className="text-[11px] text-red-500 font-bold mt-1">{errors[itemErrorKey]}</p>
+                  )}
+                </div>
+
+                {/* Seletor Desejável / Indispensável */}
+                <div className="flex items-center gap-1.5 shrink-0 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateItem(index, "priority", "Desejável")}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all ${
+                      item.priority === "Desejável"
+                        ? "bg-white text-slate-800 shadow-sm"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Desejável
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateItem(index, "priority", "Indispensável")}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all ${
+                      item.priority === "Indispensável"
+                        ? "bg-amber-500 text-white shadow-sm font-black"
+                        : "text-slate-500 hover:text-amber-700"
+                    }`}
+                  >
+                    Indispensável
+                  </button>
+                </div>
+
+                {/* Botão Remover */}
+                <button
+                  type="button"
+                  onClick={() => onRemoveItem(index)}
+                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all shrink-0"
+                  title="Remover Item"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+
+              {/* Campo de Justificativa se Indispensável */}
+              <AnimatePresence>
+                {isIndispensable && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-3 pt-3 border-t border-amber-200/80 space-y-1"
+                  >
+                    <label className="text-[11px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <AlertTriangle size={12} className="text-amber-600" />
+                      Motivo da Indispensabilidade para este item *
+                    </label>
+                    <input
+                      type="text"
+                      value={item.indispensableReason || ""}
+                      onChange={(e) => onUpdateItem(index, "indispensableReason", e.target.value)}
+                      placeholder="Explique detalhadamente por que este item é indispensável para a montagem..."
+                      className={`w-full p-3 bg-white border rounded-xl text-xs font-semibold outline-none transition-all ${
+                        errors[reasonErrorKey] ? "border-red-400 bg-red-50/20" : "border-amber-200 focus:border-amber-500"
+                      }`}
+                    />
+                    {errors[reasonErrorKey] && (
+                      <p className="text-[11px] text-red-500 font-bold">{errors[reasonErrorKey]}</p>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          );
+        })}
+      </div>
+
+      {/* Observações adicionais da subseção */}
+      <div className="space-y-1.5 pt-2">
+        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+          Observações adicionais / Conceito geral ({title}) (opcional)
+        </label>
+        <textarea
+          rows={2}
+          value={notes}
+          onChange={(e) => onUpdateNotes(e.target.value)}
+          placeholder="Comentários adicionais sobre esta área..."
+          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-pro-teal transition-all"
+        />
+      </div>
     </div>
   );
 };
 
-// Helper: Block in Printable Ficha
-const FichaFieldBlock: React.FC<{ title: string; field: PrioritizedField }> = ({ title, field }) => {
+/* COMPONENTE: CARD DE UPLOAD DE PDF COM DRAG-AND-DROP E CLIQUE */
+interface PdfUploadCardProps {
+  title: string;
+  description: string;
+  docType: "scenographyPdf" | "costumePdf" | "lightingPdf";
+  attachment: TechnicalDocumentAttachment | null | undefined;
+  error?: string;
+  onUpload: (file: File) => void;
+  onRemove: () => void;
+  formatFileSize: (bytes: number) => string;
+}
+
+const PdfUploadCard: React.FC<PdfUploadCardProps> = ({
+  title,
+  description,
+  attachment,
+  error,
+  onUpload,
+  onRemove,
+  formatFileSize
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      onUpload(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      onUpload(e.target.files[0]);
+    }
+  };
+
   return (
-    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <h5 className="text-[11px] font-black uppercase tracking-wider text-slate-700">
-          {title}
-        </h5>
-        <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
-          field.priority === "Indispensável" 
-            ? "bg-amber-500 text-white font-bold" 
-            : "bg-slate-200 text-slate-700"
-        }`}>
-          Prioridade: {field.priority}
-        </span>
+    <div className={`p-5 rounded-3xl border transition-all flex flex-col justify-between ${
+      error 
+        ? "border-red-400 bg-red-50/20" 
+        : attachment 
+          ? "border-emerald-300 bg-emerald-50/30 shadow-sm" 
+          : "border-slate-200 bg-slate-50/60 hover:border-pro-teal/40"
+    }`}>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+            <FileText size={15} className="text-pro-teal" />
+            {title} *
+          </h4>
+          {attachment ? (
+            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-lg uppercase">
+              Anexado
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded-lg uppercase">
+              Obrigatório
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-slate-500 leading-relaxed">{description}</p>
       </div>
 
-      <p className="text-xs text-slate-800 leading-relaxed font-medium whitespace-pre-wrap">
-        {field.content || "Não preenchido"}
-      </p>
+      <div className="mt-4">
+        {attachment ? (
+          <div className="bg-white p-4 rounded-2xl border border-emerald-200 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                <FileCheck size={20} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-black text-slate-800 truncate" title={attachment.name}>
+                  {attachment.name}
+                </p>
+                <p className="text-[10px] text-slate-400 font-bold">
+                  {formatFileSize(attachment.size)} • PDF
+                </p>
+              </div>
+            </div>
 
-      {field.priority === "Indispensável" && field.indispensableReason && (
-        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1">
-            <AlertCircle size={10} /> Motivo da Indispensabilidade:
-          </span>
-          <p className="text-xs text-amber-950 font-bold leading-relaxed">
-            {field.indispensableReason}
-          </p>
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+              <a
+                href={attachment.dataUrl}
+                download={attachment.name}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-[11px] font-bold text-center transition-all flex items-center justify-center gap-1"
+              >
+                <Download size={13} /> Baixar
+              </a>
+              <button
+                type="button"
+                onClick={onRemove}
+                className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                title="Remover arquivo"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+              isDragging 
+                ? "border-pro-teal bg-teal-50/50 scale-[1.02]" 
+                : "border-slate-300 hover:border-pro-teal hover:bg-white bg-slate-50/80"
+            }`}
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <Upload size={24} className="text-slate-400 mx-auto mb-2 group-hover:text-pro-teal" />
+            <p className="text-xs font-bold text-slate-700">
+              Arraste o PDF aqui ou <span className="text-pro-teal underline">clique para selecionar</span>
+            </p>
+            <p className="text-[10px] text-slate-400 mt-1">Formato .PDF (máx. 15MB)</p>
+          </div>
+        )}
+        {error && <p className="text-xs text-red-500 font-bold mt-2">{error}</p>}
+      </div>
+    </div>
+  );
+};
+
+/* COMPONENTE: TABELA PARA EXIBIÇÃO DE ITENS NA FICHA DE INSCRIÇÃO */
+const DisplayItemsTable: React.FC<{
+  title: string;
+  items?: ProductionNeedItem[];
+  notes?: string;
+}> = ({ title, items, notes }) => {
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
+      <div className="bg-slate-100 px-4 py-2.5 font-black text-xs uppercase tracking-wider text-slate-800 border-b border-slate-200">
+        {title}
+      </div>
+      <div className="divide-y divide-slate-100">
+        {items.map((item, i) => (
+          <div key={i} className="p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="space-y-0.5 flex-1">
+              <p className="font-bold text-slate-800">
+                <span className="text-slate-400 mr-2">#{i + 1}</span>
+                {item.item}
+              </p>
+              {item.priority === "Indispensável" && item.indispensableReason && (
+                <p className="text-[11px] text-amber-800 font-medium pl-5 bg-amber-50/60 p-1.5 rounded-lg border border-amber-100">
+                  <strong>Justificativa:</strong> {item.indispensableReason}
+                </p>
+              )}
+            </div>
+            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider self-start sm:self-center shrink-0 ${
+              item.priority === "Indispensável"
+                ? "bg-amber-100 text-amber-800 border border-amber-200"
+                : "bg-slate-100 text-slate-600 border border-slate-200"
+            }`}>
+              {item.priority}
+            </span>
+          </div>
+        ))}
+      </div>
+      {notes && (
+        <div className="p-3 bg-slate-50 border-t border-slate-200 text-[11px] text-slate-600">
+          <strong>Observações:</strong> {notes}
         </div>
       )}
     </div>
   );
 };
 
-// Helper: count indispensable items
-const getIndispensableCount = (p: StageProductionProposal): number => {
-  let count = 0;
-  if (p.synopsis?.priority === "Indispensável") count++;
-  if (p.pedagogicalProposal?.priority === "Indispensável") count++;
-  if (p.castProfile?.priority === "Indispensável") count++;
-  if (p.scenographyProps?.priority === "Indispensável") count++;
-  if (p.techNeeds?.priority === "Indispensável") count++;
-  if (p.otherNeeds?.priority === "Indispensável") count++;
-  return count;
+/* COMPONENTE: CARD PARA EXIBIÇÃO DE PDF NA FICHA DE INSCRIÇÃO */
+const DisplayPdfCard: React.FC<{
+  title: string;
+  attachment?: TechnicalDocumentAttachment | null;
+  formatFileSize: (bytes: number) => string;
+}> = ({ title, attachment, formatFileSize }) => {
+  if (!attachment) {
+    return (
+      <div className="p-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center space-y-1">
+        <p className="text-xs font-bold text-slate-500">{title}</p>
+        <p className="text-[10px] text-rose-500 font-black uppercase">Não Anexado</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-black text-slate-800">{title}</p>
+        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded uppercase">PDF</span>
+      </div>
+      <p className="text-xs font-semibold text-slate-600 truncate" title={attachment.name}>
+        {attachment.name}
+      </p>
+      <p className="text-[10px] text-slate-400 font-bold">{formatFileSize(attachment.size)}</p>
+      <div className="pt-2 print:hidden">
+        <a
+          href={attachment.dataUrl}
+          download={attachment.name}
+          target="_blank"
+          rel="noreferrer"
+          className="w-full py-2 bg-emerald-600 text-white rounded-xl text-[11px] font-black uppercase tracking-wider text-center transition-all flex items-center justify-center gap-1.5 shadow-sm hover:bg-emerald-700"
+        >
+          <Download size={13} /> Baixar Projeto
+        </a>
+      </div>
+    </div>
+  );
 };

@@ -343,10 +343,18 @@ export type StageProductionRole = "Professor" | "Diretor" | "Professor/Diretor" 
 export type StageProductionGenre = "Drama" | "Comédia" | "Musical" | "Dança" | "Mostra de Artes Visuais" | "Outro";
 export type PriorityLevel = "Desejável" | "Indispensável";
 
-export interface PrioritizedField {
-  content: string;
+export interface ProductionNeedItem {
+  id: string;
+  item: string;
   priority: PriorityLevel;
   indispensableReason?: string;
+}
+
+export interface TechnicalDocumentAttachment {
+  name: string;
+  size: number;
+  dataUrl: string;
+  uploadedAt: string;
 }
 
 export interface StageProductionProposal {
@@ -361,18 +369,28 @@ export interface StageProductionProposal {
   // Seção 2: Identificação da Obra
   title: string;
   genre: StageProductionGenre;
-  synopsis: PrioritizedField;
+  synopsis: string;
 
   // Seção 3: Proposta Pedagógica e Elenco
-  pedagogicalProposal: PrioritizedField;
-  castProfile: PrioritizedField;
+  pedagogicalProposal: string;
+  castProfile: string;
 
-  // Seção 4: Necessidades de Produção
-  scenographyProps: PrioritizedField;
-  techNeeds: PrioritizedField;
-  otherNeeds: PrioritizedField;
+  // Seção 4: Necessidades de Produção (Itens com priorização individual)
+  scenographyItems: ProductionNeedItem[];
+  scenographyNotes?: string;
 
-  // Seção 5: Termo de Aceite
+  techItems: ProductionNeedItem[];
+  techNotes?: string;
+
+  otherNeedsItems: ProductionNeedItem[];
+  otherNeedsNotes?: string;
+
+  // Seção: Projetos Técnicos Obrigatórios (PDFs)
+  scenographyPdf?: TechnicalDocumentAttachment | null;
+  costumePdf?: TechnicalDocumentAttachment | null;
+  lightingPdf?: TechnicalDocumentAttachment | null;
+
+  // Seção: Termo de Aceite
   termsAccepted: boolean;
   termsAcceptedAt?: any;
 

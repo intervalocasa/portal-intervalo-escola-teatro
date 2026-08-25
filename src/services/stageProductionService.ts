@@ -6,14 +6,10 @@
 import { 
   collection, 
   doc, 
-  getDocs, 
   addDoc, 
   updateDoc, 
   deleteDoc, 
   serverTimestamp, 
-  query, 
-  orderBy, 
-  where 
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { StageProductionProposal } from "../types";
@@ -51,51 +47,73 @@ export const validateStageProductionProposal = (proposal: Partial<StageProductio
   if (!proposal.genre) {
     errors.genre = "Gênero da obra é obrigatório.";
   }
-  if (!proposal.synopsis?.content || !proposal.synopsis.content.trim()) {
+  if (!proposal.synopsis || !proposal.synopsis.trim()) {
     errors.synopsis = "Sinopse da obra é obrigatória.";
-  }
-  if (proposal.synopsis?.priority === "Indispensável" && (!proposal.synopsis.indispensableReason || !proposal.synopsis.indispensableReason.trim())) {
-    errors.synopsisReason = "Informe o motivo da indispensabilidade para a sinopse/concepção da obra.";
   }
 
   // Seção 3: Proposta Pedagógica e Elenco
-  if (!proposal.pedagogicalProposal?.content || !proposal.pedagogicalProposal.content.trim()) {
+  if (!proposal.pedagogicalProposal || !proposal.pedagogicalProposal.trim()) {
     errors.pedagogicalProposal = "Proposta didática/pedagógica é obrigatória.";
   }
-  if (proposal.pedagogicalProposal?.priority === "Indispensável" && (!proposal.pedagogicalProposal.indispensableReason || !proposal.pedagogicalProposal.indispensableReason.trim())) {
-    errors.pedagogicalProposalReason = "Informe o motivo da indispensabilidade para a proposta didática.";
-  }
-
-  if (!proposal.castProfile?.content || !proposal.castProfile.content.trim()) {
+  if (!proposal.castProfile || !proposal.castProfile.trim()) {
     errors.castProfile = "Previsão de elenco (quantidade, faixa etária e perfil) é obrigatória.";
   }
-  if (proposal.castProfile?.priority === "Indispensável" && (!proposal.castProfile.indispensableReason || !proposal.castProfile.indispensableReason.trim())) {
-    errors.castProfileReason = "Informe o motivo da indispensabilidade para o elenco previsto.";
+
+  // Seção 4: Necessidades de Produção (Itens por subseção)
+  // Cenografia e Adereços
+  if (!proposal.scenographyItems || proposal.scenographyItems.length === 0) {
+    errors.scenographyItems = "Adicione ao menos um item de necessidade para Cenografia e Adereços.";
+  } else {
+    proposal.scenographyItems.forEach((item, idx) => {
+      if (!item.item || !item.item.trim()) {
+        errors[`scenographyItem_${idx}`] = `Informe a descrição do item #${idx + 1} de Cenografia.`;
+      }
+      if (item.priority === "Indispensável" && (!item.indispensableReason || !item.indispensableReason.trim())) {
+        errors[`scenographyReason_${idx}`] = `Justifique a indispensabilidade do item "${item.item || `#${idx + 1}`}".`;
+      }
+    });
   }
 
-  // Seção 4: Necessidades de Produção
-  if (!proposal.scenographyProps?.content || !proposal.scenographyProps.content.trim()) {
-    errors.scenographyProps = "Proposta de cenografia e adereços é obrigatória.";
-  }
-  if (proposal.scenographyProps?.priority === "Indispensável" && (!proposal.scenographyProps.indispensableReason || !proposal.scenographyProps.indispensableReason.trim())) {
-    errors.scenographyPropsReason = "Informe o motivo da indispensabilidade para cenografia e adereços.";
-  }
-
-  if (!proposal.techNeeds?.content || !proposal.techNeeds.content.trim()) {
-    errors.techNeeds = "Necessidades técnicas de iluminação, som e vídeo são obrigatórias.";
-  }
-  if (proposal.techNeeds?.priority === "Indispensável" && (!proposal.techNeeds.indispensableReason || !proposal.techNeeds.indispensableReason.trim())) {
-    errors.techNeedsReason = "Informe o motivo da indispensabilidade para as necessidades técnicas.";
-  }
-
-  if (!proposal.otherNeeds?.content || !proposal.otherNeeds.content.trim()) {
-    errors.otherNeeds = "Outras necessidades (figurino, maquiagem, logística) são obrigatórias.";
-  }
-  if (proposal.otherNeeds?.priority === "Indispensável" && (!proposal.otherNeeds.indispensableReason || !proposal.otherNeeds.indispensableReason.trim())) {
-    errors.otherNeedsReason = "Informe o motivo da indispensabilidade para figurino/maquiagem/logística.";
+  // Iluminação, Som e Vídeo
+  if (!proposal.techItems || proposal.techItems.length === 0) {
+    errors.techItems = "Adicione ao menos um item de necessidade para Iluminação, Som e Vídeo.";
+  } else {
+    proposal.techItems.forEach((item, idx) => {
+      if (!item.item || !item.item.trim()) {
+        errors[`techItem_${idx}`] = `Informe a descrição do item #${idx + 1} de Iluminação/Som/Vídeo.`;
+      }
+      if (item.priority === "Indispensável" && (!item.indispensableReason || !item.indispensableReason.trim())) {
+        errors[`techReason_${idx}`] = `Justifique a indispensabilidade do item "${item.item || `#${idx + 1}`}".`;
+      }
+    });
   }
 
-  // Seção 5: Termo de Aceite
+  // Outras Necessidades (Figurino, Maquiagem, Logística)
+  if (!proposal.otherNeedsItems || proposal.otherNeedsItems.length === 0) {
+    errors.otherNeedsItems = "Adicione ao menos um item de necessidade para Figurino, Maquiagem e Logística.";
+  } else {
+    proposal.otherNeedsItems.forEach((item, idx) => {
+      if (!item.item || !item.item.trim()) {
+        errors[`otherNeedsItem_${idx}`] = `Informe a descrição do item #${idx + 1} de Figurino/Maquiagem/Logística.`;
+      }
+      if (item.priority === "Indispensável" && (!item.indispensableReason || !item.indispensableReason.trim())) {
+        errors[`otherNeedsReason_${idx}`] = `Justifique a indispensabilidade do item "${item.item || `#${idx + 1}`}".`;
+      }
+    });
+  }
+
+  // Seção 5: Envio Obrigatório dos PDFs Técnicos
+  if (!proposal.scenographyPdf || !proposal.scenographyPdf.dataUrl) {
+    errors.scenographyPdf = "O envio do arquivo PDF do Projeto de Cenografia é obrigatório.";
+  }
+  if (!proposal.costumePdf || !proposal.costumePdf.dataUrl) {
+    errors.costumePdf = "O envio do arquivo PDF do Projeto de Figurino é obrigatório.";
+  }
+  if (!proposal.lightingPdf || !proposal.lightingPdf.dataUrl) {
+    errors.lightingPdf = "O envio do arquivo PDF do Projeto de Iluminação é obrigatório.";
+  }
+
+  // Seção 6: Termo de Aceite
   if (!proposal.termsAccepted) {
     errors.termsAccepted = "Você deve aceitar a confirmação de veracidade da Ficha de Inscrição.";
   }
