@@ -37,6 +37,7 @@ import {
   saveLessonPlan, 
   deleteLessonPlan, 
   getTeacherLinkedClasses,
+  getAvailableClassDates,
   DEFAULT_SKILLS
 } from "../services/lessonPlanService";
 import { PROFESSIONAL_COURSE_CRITERIA } from "../constants";
@@ -191,14 +192,18 @@ export const LessonPlansView = ({
 
   // Duplicate plan
   const handleDuplicatePlan = (plan: LessonPlan) => {
+    const targetClass = classes.find(c => c.id === plan.classId);
+    const availableDates = getAvailableClassDates(targetClass);
+    const nextValidDate = availableDates.find(d => !d.isExpired)?.value || availableDates[0]?.value || new Date().toISOString().split("T")[0];
+
     setEditingPlan({
       ...plan,
       id: undefined, // remove id to trigger create
-      date: new Date().toISOString().split("T")[0]
+      date: nextValidDate
     });
     setSelectedClassId(plan.classId);
     setActiveTab("form");
-    showToast("Cópia do plano carregada! Ajuste a data ou a turma e salve.");
+    showToast("Cópia do plano carregada! Ajuste as atividades ou a data e salve.");
   };
 
   // Edit plan

@@ -103,6 +103,7 @@ import { FinancialManagementView } from "./views/FinancialManagementView";
 import { CoursesManagementView } from "./views/CoursesManagementView";
 import { ExperimentalClassesView } from "./views/ExperimentalClassesView";
 import { LessonPlansView } from "./views/LessonPlansView";
+import { getMonthlyDeadline } from "./lib/deadlineUtils";
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
@@ -1423,6 +1424,13 @@ export default function App() {
       return;
     }
 
+    // Check monthly deadline
+    const deadlineInfo = getMonthlyDeadline(diaryFilterMonth, diaryFilterYear);
+    if (deadlineInfo.isExpired) {
+      showNotification(`O prazo para lançamento do diário de ${deadlineInfo.formattedReference} encerrou em ${deadlineInfo.formattedDeadline}. Entre em contato com a direção.`, "Prazo Expirado", "error");
+      return;
+    }
+
     const teacherData = users.find(u => u.id === currentUser.uid);
     const studentData = users.find(u => u.id === selectedDiaryStudentId);
     const selectedClass = classes.find(c => c.id === selectedClassId);
@@ -2091,6 +2099,13 @@ export default function App() {
   const handleAssessmentSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!currentUser || !assessmentForm.classId) return;
+
+    // Check monthly deadline
+    const deadlineInfo = getMonthlyDeadline(assessmentMonth, assessmentYear);
+    if (deadlineInfo.isExpired) {
+      showNotification(`O prazo para envio da autoavaliação de ${deadlineInfo.formattedReference} encerrou em ${deadlineInfo.formattedDeadline}. Entre em contato com a direção.`, "Prazo Expirado", "error");
+      return;
+    }
 
     const studentId = currentUser.uid;
     const studentData = users.find(u => u.id === studentId);

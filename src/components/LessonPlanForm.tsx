@@ -21,14 +21,25 @@ import {
   FileText, 
   Layers, 
   AlertCircle,
+  AlertTriangle,
   HelpCircle,
   Copy,
   ArrowRight,
   CheckCircle2,
-  X
+  X,
+  Lock,
+  CalendarCheck2
 } from "lucide-react";
 import { Class, User, Skill, LessonPlan } from "../types";
-import { createSkill, getSkillsForClass, isProfessionalClass } from "../services/lessonPlanService";
+import { 
+  createSkill, 
+  getSkillsForClass, 
+  isProfessionalClass,
+  getAvailableClassDates,
+  getClassScheduleAndDeadline,
+  isDateValidForClassWeekday,
+  parseClassWeekdays
+} from "../services/lessonPlanService";
 
 export interface LessonPlanFormValues {
   classId: string;
@@ -74,6 +85,19 @@ export const LessonPlanForm = ({
   const [newSkillCategory, setNewSkillCategory] = useState("Interpretação");
   const [isCreatingSkill, setIsCreatingSkill] = useState(false);
   const [skillCreateError, setSkillCreateError] = useState("");
+  const [dateSelectionMode, setDateSelectionMode] = useState<"preset" | "picker">("preset");
+
+  // Modal de prazo expirado (5 minutos antes da aula)
+  const [showExpiredModal, setShowExpiredModal] = useState(false);
+  const [expiredModalData, setExpiredModalData] = useState<{
+    className: string;
+    classDate: string;
+    classTime: string;
+    deadlineDate: string;
+    weekdayName: string;
+    suggestedNextDate?: string;
+    suggestedNextLabel?: string;
+  } | null>(null);
 
   // Default values
   const defaultDateStr = initialSelectedDate || (initialData?.date ? 
@@ -131,6 +155,41 @@ export const LessonPlanForm = ({
   const watchedClassId = watch("classId");
   const watchedDate = watch("date");
 
+  // Current selected class object
+  const currentClass = useMemo(() => {
+    return teacherClasses.find(c => c.id === watchedClassId);
+  }, [teacherClasses, watchedClassId]);
+
+  // Lista de datas válidas de aula para a turma (somente dias de semana em que a turma tem aula)
+  const availableDates = useMemo(() => {
+    return getAvailableClassDates(currentClass);
+  }, [currentClass]);
+
+  // Cálculo do prazo limite de envio (5 minutos antes do início da aula)
+  const dateSchedule = useMemo(() => {
+    if (!watchedDate || !currentClass) return null;
+    return getClassScheduleAndDeadline(watchedDate, currentClass.time);
+  }, [watchedDate, currentClass]);
+
+  // Validação se a data escolhida corresponde a um dia em que a turma realmente tem aula
+  const isDateWeekdayValid = useMemo(() => {
+    if (!watchedDate || !currentClass) return true;
+    return isDateValidForClassWeekday(watchedDate, currentClass.weekday);
+  }, [watchedDate, currentClass]);
+
+  // Auto-ajuste da data ao trocar de turma caso a data atual não seja válida para os dias da turma
+  useEffect(() => {
+    if (!currentClass || initialData) return;
+    const isCurrentDateValid = isDateValidForClassWeekday(watchedDate, currentClass.weekday);
+    if (!isCurrentDateValid || !watchedDate) {
+      // Prioriza a primeira data futura válida dentro do prazo
+      const nextValidOption = availableDates.find(d => !d.isExpired) || availableDates[0];
+      if (nextValidOption) {
+        setValue("date", nextValidOption.value, { shouldValidate: true });
+      }
+    }
+  }, [currentClass, availableDates, initialData, setValue, watchedDate]);
+
   // Sync if initialData or selectedClassId changes
   useEffect(() => {
     if (initialData) {
@@ -154,11 +213,6 @@ export const LessonPlanForm = ({
       setValue("classId", initialSelectedClassId);
     }
   }, [initialData, initialSelectedClassId, reset, setValue]);
-
-  // Current selected class object
-  const currentClass = useMemo(() => {
-    return teacherClasses.find(c => c.id === watchedClassId);
-  }, [teacherClasses, watchedClassId]);
 
   // Determine exact skills corresponding to the class course type (10 for Adult, 20 for Professional)
   const classSkillsData = useMemo(() => {
@@ -276,82 +330,192 @@ export const LessonPlanForm = ({
   };
 
   const onFormSubmit = (data: LessonPlanFormValues) => {
+    // 1. Validação de dia da semana da turma
+    if (!isDateWeekdayValid) {
+      return;
+    }
+
+    // 2. Validação da regra dos 5 minutos antes da aula para novos planos
+    if (!initialData?.id && dateSchedule?.isExpired) {
+      const nextValidOption = availableDates.find(d => !d.isExpired);
+      const [y, m, d] = (data.date || "").split("-").map(Number);
+      const dt = new Date(y, m - 1, d);
+      const weekdayName = dt.toLocaleDateString("pt-BR", { weekday: "long" });
+
+      setExpiredModalData({
+        className: currentClass ? `${currentClass.code} - ${currentClass.type}` : "Turma",
+        classDate: dateSchedule.formattedClassDate || data.date,
+        classTime: dateSchedule.formattedStart,
+        deadlineDate: `${dateSchedule.formattedClassDate} às ${dateSchedule.formattedDeadline}`,
+        weekdayName: weekdayName.charAt(0).toUpperCase() + weekdayName.slice(1),
+        suggestedNextDate: nextValidOption?.value,
+        suggestedNextLabel: nextValidOption?.label
+      });
+      setShowExpiredModal(true);
+      return;
+    }
+
     onSubmitPlan(data, initialData?.id);
   };
 
+  const handleApplyNextValidDate = () => {
+    if (expiredModalData?.suggestedNextDate) {
+      setValue("date", expiredModalData.suggestedNextDate, { shouldValidate: true });
+    }
+    setShowExpiredModal(false);
+  };
+
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-8">
-      {/* 1. SELEÇÃO DE TURMA & DATA */}
-      <div className="bg-white p-6 md:p-8 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-teal-50 text-pro-teal flex items-center justify-center font-bold">
-              1
-            </div>
-            <div>
-              <h3 className="text-lg font-black text-slate-800 tracking-tight">Turma e Data da Aula</h3>
-              <p className="text-xs text-slate-400 font-bold">Defina a turma vinculada e o dia da aula planejada</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Turma */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <Presentation size={14} className="text-pro-teal" /> Turma *
-            </label>
-            <select
-              {...register("classId", { required: "Selecione uma turma para a aula" })}
-              className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 transition-all focus:ring-2 focus:ring-pro-teal focus:border-pro-teal outline-none"
-            >
-              {teacherClasses.length === 0 && (
-                <option value="">Nenhuma turma vinculada encontrada</option>
-              )}
-              {teacherClasses.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.code} - {c.type} ({c.weekday} • {c.time})
-                </option>
-              ))}
-            </select>
-            {errors.classId && (
-              <p className="text-xs text-red-500 font-bold flex items-center gap-1">
-                <AlertCircle size={12} /> {errors.classId.message}
-              </p>
-            )}
-            {currentClass && (
-              <div className="p-3 bg-teal-50/70 border border-teal-100 rounded-xl text-xs font-bold text-teal-900 flex items-center justify-between">
-                <span>Dia oficial: <strong>{currentClass.weekday}</strong> às <strong>{currentClass.time}</strong></span>
-                <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 bg-teal-200/60 rounded-full">
-                  {currentClass.studentIds?.length || 0} alunos matriculados
-                </span>
+    <>
+      <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-8">
+        {/* 1. SELEÇÃO DE TURMA & DATA */}
+        <div className="bg-white p-6 md:p-8 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-teal-50 text-pro-teal flex items-center justify-center font-bold">
+                1
               </div>
-            )}
+              <div>
+                <h3 className="text-lg font-black text-slate-800 tracking-tight">Turma e Data da Aula</h3>
+                <p className="text-xs text-slate-400 font-bold">
+                  Selecione a turma e uma data correspondente aos dias oficiais de aula
+                </p>
+              </div>
+            </div>
           </div>
 
-          {/* Data da Aula */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <Calendar size={14} className="text-pro-orange" /> Data da Aula *
-            </label>
-            <input
-              type="date"
-              {...register("date", { required: "A data da aula é obrigatória" })}
-              className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 transition-all focus:ring-2 focus:ring-pro-teal focus:border-pro-teal outline-none"
-            />
-            {errors.date && (
-              <p className="text-xs text-red-500 font-bold flex items-center gap-1">
-                <AlertCircle size={12} /> {errors.date.message}
-              </p>
-            )}
-            {datePreview && (
-              <p className="text-xs font-bold text-slate-500 capitalize bg-slate-50 p-2 rounded-xl border border-slate-100">
-                📅 {datePreview}
-              </p>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Turma */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Presentation size={14} className="text-pro-teal" /> Turma *
+              </label>
+              <select
+                {...register("classId", { required: "Selecione uma turma para a aula" })}
+                className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 transition-all focus:ring-2 focus:ring-pro-teal focus:border-pro-teal outline-none"
+              >
+                {teacherClasses.length === 0 && (
+                  <option value="">Nenhuma turma vinculada encontrada</option>
+                )}
+                {teacherClasses.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.code} - {c.type} ({c.weekday} • {c.time})
+                  </option>
+                ))}
+              </select>
+              {errors.classId && (
+                <p className="text-xs text-red-500 font-bold flex items-center gap-1">
+                  <AlertCircle size={12} /> {errors.classId.message}
+                </p>
+              )}
+              {currentClass && (
+                <div className="p-3 bg-teal-50/70 border border-teal-100 rounded-xl text-xs font-bold text-teal-900 flex items-center justify-between">
+                  <span>Dias oficiais: <strong>{currentClass.weekday}</strong> às <strong>{currentClass.time}</strong></span>
+                  <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 bg-teal-200/60 rounded-full">
+                    {currentClass.studentIds?.length || 0} alunos matriculados
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Data da Aula */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Calendar size={14} className="text-pro-orange" /> Data da Aula *
+                </label>
+                <div className="flex items-center gap-1 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setDateSelectionMode("preset")}
+                    className={`px-2 py-0.5 rounded-md font-bold transition-all ${
+                      dateSelectionMode === "preset"
+                        ? "bg-orange-100 text-orange-900"
+                        : "text-slate-400 hover:text-slate-600"
+                    }`}
+                  >
+                    Dias da Turma
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => setDateSelectionMode("picker")}
+                    className={`px-2 py-0.5 rounded-md font-bold transition-all ${
+                      dateSelectionMode === "picker"
+                        ? "bg-orange-100 text-orange-900"
+                        : "text-slate-400 hover:text-slate-600"
+                    }`}
+                  >
+                    Calendário
+                  </button>
+                </div>
+              </div>
+
+              {dateSelectionMode === "preset" && availableDates.length > 0 ? (
+                <select
+                  value={watchedDate}
+                  onChange={(e) => setValue("date", e.target.value, { shouldValidate: true })}
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 transition-all focus:ring-2 focus:ring-pro-teal focus:border-pro-teal outline-none"
+                >
+                  {availableDates.map(opt => (
+                    <option 
+                      key={opt.value} 
+                      value={opt.value}
+                      className={opt.isExpired ? "text-slate-400" : "text-slate-900 font-bold"}
+                    >
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="date"
+                  {...register("date", { required: "A data da aula é obrigatória" })}
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 transition-all focus:ring-2 focus:ring-pro-teal focus:border-pro-teal outline-none"
+                />
+              )}
+
+              {errors.date && (
+                <p className="text-xs text-red-500 font-bold flex items-center gap-1">
+                  <AlertCircle size={12} /> {errors.date.message}
+                </p>
+              )}
+
+              {/* Feedback de Validação e Prazo dos 5 Minutos */}
+              {!isDateWeekdayValid && currentClass ? (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs font-bold text-red-700 flex items-start gap-2">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-600" />
+                  <div>
+                    <p className="font-black">Dia incompatível com a turma</p>
+                    <p className="text-[11px] font-medium mt-0.5">
+                      Esta turma tem aulas apenas aos dias: <strong>{currentClass.weekday}</strong>. Selecione uma data correspondente aos dias oficiais.
+                    </p>
+                  </div>
+                </div>
+              ) : dateSchedule?.isExpired && !initialData?.id ? (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs font-bold text-amber-900 flex items-start gap-2">
+                  <Clock size={16} className="shrink-0 mt-0.5 text-amber-600" />
+                  <div>
+                    <p className="font-black text-amber-950">⚠️ Prazo de postagem encerrado</p>
+                    <p className="text-[11px] text-amber-800 font-medium mt-0.5">
+                      O plano só pode ser lançado até 5 min antes da aula. O prazo para a aula de {dateSchedule.formattedClassDate} às {dateSchedule.formattedStart} encerrou-se em <strong>{dateSchedule.formattedClassDate} às {dateSchedule.formattedDeadline}</strong>.
+                    </p>
+                  </div>
+                </div>
+              ) : dateSchedule ? (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200/80 rounded-2xl text-[11px] font-bold text-emerald-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Clock size={13} className="text-emerald-600" />
+                    Prazo para envio: até <strong>{dateSchedule.formattedClassDate} às {dateSchedule.formattedDeadline}</strong> (5 min antes do início às {dateSchedule.formattedStart})
+                  </span>
+                  <span className="text-[10px] uppercase font-black px-2 py-0.5 bg-emerald-200/70 text-emerald-900 rounded-md">
+                    Liberado
+                  </span>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
 
       {/* 2. OBJETIVO GERAL DA AULA */}
       <div className="bg-white p-6 md:p-8 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
@@ -886,5 +1050,103 @@ export const LessonPlanForm = ({
         </div>
       </div>
     </form>
-  );
+
+    {/* MODAL: PRAZO PARA ENVIO EXPIRADO (5 MINUTOS ANTES DA AULA) */}
+    <AnimatePresence>
+      {showExpiredModal && expiredModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowExpiredModal(false)}
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+          />
+
+          {/* Modal Card */}
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden z-10"
+          >
+            {/* Header com destaque vermelho/alerta */}
+            <div className="bg-gradient-to-br from-rose-600 to-red-700 p-6 text-white text-center relative overflow-hidden">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center mb-3 shadow-inner">
+                <Clock size={28} className="text-white animate-pulse" />
+              </div>
+              <h3 className="text-xl font-black uppercase tracking-tight">
+                Prazo para Envio Expirado
+              </h3>
+              <p className="text-rose-100 text-xs font-bold mt-1">
+                Não é mais possível lançar o plano de aula para esta data
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setShowExpiredModal(false)}
+                className="absolute top-4 right-4 p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Corpo informativo com as regras */}
+            <div className="p-6 md:p-8 space-y-6">
+              <div className="text-xs text-slate-600 leading-relaxed space-y-2">
+                <p className="font-medium">
+                  Por determinação pedagógica, os planos de aula devem ser registrados no sistema com antecedência de <strong>até 5 minutos antes do início da aula</strong>.
+                </p>
+                <p className="font-medium text-slate-500">
+                  Como o prazo limite para esta aula expirou, o sistema bloqueia novos lançamentos retroativos para manter a integridade do planejamento.
+                </p>
+              </div>
+
+              {/* Caixa de detalhes da aula */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Turma</span>
+                  <span className="font-black text-slate-800">{expiredModalData.className}</span>
+                </div>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Data da Aula</span>
+                  <span className="font-bold text-slate-800">{expiredModalData.classDate} ({expiredModalData.weekdayName})</span>
+                </div>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Início da Aula</span>
+                  <span className="font-bold text-slate-800">{expiredModalData.classTime}</span>
+                </div>
+                <div className="flex items-center justify-between pt-0.5">
+                  <span className="text-rose-600 font-bold uppercase tracking-wider text-[10px]">Prazo Limite Encerrou</span>
+                  <span className="font-black text-rose-600">{expiredModalData.deadlineDate}</span>
+                </div>
+              </div>
+
+              {/* Ações */}
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                {expiredModalData.suggestedNextDate && (
+                  <button
+                    type="button"
+                    onClick={handleApplyNextValidDate}
+                    className="flex-1 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-2xl uppercase tracking-wider transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <CalendarCheck2 size={16} /> Selecionar Próxima Aula
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowExpiredModal(false)}
+                  className="flex-1 px-5 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-2xl uppercase tracking-wider transition-all active:scale-95"
+                >
+                  Entendido
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  </>
+);
 };

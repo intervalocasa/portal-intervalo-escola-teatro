@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Save, HelpCircle, CheckCircle2, Download } from "lucide-react";
+import { ArrowLeft, Save, HelpCircle, CheckCircle2, Download, Clock, Lock, AlertTriangle } from "lucide-react";
 import { User, Class } from "../types";
 import { Avatar, BackButton } from "../components/CommonComponents";
 import { 
@@ -19,6 +19,8 @@ import { Award, Star } from "lucide-react";
 import { UserRole } from "../types";
 import { generateDiaryPDF } from "../lib/pdfExporter";
 import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
+import { getMonthlyDeadline } from "../lib/deadlineUtils";
+import { DeadlineExpiredModal } from "../components/DeadlineExpiredModal";
 
 interface StudentDiaryFormViewProps {
   selectedClassId: string | null;
@@ -51,10 +53,23 @@ export const StudentDiaryFormView = ({
   setView,
   evaluations = []
 }: StudentDiaryFormViewProps) => {
+  const [showExpiredModal, setShowExpiredModal] = useState(false);
   const student = users.find(u => u.id === selectedDiaryStudentId);
   const targetClass = classes.find(c => c.id === selectedClassId);
   const isProfessional = targetClass?.type?.includes("Profissional") || targetClass?.type?.includes("Montagem");
   const criteria = isProfessional ? PROFESSIONAL_COURSE_CRITERIA : ADULT_COURSE_CRITERIA;
+
+  const deadlineInfo = useMemo(() => {
+    return getMonthlyDeadline(diaryFilterMonth, diaryFilterYear);
+  }, [diaryFilterMonth, diaryFilterYear]);
+
+  const handleValidatedSubmit = (status: "rascunho" | "concluido") => {
+    if (deadlineInfo.isExpired) {
+      setShowExpiredModal(true);
+      return;
+    }
+    handleSubmitDiary(status);
+  };
 
   // Obter todos os emails, IDs e nomes possíveis associados a este aluno para correspondência robusta de autoavaliação
   const { studentEmails, studentNames, eligibleIds } = useMemo(() => {
@@ -182,13 +197,14 @@ export const StudentDiaryFormView = ({
   };
 
   return (
-    <motion.div
-      key="student-diary-form-screen"
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-4xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
-    >
+    <>
+      <motion.div
+        key="student-diary-form-screen"
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-4xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
+      >
       <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8 md:py-16">
          <div className="space-y-4 text-center md:text-left">
            <div className="absolute top-4 left-4 z-20">
@@ -213,6 +229,16 @@ export const StudentDiaryFormView = ({
                <p className="text-pro-yellow text-[10px] md:text-xs font-black uppercase tracking-[0.3em] italic bg-white/10 px-4 py-2 rounded-lg border border-white/10 inline-block backdrop-blur-md">
                  {targetClass?.code} • {new Date(0, (diaryFilterMonth || 1) - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()} {diaryFilterYear}
                </p>
+               <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border backdrop-blur-md ${
+                 deadlineInfo.isExpired 
+                   ? "bg-rose-500/20 text-rose-200 border-rose-400/30" 
+                   : "bg-emerald-500/20 text-emerald-200 border-emerald-400/30"
+               }`}>
+                 {deadlineInfo.isExpired ? <Lock size={12} /> : <Clock size={12} />}
+                 {deadlineInfo.isExpired 
+                   ? `Prazo expirado (${deadlineInfo.formattedDeadline})` 
+                   : `Prazo até ${deadlineInfo.formattedDeadline} às 23:59`}
+               </div>
                <button
                  type="button"
                  onClick={handleDownloadPDF}
@@ -644,13 +670,13 @@ export const StudentDiaryFormView = ({
                <Download size={16} /> PDF
              </button>
              <button 
-               onClick={() => handleSubmitDiary("rascunho")}
+               onClick={() => handleValidatedSubmit("rascunho")}
                className="flex-1 py-5 bg-white text-pro-teal font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl hover:bg-slate-50 active:scale-95 transition-all border border-slate-100"
              >
                Salvar Rascunho
              </button>
              <button 
-               onClick={() => handleSubmitDiary("concluido")}
+               onClick={() => handleValidatedSubmit("concluido")}
                className="flex-[2] py-5 bg-pro-teal text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl shadow-teal-900/30 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-3"
              >
                <CheckCircle2 size={16} /> Finalizar e Consolidar
@@ -659,5 +685,17 @@ export const StudentDiaryFormView = ({
         </div>
       </div>
     </motion.div>
+
+    {/* MODAL DE PRAZO DE DIÁRIO EXPIRADO */}
+    <DeadlineExpiredModal
+      isOpen={showExpiredModal}
+      onClose={() => setShowExpiredModal(false)}
+      type="professor_diary"
+      referencePeriod={deadlineInfo.formattedReference}
+      formattedDeadline={deadlineInfo.formattedDeadline}
+      studentName={getUserDisplayName(student)}
+      className={targetClass ? `${targetClass.code} - ${targetClass.type}` : undefined}
+    />
+  </>
   );
 };

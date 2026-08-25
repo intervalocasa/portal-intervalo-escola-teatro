@@ -123,6 +123,187 @@ export function getSkillsForClass(
 }
 
 /**
+ * Converte string de dias da semana de uma turma para array de números (0 = Domingo, 1 = Segunda, ..., 6 = Sábado)
+ */
+export function parseClassWeekdays(weekdayStr?: string): number[] {
+  if (!weekdayStr) return [];
+  const normalized = weekdayStr
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, ""); // remove acentos
+
+  const days: number[] = [];
+  if (normalized.includes("dom") || normalized.includes("0")) days.push(0);
+  if (normalized.includes("seg") || normalized.includes("2")) days.push(1);
+  if (normalized.includes("ter") || normalized.includes("3")) days.push(2);
+  if (normalized.includes("qua") || normalized.includes("4")) days.push(3);
+  if (normalized.includes("qui") || normalized.includes("5")) days.push(4);
+  if (normalized.includes("sex") || normalized.includes("6")) days.push(5);
+  if (normalized.includes("sab") || normalized.includes("7")) days.push(6);
+  return Array.from(new Set(days));
+}
+
+/**
+ * Extrai a hora e minuto de início da aula a partir do campo time da turma (ex: "19:00", "19h", "19:30 - 21:30")
+ */
+export function parseClassStartTime(timeStr?: string): { hour: number; minute: number } {
+  if (!timeStr) return { hour: 19, minute: 0 };
+  
+  // Trata formato "19:30" ou "19h30" ou "19h" ou "19:00 - 21:00"
+  const match = timeStr.match(/(\d{1,2})[:hH](\d{2})?/);
+  if (match) {
+    const hour = parseInt(match[1], 10);
+    const minute = match[2] ? parseInt(match[2], 10) : 0;
+    return { hour: isNaN(hour) ? 19 : hour, minute: isNaN(minute) ? 0 : minute };
+  }
+
+  const singleNumMatch = timeStr.match(/(\d{1,2})/);
+  if (singleNumMatch) {
+    const hour = parseInt(singleNumMatch[1], 10);
+    return { hour: isNaN(hour) ? 19 : hour, minute: 0 };
+  }
+
+  return { hour: 19, minute: 0 };
+}
+
+/**
+ * Calcula o horário de início da aula e o prazo limite para envio (exatamente 5 minutos antes do início)
+ */
+export function getClassScheduleAndDeadline(dateStr: string, timeStr?: string, now: Date = new Date()) {
+  if (!dateStr) {
+    return {
+      classStart: new Date(),
+      deadline: new Date(),
+      hour: 19,
+      minute: 0,
+      isExpired: false,
+      minutesRemaining: 0,
+      formattedStart: "19:00",
+      formattedDeadline: "18:55",
+      formattedClassDate: ""
+    };
+  }
+
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const { hour, minute } = parseClassStartTime(timeStr);
+  const classStart = new Date(y, m - 1, d, hour, minute, 0, 0);
+  
+  // Prazo limite: 5 minutos antes do início da aula
+  const deadline = new Date(classStart.getTime() - 5 * 60 * 1000);
+  
+  const isExpired = now.getTime() > deadline.getTime();
+  const minutesRemaining = Math.max(0, Math.floor((deadline.getTime() - now.getTime()) / (60 * 1000)));
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const formattedStart = `${pad(hour)}:${pad(minute)}`;
+  const formattedDeadline = `${pad(deadline.getHours())}:${pad(deadline.getMinutes())}`;
+  
+  const formattedClassDate = classStart.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+
+  return {
+    classStart,
+    deadline,
+    hour,
+    minute,
+    isExpired,
+    minutesRemaining,
+    formattedStart,
+    formattedDeadline,
+    formattedClassDate
+  };
+}
+
+/**
+ * Valida se uma data corresponde aos dias de aula da turma
+ */
+export function isDateValidForClassWeekday(dateStr: string, weekdayStr?: string): boolean {
+  if (!dateStr || !weekdayStr) return true;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!y || !m || !d) return true;
+  const dt = new Date(y, m - 1, d);
+  const allowedDays = parseClassWeekdays(weekdayStr);
+  if (allowedDays.length === 0) return true;
+  return allowedDays.includes(dt.getDay());
+}
+
+export interface ClassDateOption {
+  value: string;
+  label: string;
+  weekdayName: string;
+  formattedDate: string;
+  isToday: boolean;
+  isExpired: boolean;
+  deadline: Date;
+  classStart: Date;
+  formattedDeadline: string;
+  formattedStart: string;
+}
+
+/**
+ * Gera lista de datas válidas de aula para a turma (próximas 16 semanas + aula de hoje/recente se aplicável)
+ */
+export function getAvailableClassDates(targetClass?: Class | null, now: Date = new Date()): ClassDateOption[] {
+  if (!targetClass) return [];
+
+  const targetDays = parseClassWeekdays(targetClass.weekday);
+  const options: ClassDateOption[] = [];
+  const seenDates = new Set<string>();
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const formatDateKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  // Se a turma não tiver dias específicos cadastrados, permite gerar próximas datas normais
+  const daysToCheck = targetDays.length > 0 ? targetDays : [1]; // padrão segunda-feira se vazio
+
+  // Olhar de hoje até 120 dias no futuro (cerca de 17 semanas)
+  for (let i = 0; i <= 120; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    if (daysToCheck.includes(d.getDay())) {
+      const dateKey = formatDateKey(d);
+      if (seenDates.has(dateKey)) continue;
+      seenDates.add(dateKey);
+
+      const schedule = getClassScheduleAndDeadline(dateKey, targetClass.time, now);
+      const isToday = i === 0;
+      const weekdayName = d.toLocaleDateString("pt-BR", { weekday: "long" });
+      const capitalizedWeekday = weekdayName.charAt(0).toUpperCase() + weekdayName.slice(1);
+      const formattedDate = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+      let labelPrefix = "";
+      if (isToday) {
+        labelPrefix = `Hoje (${formattedDate}) - ${capitalizedWeekday}`;
+      } else if (i === 1) {
+        labelPrefix = `Amanhã (${formattedDate}) - ${capitalizedWeekday}`;
+      } else {
+        labelPrefix = `${formattedDate} - ${capitalizedWeekday}`;
+      }
+
+      const timeSuffix = targetClass.time ? ` • ${targetClass.time}` : "";
+      const statusSuffix = schedule.isExpired ? " ⚠️ (Prazo encerrado)" : "";
+
+      options.push({
+        value: dateKey,
+        label: `${labelPrefix}${timeSuffix}${statusSuffix}`,
+        weekdayName: capitalizedWeekday,
+        formattedDate,
+        isToday,
+        isExpired: schedule.isExpired,
+        deadline: schedule.deadline,
+        classStart: schedule.classStart,
+        formattedDeadline: schedule.formattedDeadline,
+        formattedStart: schedule.formattedStart
+      });
+    }
+  }
+
+  return options;
+}
+
+/**
  * Busca todas as habilidades (skills) da coleção no Firestore.
  * Se a coleção estiver vazia, faz o seed automático com as habilidades pedagógicas padrão.
  */

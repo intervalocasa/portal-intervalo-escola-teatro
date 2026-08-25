@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { 
   Calendar, 
@@ -9,7 +9,9 @@ import {
   LogOut, 
   Drama,
   ArrowLeft,
-  AlertTriangle
+  AlertTriangle,
+  Clock,
+  Lock
 } from 'lucide-react';
 import { Logo, BackButton } from './CommonComponents';
 import { 
@@ -21,6 +23,8 @@ import {
   SCALES 
 } from '../constants';
 import { Class, User, Evaluation } from '../types';
+import { getMonthlyDeadline } from '../lib/deadlineUtils';
+import { DeadlineExpiredModal } from './DeadlineExpiredModal';
 
 interface SelfAssessmentViewProps {
   assessmentMonth: number;
@@ -55,91 +59,124 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
   setView,
   handleAssessmentSubmit
 }) => {
+  const [showExpiredModal, setShowExpiredModal] = useState(false);
   const mappedUser = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
   const eligibleIds = [currentUser?.uid, mappedUser?.id, mappedUser?.migratedFrom].filter(Boolean) as string[];
 
+  // Informações de prazo (até o dia 05 do mês seguinte)
+  const deadlineInfo = useMemo(() => {
+    return getMonthlyDeadline(assessmentMonth, assessmentYear);
+  }, [assessmentMonth, assessmentYear]);
+
+  const selectedClass = classes.find(c => c.id === assessmentForm.classId);
+
+  const handleFormSubmitWithDeadline = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (deadlineInfo.isExpired) {
+      setShowExpiredModal(true);
+      return;
+    }
+    handleAssessmentSubmit(e);
+  };
+
   return (
-    <motion.div
-      key="assessment-screen"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-2xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
-    >
-       {/* Back Button Overlay */}
-       <div className="absolute top-4 left-4 z-20">
-         <BackButton onClick={() => setView("dashboard")} className="!text-white pointer-events-auto" />
-       </div>
-       <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-8 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
-         <Logo className="h-10 md:h-16 w-auto mb-1" />
-         <h1 className="text-white text-xl md:text-3xl font-bold uppercase tracking-tight">Autoanálise Mensal</h1>
-         <p className="text-teal-50/70 text-xs md:text-sm mt-1 uppercase tracking-widest leading-none font-bold">Acompanhe seu desempenho</p>
-      </div>
+    <>
+      <motion.div
+        key="assessment-screen"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-2xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
+      >
+         {/* Back Button Overlay */}
+         <div className="absolute top-4 left-4 z-20">
+           <BackButton onClick={() => setView("dashboard")} className="!text-white pointer-events-auto" />
+         </div>
+         <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-8 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
+           <Logo className="h-10 md:h-16 w-auto mb-1" />
+           <h1 className="text-white text-xl md:text-3xl font-bold uppercase tracking-tight">Autoanálise Mensal</h1>
+           <p className="text-teal-50/70 text-xs md:text-sm mt-1 uppercase tracking-widest leading-none font-bold">Acompanhe seu desempenho</p>
+        </div>
 
-      <div className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-12">
-        <div className="max-w-7xl mx-auto w-full">
-          {/* 0. Month/Year Selection (Always Visible if not viewing specifically) */}
-          {!viewingEvaluation && (
-            <div className="mb-10 bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6 justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-pro-teal/10 rounded-2xl flex items-center justify-center text-pro-teal shadow-inner">
-                  <Calendar size={24} />
+        <div className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-12">
+          <div className="max-w-7xl mx-auto w-full">
+            {/* 0. Month/Year Selection (Always Visible if not viewing specifically) */}
+            {!viewingEvaluation && (
+              <div className="mb-10 bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-col lg:flex-row items-center gap-6 justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-pro-teal/10 rounded-2xl flex items-center justify-center text-pro-teal shadow-inner">
+                    <Calendar size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Período de Análise</h3>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selecione o mês de referência</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Período de Análise</h3>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selecione o mês de referência</p>
+
+                {/* Badge de prazo */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {deadlineInfo.isExpired ? (
+                    <div className="px-3.5 py-1.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                      <Clock size={14} className="text-rose-600 shrink-0" />
+                      <span>Prazo encerrou em <strong>{deadlineInfo.formattedDeadline}</strong></span>
+                    </div>
+                  ) : (
+                    <div className="px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                      <Clock size={14} className="text-emerald-600 shrink-0" />
+                      <span>Prazo para entrega: até <strong>{deadlineInfo.formattedDeadline}</strong></span>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <select
+                      value={assessmentMonth}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setAssessmentMonth(val);
+                        setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
+                        setViewingEvaluation(null);
+                      }}
+                      className="flex-1 md:w-40 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:border-pro-teal disabled:opacity-50"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1)
+                        .filter(m => {
+                          const now = new Date();
+                          const currentYear = now.getFullYear();
+                          const currentMonth = now.getMonth() + 1;
+                          if (assessmentYear < currentYear) return true;
+                          if (assessmentYear === currentYear) return m <= currentMonth;
+                          return false;
+                        })
+                        .map((m) => (
+                          <option key={m} value={m}>
+                            {new Date(0, m - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}
+                          </option>
+                        ))
+                      }
+                    </select>
+                    <select
+                      value={assessmentYear}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setAssessmentYear(val);
+                        setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
+                        setViewingEvaluation(null);
+
+                        const now = new Date();
+                        if (val === now.getFullYear() && assessmentMonth > now.getMonth() + 1) {
+                          setAssessmentMonth(now.getMonth() + 1);
+                        }
+                      }}
+                      className="w-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:border-pro-teal disabled:opacity-50"
+                    >
+                      {[2023, 2024, 2025, 2026, 2027, 2028].filter(y => y <= new Date().getFullYear()).map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
-              
-              <div className="flex gap-3 w-full md:w-auto">
-                <select
-                  value={assessmentMonth}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    setAssessmentMonth(val);
-                    setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
-                    setViewingEvaluation(null);
-                  }}
-                  className="flex-1 md:w-40 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:border-pro-teal disabled:opacity-50"
-                >
-                  {Array.from({ length: 12 }, (_, i) => i + 1)
-                    .filter(m => {
-                      const now = new Date();
-                      const currentYear = now.getFullYear();
-                      const currentMonth = now.getMonth() + 1;
-                      if (assessmentYear < currentYear) return true;
-                      if (assessmentYear === currentYear) return m <= currentMonth;
-                      return false;
-                    })
-                    .map((m) => (
-                      <option key={m} value={m}>
-                        {new Date(0, m - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}
-                      </option>
-                    ))
-                  }
-                </select>
-                <select
-                  value={assessmentYear}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    setAssessmentYear(val);
-                    setAssessmentForm({ classId: "", notes: {}, openAnswers: {} });
-                    setViewingEvaluation(null);
-
-                    const now = new Date();
-                    if (val === now.getFullYear() && assessmentMonth > now.getMonth() + 1) {
-                      setAssessmentMonth(now.getMonth() + 1);
-                    }
-                  }}
-                  className="w-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:border-pro-teal disabled:opacity-50"
-                >
-                  {[2023, 2024, 2025, 2026, 2027, 2028].filter(y => y <= new Date().getFullYear()).map(y => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
+            )}
 
           {/* 1. Class Selection */}
           {!assessmentForm.classId && !viewingEvaluation ? (
@@ -157,36 +194,46 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                     const hasSubmitted = evaluations.find(e => eligibleIds.includes(e.studentId) && e.classId === c.id && e.month === m && e.year === y);
                     
                     return (
-                      <motion.button
-                        key={c.id}
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.99 }}
-                        onClick={() => {
-                          if (hasSubmitted) {
-                            setViewingEvaluation(hasSubmitted);
-                          } else {
-                            setAssessmentForm((prev: any) => ({ ...prev, classId: c.id }));
-                          }
-                        }}
-                        className="w-full p-6 bg-white rounded-2xl flex items-center justify-between border-2 border-slate-100 hover:border-pro-teal transition-all group shadow-sm hover:shadow-md"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="p-3 bg-slate-50 rounded-xl text-pro-teal group-hover:bg-pro-teal group-hover:text-white transition-colors">
-                            <Calendar size={24} />
+                        <motion.button
+                          key={c.id}
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                          onClick={() => {
+                            if (hasSubmitted) {
+                              setViewingEvaluation(hasSubmitted);
+                            } else if (deadlineInfo.isExpired) {
+                              setShowExpiredModal(true);
+                            } else {
+                              setAssessmentForm((prev: any) => ({ ...prev, classId: c.id }));
+                            }
+                          }}
+                          className={`w-full p-6 bg-white rounded-2xl flex items-center justify-between border-2 transition-all group shadow-sm hover:shadow-md ${
+                            !hasSubmitted && deadlineInfo.isExpired
+                              ? "border-slate-100 hover:border-rose-300"
+                              : "border-slate-100 hover:border-pro-teal"
+                          }`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="p-3 bg-slate-50 rounded-xl text-pro-teal group-hover:bg-pro-teal group-hover:text-white transition-colors">
+                              <Calendar size={24} />
+                            </div>
+                            <div className="text-left">
+                              <div className="font-black text-slate-800 uppercase tracking-tight">{c.code}</div>
+                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.type}</div>
+                            </div>
                           </div>
-                          <div className="text-left">
-                            <div className="font-black text-slate-800 uppercase tracking-tight">{c.code}</div>
-                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.type}</div>
-                          </div>
-                        </div>
-                        {hasSubmitted ? (
-                          <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-full text-[10px] font-black uppercase tracking-widest">
-                            <Eye size={12} /> Ver Análise Enviada
-                          </div>
-                        ) : (
-                          <ChevronDown size={20} className="text-slate-300 -rotate-90" />
-                        )}
-                      </motion.button>
+                          {hasSubmitted ? (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-full text-[10px] font-black uppercase tracking-widest">
+                              <Eye size={12} /> Ver Análise Enviada
+                            </div>
+                          ) : deadlineInfo.isExpired ? (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-rose-200">
+                              <Lock size={12} /> Prazo Expirado
+                            </div>
+                          ) : (
+                            <ChevronDown size={20} className="text-slate-300 -rotate-90" />
+                          )}
+                        </motion.button>
                     );
                   })
                 ) : (
@@ -213,21 +260,25 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                   <p className="text-green-800 font-black uppercase tracking-tight">Análise enviada com sucesso</p>
                   <p className="text-green-700/70 text-[10px] font-black uppercase tracking-widest">Referente a {new Date(0, viewingEvaluation.month - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()} / {viewingEvaluation.year}</p>
                 </div>
-                <button 
-                  onClick={() => {
-                    setAssessmentForm({
-                      classId: viewingEvaluation.classId,
-                      notes: viewingEvaluation.notes,
-                      openAnswers: viewingEvaluation.openAnswers || {}
-                    });
-                    setAssessmentMonth(viewingEvaluation.month);
-                    setAssessmentYear(viewingEvaluation.year);
-                    setViewingEvaluation(null);
-                  }}
-                  className="px-4 py-2 bg-white border border-green-200 text-green-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-100 transition-all ml-auto"
-                >
-                  Editar Análise
-                </button>
+                  <button 
+                    onClick={() => {
+                      if (deadlineInfo.isExpired) {
+                        setShowExpiredModal(true);
+                        return;
+                      }
+                      setAssessmentForm({
+                        classId: viewingEvaluation.classId,
+                        notes: viewingEvaluation.notes,
+                        openAnswers: viewingEvaluation.openAnswers || {}
+                      });
+                      setAssessmentMonth(viewingEvaluation.month);
+                      setAssessmentYear(viewingEvaluation.year);
+                      setViewingEvaluation(null);
+                    }}
+                    className="px-4 py-2 bg-white border border-green-200 text-green-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-100 transition-all ml-auto"
+                  >
+                    Editar Análise
+                  </button>
                 <button 
                   onClick={() => setViewingEvaluation(null)}
                   className="ml-auto text-green-600 hover:bg-green-100 p-2 rounded-lg transition-colors"
@@ -362,7 +413,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
             </div>
           ) : (
             /* 3. Form Mode (New Submission) */
-            <form onSubmit={handleAssessmentSubmit} className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <form onSubmit={handleFormSubmitWithDeadline} className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="bg-pro-teal border border-teal-400/20 p-8 rounded-3xl text-white relative overflow-hidden group shadow-xl">
                 <div className="relative z-10">
                   <div className="flex items-center gap-3 mb-2">
@@ -470,5 +521,16 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
         </div>
       </div>
     </motion.div>
+
+    {/* MODAL DE PRAZO DE AUTOAVALIAÇÃO EXPIRADO */}
+    <DeadlineExpiredModal
+      isOpen={showExpiredModal}
+      onClose={() => setShowExpiredModal(false)}
+      type="student_self_assessment"
+      referencePeriod={deadlineInfo.formattedReference}
+      formattedDeadline={deadlineInfo.formattedDeadline}
+      className={selectedClass ? `${selectedClass.code} - ${selectedClass.type}` : undefined}
+    />
+  </>
   );
 };
