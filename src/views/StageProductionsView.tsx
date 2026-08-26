@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, FormEvent, useRef } from "react";
+import React, { useState, useEffect, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Clapperboard, 
@@ -23,30 +23,29 @@ import {
   Trash2, 
   Plus, 
   Search, 
-  ChevronDown,
-  ChevronUp,
-  Upload,
+  ChevronRight,
   FileCheck,
   Download,
   ExternalLink,
   Info,
   Boxes,
-  Volume2,
-  Brush,
   Clock,
   Check,
   X,
   MessageSquare,
   ShieldCheck,
-  AlertTriangle
+  GraduationCap,
+  Briefcase,
+  ArrowRight,
+  History
 } from "lucide-react";
 import { 
   StageProductionProposal, 
   StageProductionRole, 
   StageProductionGenre, 
-  PriorityLevel, 
   ProductionNeedItem,
   TechnicalDocumentAttachment,
+  StageProductionStatus,
   UserRole 
 } from "../types";
 import { 
@@ -54,7 +53,12 @@ import {
   createStageProductionProposal, 
   updateStageProductionStatus, 
   deleteStageProductionProposal,
-  STAGE_PRODUCTIONS_COLLECTION 
+  STAGE_PRODUCTIONS_COLLECTION,
+  STAGE_EVOLUTION_STEPS,
+  getStageStepIndex,
+  getStageStepInfo,
+  getStageLabel,
+  StageEvolutionStep
 } from "../services/stageProductionService";
 import { db } from "../lib/firebase";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
@@ -135,7 +139,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     costumePdf: null,
     lightingPdf: null,
     termsAccepted: false,
-    status: "pendente"
+    status: "em_analise_pedagogica"
   });
 
   // Check Permissions: Gestor, Diretor Pedagógico, or Professor
@@ -163,13 +167,21 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
       }));
       setProposals(items);
       setLoadingProposals(false);
+
+      // Keep selected proposal updated in real time if open
+      if (selectedProposalForFicha?.id) {
+        const found = items.find(p => p.id === selectedProposalForFicha.id);
+        if (found) {
+          setSelectedProposalForFicha(found);
+        }
+      }
     }, (error) => {
       console.error("Error loading stage productions:", error);
       setLoadingProposals(false);
     });
 
     return () => unsubscribe();
-  }, [hasAccess]);
+  }, [hasAccess, selectedProposalForFicha?.id]);
 
   // Pre-fill user data when available
   useEffect(() => {
@@ -325,7 +337,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
       costumePdf: null,
       lightingPdf: null,
       termsAccepted: false,
-      status: "pendente"
+      status: "em_analise_pedagogica"
     });
     setErrors({});
   };
@@ -350,7 +362,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
       const proposalPayload = {
         ...formData,
         proponentUserId: currentUser?.uid || userProfile?.id || "",
-        status: "pendente" as const
+        status: "em_analise_pedagogica" as const
       };
 
       const newId = await createStageProductionProposal(proposalPayload);
@@ -366,7 +378,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
       setShowSuccessModal(true);
 
       if (showNotification) {
-        showNotification("Proposta submetida com sucesso! A Ficha de Inscrição da Montagem foi gerada.", "Sucesso!", "success");
+        showNotification("Proposta submetida com sucesso! Iniciada a etapa 1: Proposta em análise pedagógica.", "Sucesso!", "success");
       }
 
       resetForm();
@@ -380,7 +392,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     }
   };
 
-  const handleUpdateStatus = async (proposalId: string, newStatus: StageProductionProposal["status"]) => {
+  const handleUpdateStatus = async (proposalId: string, newStatus: StageProductionStatus) => {
     try {
       const feedback = feedbackInput[proposalId] || "";
       await updateStageProductionStatus(
@@ -390,12 +402,16 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
         currentUser?.uid,
         userProfile?.name || "Gestão"
       );
+      const label = getStageLabel(newStatus);
       if (showNotification) {
-        showNotification(`Status da proposta alterado para "${newStatus}".`, "Status Atualizado", "success");
+        showNotification(`Etapa atualizada para: "${label}".`, "Andamento Atualizado", "success");
       }
-      if (selectedProposalForFicha?.id === proposalId) {
-        setSelectedProposalForFicha(prev => prev ? { ...prev, status: newStatus, feedback } : null);
-      }
+      // Clear feedback input for this proposal
+      setFeedbackInput(p => {
+        const next = { ...p };
+        delete next[proposalId];
+        return next;
+      });
     } catch (err) {
       console.error("Error updating status:", err);
       if (showNotification) {
@@ -464,7 +480,10 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
 
   // Filtered proposals
   const filteredProposals = proposals.filter(p => {
-    const matchesStatus = statusFilter === "todos" || p.status === statusFilter;
+    let matchesStatus = true;
+    if (statusFilter !== "todos") {
+      matchesStatus = p.status === statusFilter;
+    }
     const matchesSearch = 
       (p.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.proponentName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -490,7 +509,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
               Montagens e Apresentações
             </h1>
             <p className="text-teal-100/80 text-xs md:text-sm font-medium max-w-2xl leading-relaxed">
-              Submissão detalhada de necessidades de produção item a item, upload obrigatório de projetos técnicos em PDF e emissão da Ficha de Inscrição.
+              Submissão de espetáculos, acompanhamento das 6 etapas de evolução pedagógica, artística e executiva, e upload de projetos técnicos.
             </p>
           </div>
 
@@ -538,11 +557,34 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     Ficha de Inscrição de Montagem e Espetáculo
                   </h2>
                   <p className="text-slate-500 text-xs font-medium mt-1">
-                    Cadastre a obra, insira os itens de produção com sua prioridade individual e anexe os projetos técnicos em PDF.
+                    Cadastre a obra, insira os itens de produção com prioridade individual, anexe os 3 PDFs obrigatórios e acompanhe as 6 etapas de análise.
                   </p>
                 </div>
                 <div className="bg-teal-50 border border-teal-200/60 px-4 py-2 rounded-2xl text-[11px] font-bold text-pro-teal">
                   Autor: <strong>{formData.proponentName || "Professor/Diretor"}</strong>
+                </div>
+              </div>
+
+              {/* Guia das 6 Etapas */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                  <Clock size={16} className="text-pro-teal" />
+                  Ciclo de Avaliação e Execução da Proposta (6 Etapas):
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
+                  {STAGE_EVOLUTION_STEPS.map((step) => (
+                    <div 
+                      key={step.id} 
+                      className="p-2.5 bg-white border border-slate-200/80 rounded-xl text-center flex flex-col items-center justify-center gap-1 shadow-2xs"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-pro-teal/10 text-pro-teal text-[11px] font-black flex items-center justify-center">
+                        {step.stepNumber}
+                      </div>
+                      <span className="text-[10px] font-black text-slate-700 leading-tight">
+                        {step.label}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -696,7 +738,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Sinopse da Obra (sem prioridade, apenas campo descritivo normal) */}
+                  {/* Sinopse da Obra */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
                       <FileText size={13} className="text-pro-teal" />
@@ -730,7 +772,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     </h3>
                   </div>
 
-                  {/* Proposta Didática (sem prioridade) */}
+                  {/* Proposta Didática */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
                       <Sparkles size={13} className="text-pro-teal" />
@@ -752,7 +794,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     {errors.pedagogicalProposal && <p className="text-xs text-red-500 font-bold">{errors.pedagogicalProposal}</p>}
                   </div>
 
-                  {/* Elenco Previsto (sem prioridade) */}
+                  {/* Elenco Previsto */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
                       <User size={13} className="text-pro-teal" />
@@ -775,7 +817,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                   </div>
                 </div>
 
-                {/* SEÇÃO 4: NECESSIDADES DE PRODUÇÃO (ITENS UM POR UM COM SELETOR DESEJÁVEL/INDISPENSÁVEL) */}
+                {/* SEÇÃO 4: NECESSIDADES DE PRODUÇÃO (ITEMIZADAS) */}
                 <div className="space-y-6 pt-4 border-t border-slate-100">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
                     <div className="flex items-center gap-3">
@@ -787,7 +829,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                           Necessidades de Produção
                         </h3>
                         <p className="text-xs text-slate-500 font-medium">
-                          Adicione os itens de necessidade individualmente em cada subseção e marque a prioridade de cada um.
+                          Adicione os itens individualmente em cada subseção e selecione a prioridade (Desejável ou Indispensável).
                         </p>
                       </div>
                     </div>
@@ -929,7 +971,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                         className="mt-1 w-5 h-5 rounded-lg text-pro-teal focus:ring-pro-teal border-slate-300 transition-all cursor-pointer accent-[#016a86]"
                       />
                       <span className="text-xs md:text-sm font-bold text-slate-700 leading-relaxed group-hover:text-slate-900 transition-colors">
-                        Confirmo a veracidade das informações da Ficha de Inscrição da Montagem, o envio dos projetos técnicos em PDF e estou ciente de que as necessidades assinaladas como "Indispensáveis" serão analisadas detalhadamente pela coordenação técnica e pedagógica. *
+                        Confirmo a veracidade das informações da Ficha de Inscrição da Montagem, o envio dos projetos técnicos em PDF e estou ciente de que a proposta passará pelas 6 etapas de análise pedagógica, artística e executiva da Intervalo Escola de Teatro. *
                       </span>
                     </label>
                     {errors.termsAccepted && (
@@ -970,7 +1012,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
             </div>
           </motion.div>
         ) : (
-          /* LISTA DE PROPOSTAS SUBMETIDAS */
+          /* LISTA DE PROPOSTAS SUBMETIDAS COM AS 6 ETAPAS */
           <motion.div 
             initial={{ opacity: 0, y: 15 }} 
             animate={{ opacity: 1, y: 0 }} 
@@ -989,26 +1031,29 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 />
               </div>
 
-              {/* Status Filter */}
+              {/* Status Filter by Stage */}
               <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-                {[
-                  { id: "todos", label: "Todas" },
-                  { id: "pendente", label: "Pendentes" },
-                  { id: "em_analise", label: "Em Análise" },
-                  { id: "aprovada", label: "Aprovadas" },
-                  { id: "ajustes_solicitados", label: "Ajustes" },
-                  { id: "rejeitada", label: "Rejeitadas" }
-                ].map(tab => (
+                <button
+                  onClick={() => setStatusFilter("todos")}
+                  className={`px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                    statusFilter === "todos"
+                      ? "bg-pro-teal text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Todas ({proposals.length})
+                </button>
+                {STAGE_EVOLUTION_STEPS.map(step => (
                   <button
-                    key={tab.id}
-                    onClick={() => setStatusFilter(tab.id)}
+                    key={step.id}
+                    onClick={() => setStatusFilter(step.id)}
                     className={`px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
-                      statusFilter === tab.id
+                      statusFilter === step.id
                         ? "bg-pro-teal text-white shadow-sm"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
                   >
-                    {tab.label}
+                    {step.shortLabel}
                   </button>
                 ))}
               </div>
@@ -1037,104 +1082,168 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 gap-6">
                 {filteredProposals.map((proposal) => {
-                  const statusColors: Record<string, string> = {
-                    pendente: "bg-amber-100 text-amber-800 border-amber-200",
-                    em_analise: "bg-blue-100 text-blue-800 border-blue-200",
-                    aprovada: "bg-emerald-100 text-emerald-800 border-emerald-200",
-                    ajustes_solicitados: "bg-purple-100 text-purple-800 border-purple-200",
-                    rejeitada: "bg-rose-100 text-rose-800 border-rose-200"
-                  };
-
-                  const statusLabels: Record<string, string> = {
-                    pendente: "Pendente de Análise",
-                    em_analise: "Em Curadoria",
-                    aprovada: "Aprovada para Montagem",
-                    ajustes_solicitados: "Ajustes Solicitados",
-                    rejeitada: "Não Aprovada"
-                  };
-
+                  const currentStepIdx = getStageStepIndex(proposal.status);
+                  const stepInfo = getStageStepInfo(proposal.status);
                   const indispCount = countTotalIndispensables(proposal);
 
                   return (
                     <div 
                       key={proposal.id}
-                      className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 hover:border-pro-teal/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-6"
+                      className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200/90 hover:border-pro-teal/40 transition-all space-y-6"
                     >
-                      <div className="space-y-3 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${statusColors[proposal.status || "pendente"]}`}>
-                            {statusLabels[proposal.status || "pendente"]}
-                          </span>
-                          <span className="px-3 py-1 bg-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-wider rounded-lg">
-                            {proposal.genre}
-                          </span>
-                          <span className="text-slate-400 text-xs font-medium">
-                            {proposal.createdAt?.toDate ? proposal.createdAt.toDate().toLocaleDateString("pt-BR") : "Data recente"}
-                          </span>
-                        </div>
+                      {/* Top Row: Title, Proponent & Actions */}
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${stepInfo.badgeColor}`}>
+                              {stepInfo.label}
+                            </span>
+                            <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-wider rounded-lg">
+                              {proposal.genre}
+                            </span>
+                            <span className="text-slate-400 text-xs font-medium">
+                              Submetido em: {proposal.createdAt?.toDate ? proposal.createdAt.toDate().toLocaleDateString("pt-BR") : "Data recente"}
+                            </span>
+                          </div>
 
-                        <div>
-                          <h3 className="text-lg md:text-xl font-black text-slate-800 tracking-tight">
+                          <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
                             {proposal.title}
                           </h3>
-                          <p className="text-xs font-bold text-slate-500 mt-0.5">
+                          <p className="text-xs font-bold text-slate-500">
                             Proponente: <span className="text-slate-800">{proposal.proponentName}</span> ({proposal.proponentRole}) • {proposal.proponentEmail}
                           </p>
                         </div>
 
-                        <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
-                          {proposal.synopsis}
-                        </p>
+                        {/* Action Buttons */}
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => setSelectedProposalForFicha(proposal)}
+                            className="px-5 py-2.5 bg-pro-teal text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-[#014e63] transition-all flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            <FileText size={15} />
+                            Ficha & Andamento
+                          </button>
 
-                        {/* Badges Info */}
-                        <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
-                          {indispCount > 0 ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-200/60">
-                              <AlertCircle size={12} />
-                              {indispCount} item(ns) indispensável(is)
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">Todos os itens desejáveis</span>
+                          <button
+                            onClick={() => {
+                              setSelectedProposalForFicha(proposal);
+                              setTimeout(() => window.print(), 300);
+                            }}
+                            className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+                          >
+                            <Printer size={15} />
+                            Imprimir
+                          </button>
+
+                          {isGestor && (
+                            <button
+                              onClick={() => handleDelete(proposal.id!)}
+                              className="px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1"
+                              title="Excluir proposta"
+                            >
+                              <Trash2 size={15} />
+                            </button>
                           )}
-
-                          {/* PDF Status */}
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200/60">
-                            <FileCheck size={12} />
-                            3 Projetos em PDF Anexados
-                          </span>
                         </div>
                       </div>
 
-                      {/* Action buttons on card */}
-                      <div className="flex flex-col sm:flex-row md:flex-col items-stretch gap-2 shrink-0">
-                        <button
-                          onClick={() => setSelectedProposalForFicha(proposal)}
-                          className="px-5 py-3 bg-pro-teal text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-[#014e63] transition-all flex items-center justify-center gap-2 shadow-sm"
-                        >
-                          <FileText size={15} />
-                          Ver Ficha Completa
-                        </button>
+                      {/* ANDAMENTO DA SUBMISSÃO (STEPPER COMPACTO NO CARD) */}
+                      <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 md:p-5 space-y-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Clock size={16} className="text-pro-teal" />
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+                              Andamento da Submissão:
+                            </span>
+                            <span className="text-xs font-bold text-pro-teal">
+                              Etapa {currentStepIdx + 1} de 6
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-extrabold text-slate-500">
+                            {Math.round(((currentStepIdx + 1) / 6) * 100)}% concluído
+                          </span>
+                        </div>
 
-                        <button
-                          onClick={() => {
-                            setSelectedProposalForFicha(proposal);
-                            setTimeout(() => window.print(), 300);
-                          }}
-                          className="px-5 py-3 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
-                        >
-                          <Printer size={15} />
-                          Imprimir Ficha
-                        </button>
+                        {/* Progress Bar */}
+                        <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                          <div 
+                            className="bg-gradient-to-r from-[#016a86] to-[#00b4d8] h-2.5 rounded-full transition-all duration-500"
+                            style={{ width: `${((currentStepIdx + 1) / 6) * 100}%` }}
+                          />
+                        </div>
 
-                        {isGestor && (
+                        {/* 6 Steps Grid in Card */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
+                          {STAGE_EVOLUTION_STEPS.map((step, idx) => {
+                            const isPast = idx < currentStepIdx;
+                            const isCurrent = idx === currentStepIdx;
+                            const isFuture = idx > currentStepIdx;
+
+                            return (
+                              <div 
+                                key={step.id}
+                                className={`p-2.5 rounded-xl border text-left transition-all ${
+                                  isCurrent 
+                                    ? "bg-white border-pro-teal shadow-md ring-2 ring-pro-teal/20" 
+                                    : isPast 
+                                    ? "bg-emerald-50/80 border-emerald-200/80 text-emerald-900" 
+                                    : "bg-white/60 border-slate-200 text-slate-400"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                                    isCurrent ? "bg-pro-teal text-white" : isPast ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600"
+                                  }`}>
+                                    {isPast ? "✓" : `${step.stepNumber}`}
+                                  </span>
+                                  {isCurrent && (
+                                    <span className="text-[9px] font-black uppercase text-pro-teal bg-teal-50 px-1 py-0.5 rounded">
+                                      Atual
+                                    </span>
+                                  )}
+                                </div>
+                                <p className={`text-[10px] font-bold leading-tight line-clamp-2 ${
+                                  isCurrent ? "text-slate-900 font-black" : isPast ? "text-emerald-950 font-bold" : "text-slate-400"
+                                }`}>
+                                  {step.label}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Brief Info & Summary */}
+                      <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-semibold text-slate-600">
+                        <div className="flex flex-wrap items-center gap-3">
+                          {indispCount > 0 ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-800 rounded-lg border border-amber-200/60 font-bold text-[11px]">
+                              <AlertCircle size={13} className="text-amber-600" />
+                              {indispCount} item(ns) indispensável(is)
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">Todos os itens desejáveis</span>
+                          )}
+
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200/60 font-bold text-[11px]">
+                            <FileCheck size={13} className="text-emerald-600" />
+                            3 PDFs Técnicos Anexados
+                          </span>
+                        </div>
+
+                        {/* Quick Status Advance for Managers */}
+                        {isGestor && currentStepIdx < 5 && (
                           <button
-                            onClick={() => handleDelete(proposal.id!)}
-                            className="px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                            onClick={() => {
+                              const nextStep = STAGE_EVOLUTION_STEPS[currentStepIdx + 1];
+                              handleUpdateStatus(proposal.id!, nextStep.id);
+                            }}
+                            className="px-3.5 py-1.5 bg-slate-900 text-white hover:bg-pro-teal rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
                           >
-                            <Trash2 size={14} />
-                            Excluir
+                            <span>Avançar para Etapa {currentStepIdx + 2}</span>
+                            <ArrowRight size={13} />
                           </button>
                         )}
                       </div>
@@ -1166,14 +1275,21 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                   Proposta Inscrita com Sucesso!
                 </h3>
                 <p className="text-xs md:text-sm text-slate-500 font-medium leading-relaxed">
-                  A Ficha de Inscrição da Montagem para o espetáculo <strong>"{lastCreatedProposal.title}"</strong> foi gerada com todos os projetos anexados.
+                  A Ficha de Inscrição da Montagem para o espetáculo <strong>"{lastCreatedProposal.title}"</strong> foi registrada.
                 </p>
               </div>
 
-              <div className="p-4 bg-teal-50 border border-teal-100 rounded-2xl text-left space-y-1">
-                <p className="text-[11px] font-bold text-pro-teal uppercase tracking-wider">Protocolo de Submissão</p>
+              <div className="p-4 bg-teal-50 border border-teal-100 rounded-2xl text-left space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold text-pro-teal uppercase tracking-wider">Protocolo de Submissão</p>
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded font-black text-[10px] uppercase">
+                    Etapa 1 de 6
+                  </span>
+                </div>
                 <p className="text-xs font-mono font-bold text-slate-700 break-all">{lastCreatedProposal.id}</p>
-                <p className="text-[11px] text-slate-500">Status atual: <span className="font-bold text-amber-700">Pendente de Avaliação</span></p>
+                <p className="text-[11px] text-slate-600">
+                  Status atual: <strong>1) Proposta em análise pedagógica</strong>
+                </p>
               </div>
 
               <div className="flex flex-col gap-2.5">
@@ -1185,7 +1301,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                   className="w-full py-4 bg-pro-teal text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#014e63] shadow-lg shadow-teal-900/10 transition-all flex items-center justify-center gap-2"
                 >
                   <FileText size={16} />
-                  Visualizar e Imprimir Ficha de Inscrição
+                  Ver Ficha e Acompanhar Etapas
                 </button>
                 <button
                   onClick={() => {
@@ -1202,7 +1318,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
         )}
       </AnimatePresence>
 
-      {/* MODAL: FICHA DE INSCRIÇÃO DA MONTAGEM (DOCUMENTO COMPLETO E IMPRIMÍVEL) */}
+      {/* MODAL: FICHA DE INSCRIÇÃO & ANDAMENTO DAS ETAPAS */}
       <AnimatePresence>
         {selectedProposalForFicha && (
           <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:fixed print:inset-0">
@@ -1247,18 +1363,8 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 </div>
               </div>
 
-              {/* Status Banner */}
-              <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200 print:bg-slate-50">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-500">Status da Proposta:</span>
-                  <span className="px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider bg-pro-teal text-white">
-                    {selectedProposalForFicha.status || "Pendente"}
-                  </span>
-                </div>
-                <div className="text-xs text-slate-500 font-semibold">
-                  Submetido em: {selectedProposalForFicha.createdAt?.toDate ? selectedProposalForFicha.createdAt.toDate().toLocaleString("pt-BR") : "Data de submissão"}
-                </div>
-              </div>
+              {/* PAINEL DE ANDAMENTO DAS 6 ETAPAS */}
+              <StageEvolutionTracker proposal={selectedProposalForFicha} />
 
               {/* Bloco 1: Proponente e Identificação */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1359,71 +1465,84 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 </div>
               </div>
 
-              {/* Bloco 5: Parecer / Feedback da Curadoria (Se houver) */}
-              {selectedProposalForFicha.feedback && (
-                <div className="p-5 bg-purple-50 border border-purple-200 rounded-2xl space-y-2">
-                  <span className="text-xs font-black uppercase tracking-wider text-purple-900 flex items-center gap-2">
-                    <MessageSquare size={14} />
-                    Parecer da Coordenação / Curadoria:
-                  </span>
-                  <p className="text-xs text-purple-950 font-medium whitespace-pre-wrap">
-                    {selectedProposalForFicha.feedback}
-                  </p>
-                  {selectedProposalForFicha.reviewedByName && (
-                    <p className="text-[10px] text-purple-700 font-bold">
-                      Avaliador: {selectedProposalForFicha.reviewedByName}
-                    </p>
-                  )}
+              {/* Histórico das Etapas Registradas */}
+              {selectedProposalForFicha.statusHistory && selectedProposalForFicha.statusHistory.length > 0 && (
+                <div className="space-y-3 bg-slate-50 p-5 rounded-2xl border border-slate-200/80">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                    <History size={14} className="text-pro-teal" />
+                    Histórico de Atualização das Etapas
+                  </h4>
+                  <div className="space-y-2">
+                    {selectedProposalForFicha.statusHistory.map((hist, hIdx) => (
+                      <div key={hIdx} className="p-3 bg-white border border-slate-200 rounded-xl text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-black text-slate-800">{hist.statusLabel}</span>
+                          <span className="text-[10px] text-slate-400">
+                            {new Date(hist.updatedAt).toLocaleString("pt-BR")}
+                          </span>
+                        </div>
+                        {hist.notes && (
+                          <p className="text-slate-600 font-medium italic">"{hist.notes}"</p>
+                        )}
+                        <p className="text-[10px] text-slate-400 font-semibold">
+                          Atualizado por: {hist.updatedByName || "Gestão"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* Área de Gestão de Status (Apenas Gestor) */}
+              {/* Área de Gestão de Etapas (Apenas Gestor) */}
               {isGestor && (
                 <div className="p-6 bg-slate-100 rounded-2xl border border-slate-200 space-y-4 print:hidden">
                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
                     <ShieldCheck size={16} className="text-pro-teal" />
-                    Painel de Avaliação da Gestão
+                    Painel de Evolução da Proposta (Gestor / Coordenação)
                   </h4>
 
                   <div className="space-y-2">
-                    <label className="text-[11px] font-black text-slate-600 uppercase">Parecer / Feedback para o Proponente:</label>
+                    <label className="text-[11px] font-black text-slate-600 uppercase">
+                      Parecer / Feedback para a Etapa:
+                    </label>
                     <textarea
                       rows={2}
                       defaultValue={selectedProposalForFicha.feedback || ""}
                       onChange={(e) => setFeedbackInput(p => ({ ...p, [selectedProposalForFicha.id!]: e.target.value }))}
-                      placeholder="Insira as observações da curadoria ou justificativas de ajustes..."
+                      placeholder="Insira as observações da coordenação ou instruções para a próxima etapa..."
                       className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-pro-teal font-medium"
                     />
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 pt-2">
-                    <button
-                      onClick={() => handleUpdateStatus(selectedProposalForFicha.id!, "aprovada")}
-                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Check size={14} /> Aprovar Montagem
-                    </button>
-
-                    <button
-                      onClick={() => handleUpdateStatus(selectedProposalForFicha.id!, "em_analise")}
-                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Clock size={14} /> Em Curadoria
-                    </button>
-
-                    <button
-                      onClick={() => handleUpdateStatus(selectedProposalForFicha.id!, "ajustes_solicitados")}
-                      className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
-                    >
-                      <AlertCircle size={14} /> Solicitar Ajustes
-                    </button>
-
-                    <button
-                      onClick={() => handleUpdateStatus(selectedProposalForFicha.id!, "rejeitada")}
-                      className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
-                    >
-                      <X size={14} /> Não Aprovar
-                    </button>
+                  <div className="space-y-2 pt-1">
+                    <p className="text-[11px] font-black text-slate-600 uppercase">
+                      Alterar para a Etapa:
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {STAGE_EVOLUTION_STEPS.map((step) => {
+                        const isCurrent = selectedProposalForFicha.status === step.id;
+                        return (
+                          <button
+                            key={step.id}
+                            onClick={() => handleUpdateStatus(selectedProposalForFicha.id!, step.id)}
+                            className={`p-3 rounded-xl text-left font-bold text-xs transition-all flex items-start gap-2 border ${
+                              isCurrent
+                                ? "bg-pro-teal text-white border-pro-teal shadow-sm"
+                                : "bg-white text-slate-700 border-slate-200 hover:border-pro-teal hover:bg-teal-50/50"
+                            }`}
+                          >
+                            <span className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5 ${
+                              isCurrent ? "bg-white text-pro-teal" : "bg-slate-100 text-slate-600"
+                            }`}>
+                              {step.stepNumber}
+                            </span>
+                            <div className="space-y-0.5">
+                              <p className="leading-tight">{step.label}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1437,6 +1556,127 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
           </div>
         )}
       </AnimatePresence>
+    </div>
+  );
+};
+
+/* COMPONENTE: TRACKER DAS 6 ETAPAS DE EVOLUÇÃO (VISUAL COMPLETO) */
+interface StageEvolutionTrackerProps {
+  proposal: StageProductionProposal;
+}
+
+const StageEvolutionTracker: React.FC<StageEvolutionTrackerProps> = ({ proposal }) => {
+  const currentStepIdx = getStageStepIndex(proposal.status);
+  const currentStepInfo = getStageStepInfo(proposal.status);
+
+  return (
+    <div className="bg-gradient-to-br from-slate-900 to-[#013543] text-white rounded-3xl p-6 md:p-8 space-y-6 shadow-xl border border-teal-800/40 print:bg-white print:text-slate-900 print:border-slate-300">
+      {/* Header do Tracker */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4 print:border-slate-300">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 bg-pro-yellow text-slate-900 text-[10px] font-black uppercase tracking-wider rounded-lg">
+              Andamento da Montagem
+            </span>
+            <span className="text-xs text-teal-200/80 font-bold">
+              Etapa {currentStepIdx + 1} de 6
+            </span>
+          </div>
+          <h3 className="text-lg md:text-xl font-black tracking-tight text-white print:text-slate-900">
+            {currentStepInfo.label}
+          </h3>
+        </div>
+
+        <div className="text-right">
+          <span className="text-xs font-bold text-teal-300 print:text-slate-600 block">
+            Progresso Geral
+          </span>
+          <span className="text-2xl font-black text-white print:text-slate-900">
+            {Math.round(((currentStepIdx + 1) / 6) * 100)}%
+          </span>
+        </div>
+      </div>
+
+      {/* Stepper Visual Horizontal */}
+      <div className="relative pt-2">
+        {/* Connecting Line Background */}
+        <div className="hidden lg:block absolute top-[28px] left-[5%] right-[5%] h-1 bg-white/20 rounded-full z-0" />
+        {/* Active Line Fill */}
+        <div 
+          className="hidden lg:block absolute top-[28px] left-[5%] h-1 bg-gradient-to-r from-pro-yellow to-teal-300 rounded-full z-0 transition-all duration-500" 
+          style={{ width: `${(currentStepIdx / 5) * 90}%` }}
+        />
+
+        {/* 6 Steps */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 relative z-10">
+          {STAGE_EVOLUTION_STEPS.map((step, index) => {
+            const isCompleted = index < currentStepIdx;
+            const isCurrent = index === currentStepIdx;
+            const isPending = index > currentStepIdx;
+
+            return (
+              <div 
+                key={step.id} 
+                className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-2 ${
+                  isCurrent 
+                    ? "bg-white text-slate-900 border-white shadow-xl ring-4 ring-pro-yellow/30 scale-[1.02]" 
+                    : isCompleted 
+                    ? "bg-teal-900/50 border-teal-500/40 text-teal-100" 
+                    : "bg-white/5 border-white/10 text-white/40"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center shadow-sm ${
+                    isCurrent 
+                      ? "bg-pro-teal text-white" 
+                      : isCompleted 
+                      ? "bg-emerald-500 text-white" 
+                      : "bg-white/10 text-white/60"
+                  }`}>
+                    {isCompleted ? <Check size={16} /> : step.stepNumber}
+                  </div>
+
+                  <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                    isCurrent 
+                      ? "bg-pro-yellow text-slate-900" 
+                      : isCompleted 
+                      ? "bg-emerald-500/20 text-emerald-300" 
+                      : "bg-white/5 text-white/30"
+                  }`}>
+                    {isCurrent ? "Etapa Atual" : isCompleted ? "Concluída" : "Aguardando"}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <p className={`text-xs font-black leading-tight ${
+                    isCurrent ? "text-slate-900" : isCompleted ? "text-white" : "text-white/60"
+                  }`}>
+                    {step.label}
+                  </p>
+                  <p className={`text-[10px] leading-snug line-clamp-2 ${
+                    isCurrent ? "text-slate-600" : isCompleted ? "text-teal-200/70" : "text-white/30"
+                  }`}>
+                    {step.description}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Current Step Detailed Message */}
+      <div className="p-4 bg-white/10 rounded-2xl border border-white/15 flex items-start gap-3 print:bg-slate-100 print:text-slate-900">
+        <Info size={20} className="text-pro-yellow shrink-0 mt-0.5" />
+        <div className="text-xs leading-relaxed space-y-0.5">
+          <p className="font-black text-white print:text-slate-900">
+            Fase Atual: {currentStepInfo.label}
+          </p>
+          <p className="text-teal-100/80 print:text-slate-700">
+            {currentStepInfo.description}
+          </p>
+        </div>
+      </div>
     </div>
   );
 };
@@ -1502,126 +1742,125 @@ const ItemizedSection: React.FC<ItemizedSectionProps> = ({
           return (
             <div 
               key={item.id || index}
-              className={`p-4 rounded-2xl border transition-all ${
+              className={`p-4 rounded-2xl border transition-all space-y-3 ${
                 isIndispensable 
-                  ? "bg-amber-50/50 border-amber-300 shadow-sm" 
+                  ? "bg-amber-50/40 border-amber-300" 
                   : "bg-white border-slate-200"
               }`}
             >
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-                <span className="w-6 h-6 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-black shrink-0">
-                  {index + 1}
+              <div className="flex flex-col md:flex-row md:items-center gap-3">
+                <span className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 text-xs font-black flex items-center justify-center shrink-0">
+                  #{index + 1}
                 </span>
 
                 {/* Descrição do Item */}
-                <div className="flex-1 w-full">
+                <div className="flex-1 space-y-1">
                   <input
                     type="text"
                     value={item.item}
                     onChange={(e) => onUpdateItem(index, "item", e.target.value)}
                     placeholder={itemPlaceholder}
                     className={`w-full p-3 bg-slate-50 border rounded-xl text-xs font-semibold outline-none transition-all ${
-                      errors[itemErrorKey] ? "border-red-400 bg-red-50/20" : "border-slate-200 focus:border-pro-teal focus:bg-white"
+                      errors[itemErrorKey] 
+                        ? "border-red-400 bg-red-50/20" 
+                        : "border-slate-200 focus:border-pro-teal focus:bg-white"
                     }`}
                   />
                   {errors[itemErrorKey] && (
-                    <p className="text-[11px] text-red-500 font-bold mt-1">{errors[itemErrorKey]}</p>
+                    <p className="text-[11px] text-red-500 font-bold">{errors[itemErrorKey]}</p>
                   )}
                 </div>
 
-                {/* Seletor Desejável / Indispensável */}
-                <div className="flex items-center gap-1.5 shrink-0 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                {/* Seletor de Prioridade */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => onUpdateItem(index, "priority", "Desejável")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        item.priority === "Desejável"
+                          ? "bg-white text-slate-800 shadow-sm"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Desejável
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateItem(index, "priority", "Indispensável")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        item.priority === "Indispensável"
+                          ? "bg-amber-500 text-white shadow-sm"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Indispensável
+                    </button>
+                  </div>
+
+                  {/* Botão de Excluir Item */}
                   <button
                     type="button"
-                    onClick={() => onUpdateItem(index, "priority", "Desejável")}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all ${
-                      item.priority === "Desejável"
-                        ? "bg-white text-slate-800 shadow-sm"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
+                    onClick={() => onRemoveItem(index)}
+                    className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                    title="Remover Item"
                   >
-                    Desejável
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onUpdateItem(index, "priority", "Indispensável")}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all ${
-                      item.priority === "Indispensável"
-                        ? "bg-amber-500 text-white shadow-sm font-black"
-                        : "text-slate-500 hover:text-amber-700"
-                    }`}
-                  >
-                    Indispensável
+                    <Trash2 size={16} />
                   </button>
                 </div>
-
-                {/* Botão Remover */}
-                <button
-                  type="button"
-                  onClick={() => onRemoveItem(index)}
-                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all shrink-0"
-                  title="Remover Item"
-                >
-                  <Trash2 size={16} />
-                </button>
               </div>
 
-              {/* Campo de Justificativa se Indispensável */}
-              <AnimatePresence>
-                {isIndispensable && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mt-3 pt-3 border-t border-amber-200/80 space-y-1"
-                  >
-                    <label className="text-[11px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <AlertTriangle size={12} className="text-amber-600" />
-                      Motivo da Indispensabilidade para este item *
-                    </label>
-                    <input
-                      type="text"
-                      value={item.indispensableReason || ""}
-                      onChange={(e) => onUpdateItem(index, "indispensableReason", e.target.value)}
-                      placeholder="Explique detalhadamente por que este item é indispensável para a montagem..."
-                      className={`w-full p-3 bg-white border rounded-xl text-xs font-semibold outline-none transition-all ${
-                        errors[reasonErrorKey] ? "border-red-400 bg-red-50/20" : "border-amber-200 focus:border-amber-500"
-                      }`}
-                    />
-                    {errors[reasonErrorKey] && (
-                      <p className="text-[11px] text-red-500 font-bold">{errors[reasonErrorKey]}</p>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Justificativa Condicional se Indispensável */}
+              {isIndispensable && (
+                <div className="pl-0 md:pl-10 space-y-1 pt-1 border-t border-amber-200/60">
+                  <label className="text-[11px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertCircle size={13} className="text-amber-600" />
+                    Motivo da Indispensabilidade do Item #{index + 1} *
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={item.indispensableReason || ""}
+                    onChange={(e) => onUpdateItem(index, "indispensableReason", e.target.value)}
+                    placeholder="Justifique detalhadamente por que este recurso é estritamente indispensável para a realização da montagem..."
+                    className={`w-full p-3 bg-white border rounded-xl text-xs font-medium outline-none transition-all resize-y ${
+                      errors[reasonErrorKey] 
+                        ? "border-red-400 bg-red-50/20" 
+                        : "border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    }`}
+                  />
+                  {errors[reasonErrorKey] && (
+                    <p className="text-[11px] text-red-500 font-bold">{errors[reasonErrorKey]}</p>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* Observações adicionais da subseção */}
-      <div className="space-y-1.5 pt-2">
+      {/* Observações Gerais Opcionais */}
+      <div className="space-y-1.5 pt-2 border-t border-slate-200/70">
         <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-          Observações adicionais / Conceito geral ({title}) (opcional)
+          Observações adicionais para esta subseção (Opcional):
         </label>
-        <textarea
-          rows={2}
+        <input
+          type="text"
           value={notes}
           onChange={(e) => onUpdateNotes(e.target.value)}
-          placeholder="Comentários adicionais sobre esta área..."
-          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-pro-teal transition-all"
+          placeholder="Ex: Dimensões aproximadas do palco necessárias, restrições elétricas, etc."
+          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-pro-teal"
         />
       </div>
     </div>
   );
 };
 
-/* COMPONENTE: CARD DE UPLOAD DE PDF COM DRAG-AND-DROP E CLIQUE */
+/* COMPONENTE: CARD DE UPLOAD DO ARQUIVO PDF OBRIGATÓRIO */
 interface PdfUploadCardProps {
   title: string;
   description: string;
   docType: "scenographyPdf" | "costumePdf" | "lightingPdf";
-  attachment: TechnicalDocumentAttachment | null | undefined;
+  attachment?: TechnicalDocumentAttachment | null;
   error?: string;
   onUpload: (file: File) => void;
   onRemove: () => void;
@@ -1637,8 +1876,8 @@ const PdfUploadCard: React.FC<PdfUploadCardProps> = ({
   onRemove,
   formatFileSize
 }) => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -1657,190 +1896,198 @@ const PdfUploadCard: React.FC<PdfUploadCardProps> = ({
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      onUpload(e.target.files[0]);
-    }
-  };
-
   return (
-    <div className={`p-5 rounded-3xl border transition-all flex flex-col justify-between ${
-      error 
-        ? "border-red-400 bg-red-50/20" 
-        : attachment 
-          ? "border-emerald-300 bg-emerald-50/30 shadow-sm" 
-          : "border-slate-200 bg-slate-50/60 hover:border-pro-teal/40"
+    <div className={`p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 ${
+      attachment 
+        ? "bg-emerald-50/40 border-emerald-300" 
+        : error 
+        ? "bg-red-50/30 border-red-300" 
+        : "bg-slate-50 border-slate-200"
     }`}>
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-            <FileText size={15} className="text-pro-teal" />
+            <FileText size={14} className="text-pro-teal" />
             {title} *
           </h4>
           {attachment ? (
-            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-lg uppercase">
+            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase rounded-md">
               Anexado
             </span>
           ) : (
-            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded-lg uppercase">
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black uppercase rounded-md">
               Obrigatório
             </span>
           )}
         </div>
-        <p className="text-[11px] text-slate-500 leading-relaxed">{description}</p>
+        <p className="text-[11px] text-slate-500 leading-snug">
+          {description}
+        </p>
       </div>
 
-      <div className="mt-4">
-        {attachment ? (
-          <div className="bg-white p-4 rounded-2xl border border-emerald-200 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                <FileCheck size={20} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-black text-slate-800 truncate" title={attachment.name}>
-                  {attachment.name}
-                </p>
-                <p className="text-[10px] text-slate-400 font-bold">
-                  {formatFileSize(attachment.size)} • PDF
-                </p>
-              </div>
+      {attachment ? (
+        <div className="p-3 bg-white border border-emerald-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 font-bold text-xs">
+              PDF
             </div>
-
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-              <a
-                href={attachment.dataUrl}
-                download={attachment.name}
-                target="_blank"
-                rel="noreferrer"
-                className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-[11px] font-bold text-center transition-all flex items-center justify-center gap-1"
-              >
-                <Download size={13} /> Baixar
-              </a>
-              <button
-                type="button"
-                onClick={onRemove}
-                className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                title="Remover arquivo"
-              >
-                <Trash2 size={15} />
-              </button>
+            <div className="overflow-hidden">
+              <p className="text-xs font-bold text-slate-800 truncate" title={attachment.name}>
+                {attachment.name}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {formatFileSize(attachment.size)}
+              </p>
             </div>
           </div>
-        ) : (
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
-              isDragging 
-                ? "border-pro-teal bg-teal-50/50 scale-[1.02]" 
-                : "border-slate-300 hover:border-pro-teal hover:bg-white bg-slate-50/80"
-            }`}
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="application/pdf,.pdf"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <Upload size={24} className="text-slate-400 mx-auto mb-2 group-hover:text-pro-teal" />
+
+          <div className="flex items-center gap-1 shrink-0">
+            <a
+              href={attachment.dataUrl}
+              download={attachment.name}
+              className="p-2 text-pro-teal hover:bg-teal-50 rounded-lg transition-all"
+              title="Baixar PDF"
+            >
+              <Download size={15} />
+            </a>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+              title="Remover arquivo"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+          className={`p-6 border-2 border-dashed rounded-xl text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 ${
+            isDragging 
+              ? "border-pro-teal bg-teal-50/50 scale-[1.01]" 
+              : "border-slate-300 hover:border-pro-teal hover:bg-white"
+          }`}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                onUpload(e.target.files[0]);
+              }
+            }}
+          />
+          <div className="w-10 h-10 rounded-full bg-pro-teal/10 text-pro-teal flex items-center justify-center">
+            <FileText size={20} />
+          </div>
+          <div className="space-y-0.5">
             <p className="text-xs font-bold text-slate-700">
-              Arraste o PDF aqui ou <span className="text-pro-teal underline">clique para selecionar</span>
+              Clique para selecionar o PDF
             </p>
-            <p className="text-[10px] text-slate-400 mt-1">Formato .PDF (máx. 15MB)</p>
+            <p className="text-[10px] text-slate-400">
+              ou arraste e solte o arquivo aqui (Máx. 15MB)
+            </p>
           </div>
-        )}
-        {error && <p className="text-xs text-red-500 font-bold mt-2">{error}</p>}
-      </div>
+        </div>
+      )}
+
+      {error && (
+        <p className="text-[11px] text-red-500 font-bold">{error}</p>
+      )}
     </div>
   );
 };
 
-/* COMPONENTE: TABELA PARA EXIBIÇÃO DE ITENS NA FICHA DE INSCRIÇÃO */
-const DisplayItemsTable: React.FC<{
+/* COMPONENTE: TABELA PARA EXIBIÇÃO DE ITENS NA FICHA OFICIAL */
+interface DisplayItemsTableProps {
   title: string;
   items?: ProductionNeedItem[];
   notes?: string;
-}> = ({ title, items, notes }) => {
+}
+
+const DisplayItemsTable: React.FC<DisplayItemsTableProps> = ({ title, items, notes }) => {
   if (!items || items.length === 0) return null;
 
   return (
     <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
-      <div className="bg-slate-100 px-4 py-2.5 font-black text-xs uppercase tracking-wider text-slate-800 border-b border-slate-200">
-        {title}
+      <div className="bg-slate-100/80 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+        <h5 className="text-xs font-black uppercase tracking-wider text-slate-800">{title}</h5>
+        <span className="text-[10px] font-bold text-slate-500">{items.length} item(ns)</span>
       </div>
+
       <div className="divide-y divide-slate-100">
-        {items.map((item, i) => (
-          <div key={i} className="p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="space-y-0.5 flex-1">
-              <p className="font-bold text-slate-800">
-                <span className="text-slate-400 mr-2">#{i + 1}</span>
-                {item.item}
-              </p>
+        {items.map((item, idx) => (
+          <div key={idx} className="p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="space-y-1 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] font-bold text-slate-400">#{idx + 1}</span>
+                <span className="font-semibold text-slate-800">{item.item}</span>
+              </div>
               {item.priority === "Indispensável" && item.indispensableReason && (
-                <p className="text-[11px] text-amber-800 font-medium pl-5 bg-amber-50/60 p-1.5 rounded-lg border border-amber-100">
-                  <strong>Justificativa:</strong> {item.indispensableReason}
+                <p className="text-[11px] text-amber-900 bg-amber-50/80 p-2 rounded-lg border border-amber-200/60 leading-relaxed font-medium">
+                  <strong>Justificativa de Indispensabilidade:</strong> {item.indispensableReason}
                 </p>
               )}
             </div>
-            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider self-start sm:self-center shrink-0 ${
-              item.priority === "Indispensável"
-                ? "bg-amber-100 text-amber-800 border border-amber-200"
-                : "bg-slate-100 text-slate-600 border border-slate-200"
+            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shrink-0 self-start sm:self-auto ${
+              item.priority === "Indispensável" 
+                ? "bg-amber-100 text-amber-900 border border-amber-200" 
+                : "bg-slate-100 text-slate-700"
             }`}>
               {item.priority}
             </span>
           </div>
         ))}
       </div>
+
       {notes && (
-        <div className="p-3 bg-slate-50 border-t border-slate-200 text-[11px] text-slate-600">
-          <strong>Observações:</strong> {notes}
+        <div className="p-3 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-600">
+          <strong>Observações da Subseção:</strong> {notes}
         </div>
       )}
     </div>
   );
 };
 
-/* COMPONENTE: CARD PARA EXIBIÇÃO DE PDF NA FICHA DE INSCRIÇÃO */
-const DisplayPdfCard: React.FC<{
+/* COMPONENTE: EXIBIÇÃO DE PDF NA FICHA OFICIAL */
+interface DisplayPdfCardProps {
   title: string;
   attachment?: TechnicalDocumentAttachment | null;
   formatFileSize: (bytes: number) => string;
-}> = ({ title, attachment, formatFileSize }) => {
-  if (!attachment) {
-    return (
-      <div className="p-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center space-y-1">
-        <p className="text-xs font-bold text-slate-500">{title}</p>
-        <p className="text-[10px] text-rose-500 font-black uppercase">Não Anexado</p>
-      </div>
-    );
-  }
+}
 
+const DisplayPdfCard: React.FC<DisplayPdfCardProps> = ({ title, attachment, formatFileSize }) => {
   return (
-    <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-black text-slate-800">{title}</p>
-        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded uppercase">PDF</span>
-      </div>
-      <p className="text-xs font-semibold text-slate-600 truncate" title={attachment.name}>
-        {attachment.name}
-      </p>
-      <p className="text-[10px] text-slate-400 font-bold">{formatFileSize(attachment.size)}</p>
-      <div className="pt-2 print:hidden">
-        <a
-          href={attachment.dataUrl}
-          download={attachment.name}
-          target="_blank"
-          rel="noreferrer"
-          className="w-full py-2 bg-emerald-600 text-white rounded-xl text-[11px] font-black uppercase tracking-wider text-center transition-all flex items-center justify-center gap-1.5 shadow-sm hover:bg-emerald-700"
-        >
-          <Download size={13} /> Baixar Projeto
-        </a>
-      </div>
+    <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 space-y-2">
+      <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 block">
+        {title}
+      </span>
+      {attachment ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+            <FileText size={16} className="text-pro-teal shrink-0" />
+            <span className="truncate" title={attachment.name}>{attachment.name}</span>
+          </div>
+          <p className="text-[10px] text-slate-400">Tamanho: {formatFileSize(attachment.size)}</p>
+          <div className="pt-1 print:hidden">
+            <a
+              href={attachment.dataUrl}
+              download={attachment.name}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pro-teal text-white rounded-lg text-[11px] font-bold hover:bg-[#014e63] transition-all shadow-2xs"
+            >
+              <Download size={13} /> Baixar PDF
+            </a>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-rose-500 font-bold">Arquivo não anexado</p>
+      )}
     </div>
   );
 };

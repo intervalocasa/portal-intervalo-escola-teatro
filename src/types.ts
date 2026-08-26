@@ -357,6 +357,28 @@ export interface TechnicalDocumentAttachment {
   uploadedAt: string;
 }
 
+export type StageProductionStatus = 
+  | "em_analise_pedagogica"
+  | "analise_pedagogica_concluida"
+  | "em_analise_artistica"
+  | "analise_artistica_concluida"
+  | "em_analise_executiva"
+  | "projeto_em_execucao"
+  | "ajustes_solicitados"
+  | "rejeitada"
+  | "pendente"
+  | "em_analise"
+  | "aprovada";
+
+export interface StageStatusHistoryEntry {
+  status: StageProductionStatus;
+  statusLabel: string;
+  updatedAt: string;
+  updatedByUid?: string;
+  updatedByName?: string;
+  notes?: string;
+}
+
 export interface StageProductionProposal {
   id?: string;
   // Seção 1: Dados do Proponente
@@ -394,8 +416,10 @@ export interface StageProductionProposal {
   termsAccepted: boolean;
   termsAcceptedAt?: any;
 
-  // Metadados
-  status?: "pendente" | "em_analise" | "aprovada" | "ajustes_solicitados" | "rejeitada";
+  // Metadados e Etapas de Evolução
+  status?: StageProductionStatus;
+  statusHistory?: StageStatusHistoryEntry[];
+  currentStepIndex?: number;
   feedback?: string;
   reviewedByUid?: string;
   reviewedByName?: string;
