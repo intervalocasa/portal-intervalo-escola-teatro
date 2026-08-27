@@ -117,6 +117,7 @@ export interface User {
   migratedFrom?: string;
   migratedTo?: string;
   inactive?: boolean;
+  customMonthlyFee?: number;
 }
 
 export interface Class {

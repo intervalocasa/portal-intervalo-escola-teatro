@@ -54,8 +54,9 @@ export function calculateStudentMonthlyFee(
   studentId: string,
   migratedFrom: string | undefined,
   classes: Class[],
-  courses?: Course[]
-): { totalAmount: number; isAllExempt: boolean; activeClassesCount: number } {
+  courses?: Course[],
+  studentUser?: User
+): { totalAmount: number; isAllExempt: boolean; activeClassesCount: number; isCustomFee: boolean } {
   const activeStudentClasses = classes.filter(c => {
     if (!c.isActive || !c.studentIds) return false;
     const isEnrolled = c.studentIds.includes(studentId) || Boolean(migratedFrom && c.studentIds.includes(migratedFrom));
@@ -65,17 +66,42 @@ export function calculateStudentMonthlyFee(
   });
 
   if (activeStudentClasses.length === 0) {
-    return { totalAmount: 0, isAllExempt: false, activeClassesCount: 0 };
+    return { totalAmount: 0, isAllExempt: false, activeClassesCount: 0, isCustomFee: false };
   }
 
   let isAllExempt = true;
+  activeStudentClasses.forEach(c => {
+    const pType = c.studentPaymentTypes?.[studentId] || (migratedFrom ? c.studentPaymentTypes?.[migratedFrom] : undefined) || "Pagante";
+    if (pType !== "Isento") {
+      isAllExempt = false;
+    }
+  });
+
+  if (isAllExempt) {
+    return { totalAmount: 0, isAllExempt: true, activeClassesCount: activeStudentClasses.length, isCustomFee: false };
+  }
+
+  // Se o aluno possui um valor de mensalidade fixado/personalizado no perfil
+  if (
+    studentUser?.customMonthlyFee !== undefined &&
+    studentUser.customMonthlyFee !== null &&
+    !isNaN(Number(studentUser.customMonthlyFee)) &&
+    Number(studentUser.customMonthlyFee) >= 0
+  ) {
+    return {
+      totalAmount: Number(studentUser.customMonthlyFee),
+      isAllExempt: false,
+      activeClassesCount: activeStudentClasses.length,
+      isCustomFee: true
+    };
+  }
+
   let totalAmount = 0;
   const courseList = (courses && courses.length > 0) ? courses : DEFAULT_COURSES;
 
   activeStudentClasses.forEach(c => {
     const pType = c.studentPaymentTypes?.[studentId] || (migratedFrom ? c.studentPaymentTypes?.[migratedFrom] : undefined) || "Pagante";
     if (pType !== "Isento") {
-      isAllExempt = false;
       const matchedCourse = courseList.find(crs =>
         crs.name.trim().toLowerCase() === c.type.trim().toLowerCase() ||
         crs.id === c.type
@@ -93,7 +119,7 @@ export function calculateStudentMonthlyFee(
     }
   });
 
-  return { totalAmount, isAllExempt, activeClassesCount: activeStudentClasses.length };
+  return { totalAmount, isAllExempt, activeClassesCount: activeStudentClasses.length, isCustomFee: false };
 }
 
 export interface EnrollmentRecord {
@@ -135,6 +161,8 @@ export interface PaymentRecord {
   paidAt?: string;
   notes?: string;
   isExempt?: boolean;
+  hasStudentCustomFee?: boolean;
+  studentCustomMonthlyFee?: number;
 }
 
 const MONTHS_PT = [
@@ -166,6 +194,7 @@ export const FinancialManagementView = ({
   const [isResetting, setIsResetting] = useState(false);
   const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
   const [tempAmountValue, setTempAmountValue] = useState<string>("");
+  const [fixAmountForFuture, setFixAmountForFuture] = useState<boolean>(true);
 
   // Subscribe to payments in Firestore
   useEffect(() => {
@@ -298,8 +327,11 @@ export const FinancialManagementView = ({
         student.id,
         student.migratedFrom,
         classes,
-        courses
+        courses,
+        student
       );
+
+      const hasStudentCustomFee = student.customMonthlyFee !== undefined && student.customMonthlyFee !== null && !isNaN(Number(student.customMonthlyFee));
 
       const classNameStr = activeStudentClasses.map(c => `${c.type} (${c.code})`).join(", ");
 
@@ -327,7 +359,9 @@ export const FinancialManagementView = ({
           paymentMethod: saved.paymentMethod,
           paidAt: saved.paidAt,
           notes: saved.notes,
-          isExempt: isAllExempt
+          isExempt: isAllExempt,
+          hasStudentCustomFee,
+          studentCustomMonthlyFee: hasStudentCustomFee ? Number(student.customMonthlyFee) : undefined
         });
       } else {
         records.push({
@@ -341,7 +375,9 @@ export const FinancialManagementView = ({
           amount: finalAmount,
           dueDate: defaultDueDate,
           status: isAllExempt ? "Isento" : "Pendente",
-          isExempt: isAllExempt
+          isExempt: isAllExempt,
+          hasStudentCustomFee,
+          studentCustomMonthlyFee: hasStudentCustomFee ? Number(student.customMonthlyFee) : undefined
         });
       }
     });
@@ -424,7 +460,8 @@ export const FinancialManagementView = ({
           student.id,
           student.migratedFrom,
           classes,
-          courses
+          courses,
+          student
         );
 
         const payRef = doc(db, "pagamentos", docId);
@@ -454,24 +491,74 @@ export const FinancialManagementView = ({
   };
 
   // Save manual custom amount edit for a payment record
-  const handleSaveCustomAmount = async (record: PaymentRecord, newAmount: number) => {
+  const handleSaveCustomAmount = async (record: PaymentRecord, newAmount: number, fixForFuture: boolean) => {
     try {
       setIsUpdatingPayment(record.id);
+      const validAmount = isNaN(newAmount) || newAmount < 0 ? 0 : newAmount;
+
+      // 1. Atualiza no registro de pagamento do mês corrente no Firestore
       const payRef = doc(db, "pagamentos", record.id);
       await setDoc(payRef, {
         studentId: record.studentId,
         studentName: record.studentName,
         month: record.month,
         year: record.year,
-        amount: isNaN(newAmount) ? 0 : newAmount,
+        amount: validAmount,
         dueDate: record.dueDate,
         status: record.status,
         updatedAt: serverTimestamp()
       }, { merge: true });
+
+      // 2. Se fixForFuture estiver marcado, fixa como nova mensalidade no perfil do aluno
+      if (fixForFuture) {
+        const userRef = doc(db, "users", record.studentId);
+        await updateDoc(userRef, {
+          customMonthlyFee: validAmount,
+          updatedAt: serverTimestamp()
+        });
+      }
+
       setEditingAmountId(null);
     } catch (err) {
       console.error("Erro ao salvar valor customizado:", err);
       alert("Erro ao salvar novo valor de mensalidade.");
+    } finally {
+      setIsUpdatingPayment(null);
+    }
+  };
+
+  // Restore standard course fee calculation for a student
+  const handleRestoreCourseStandardFee = async (record: PaymentRecord) => {
+    if (!window.confirm(`Deseja remover o valor fixado de ${record.studentName} e restaurar o cálculo padrão do curso?`)) {
+      return;
+    }
+    try {
+      setIsUpdatingPayment(record.id);
+      const userRef = doc(db, "users", record.studentId);
+      await updateDoc(userRef, {
+        customMonthlyFee: null,
+        updatedAt: serverTimestamp()
+      });
+
+      const studentObj = users.find(u => u.id === record.studentId);
+      const { totalAmount } = calculateStudentMonthlyFee(
+        record.studentId,
+        studentObj?.migratedFrom,
+        classes,
+        courses,
+        studentObj ? { ...studentObj, customMonthlyFee: undefined } : undefined
+      );
+
+      const payRef = doc(db, "pagamentos", record.id);
+      await setDoc(payRef, {
+        amount: totalAmount,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      setEditingAmountId(null);
+    } catch (err) {
+      console.error("Erro ao restaurar valor padrão:", err);
+      alert("Erro ao restaurar valor padrão do curso.");
     } finally {
       setIsUpdatingPayment(null);
     }
@@ -1241,53 +1328,85 @@ export const FinancialManagementView = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-6 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 justify-between md:justify-end">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 justify-between md:justify-end">
                           <div className="text-left md:text-right">
-                            <div className="text-xs font-black text-slate-800 flex items-center justify-start md:justify-end gap-1.5">
-                              {editingAmountId === item.id ? (
-                                <div className="flex items-center gap-1">
+                            {editingAmountId === item.id ? (
+                              <div className="flex flex-col items-start md:items-end gap-2 bg-slate-50 p-2.5 rounded-xl border border-[#016a86]/30 shadow-sm">
+                                <div className="flex items-center gap-1.5">
                                   <span className="text-xs text-slate-500 font-bold">R$</span>
                                   <input
                                     type="number"
+                                    step="0.01"
                                     value={tempAmountValue}
                                     onChange={(e) => setTempAmountValue(e.target.value)}
-                                    className="w-20 px-2 py-0.5 border border-slate-300 rounded font-bold text-xs text-slate-800 focus:outline-none focus:border-[#016a86]"
+                                    className="w-24 px-2 py-1 bg-white border border-slate-300 rounded-lg font-black text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#016a86]"
                                     autoFocus
                                   />
                                   <button
-                                    onClick={() => handleSaveCustomAmount(item, Number(tempAmountValue))}
-                                    className="p-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors"
+                                    onClick={() => handleSaveCustomAmount(item, Number(tempAmountValue), fixAmountForFuture)}
+                                    disabled={isUpdatingPayment === item.id}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
                                     title="Salvar valor"
                                   >
                                     <Check size={12} />
+                                    <span>Salvar</span>
                                   </button>
                                   <button
                                     onClick={() => setEditingAmountId(null)}
-                                    className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
+                                    className="p-1 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-lg transition-colors cursor-pointer"
                                     title="Cancelar"
                                   >
-                                    <XCircle size={12} />
+                                    <XCircle size={14} />
                                   </button>
                                 </div>
-                              ) : (
-                                <>
+
+                                <label className="flex items-center gap-1.5 text-[11px] text-slate-700 font-semibold cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={fixAmountForFuture}
+                                    onChange={(e) => setFixAmountForFuture(e.target.checked)}
+                                    className="w-3.5 h-3.5 text-[#016a86] rounded border-slate-300 focus:ring-[#016a86] cursor-pointer"
+                                  />
+                                  <span>Fixar valor dali por diante (próximos meses)</span>
+                                </label>
+
+                                {item.hasStudentCustomFee && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRestoreCourseStandardFee(item)}
+                                    disabled={isUpdatingPayment === item.id}
+                                    className="text-[10px] text-rose-600 hover:text-rose-700 font-bold underline transition-colors cursor-pointer"
+                                  >
+                                    Restaurar valor padrão do curso
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="text-xs font-black text-slate-800 flex items-center justify-start md:justify-end gap-1.5">
                                   <span>R$ {item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                                   <button
                                     onClick={() => {
                                       setEditingAmountId(item.id);
                                       setTempAmountValue(String(item.amount));
+                                      setFixAmountForFuture(true);
                                     }}
-                                    className="p-0.5 text-slate-400 hover:text-[#016a86] transition-colors cursor-pointer"
-                                    title="Editar valor de mensalidade"
+                                    className="p-1 text-slate-400 hover:text-[#016a86] hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                                    title="Editar ou fixar valor da mensalidade"
                                   >
-                                    <Edit3 size={12} />
+                                    <Edit3 size={13} />
                                   </button>
-                                </>
-                              )}
-                            </div>
-                            <div className="text-[11px] font-bold text-slate-400 mt-0.5">
-                              Vencimento: {item.dueDate ? item.dueDate.split("-").reverse().join("/") : "10/" + String(selectedMonth + 1).padStart(2, '0')}
-                            </div>
+                                </div>
+                                {item.hasStudentCustomFee && (
+                                  <span className="inline-block text-[9px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded mt-0.5" title="Valor customizado fixado para os próximos meses">
+                                    Valor fixado
+                                  </span>
+                                )}
+                                <div className="text-[11px] font-bold text-slate-400 mt-0.5">
+                                  Vencimento: {item.dueDate ? item.dueDate.split("-").reverse().join("/") : "10/" + String(selectedMonth + 1).padStart(2, '0')}
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           {/* Quick Action Button to toggle payment status */}

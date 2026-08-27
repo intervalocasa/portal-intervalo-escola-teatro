@@ -192,6 +192,20 @@ export const UserDetailsView = ({
             </>
           )}
 
+          {user.role === "Aluno" && user.customMonthlyFee !== undefined && user.customMonthlyFee !== null && (
+            <div className="col-span-full mb-2 mt-4 bg-teal-50/50 p-4 rounded-xl border border-teal-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="text-[10px] font-black text-[#016a86] uppercase tracking-[0.2em]">Mensalidade Personalizada / Fixada</h4>
+                <p className="text-xs text-slate-600 font-medium mt-0.5">Valor fixado automaticamente para as cobranças mensais deste aluno</p>
+              </div>
+              <div className="text-left sm:text-right">
+                <span className="text-base font-black text-[#016a86]">
+                  R$ {Number(user.customMonthlyFee).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          )}
+
           {(user.role === "Aluno" || user.role === "Professor" || user.role === "Diretor Pedagógico e Professor") && (
             <div className="col-span-full mt-4">
               <h4 className="text-[10px] font-black text-[#016a86] uppercase tracking-[0.2em] border-l-4 border-[#016a86] pl-3 mb-4">
