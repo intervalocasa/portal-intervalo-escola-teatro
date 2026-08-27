@@ -269,28 +269,39 @@ export const FinancialManagementView = ({
 
   // Payments computation
   const paymentRecords = useMemo<PaymentRecord[]>(() => {
-    const studentUsers = users.filter(u => u.role === "Aluno" && !u.inactive);
+    const studentUsers = users.filter(u => {
+      if (u.role !== "Aluno") return false;
+      if (u.inactive || (u as any).status === "Inativo" || (u as any).status === "Desmatriculado") return false;
+      return true;
+    });
 
-    return studentUsers.map(student => {
-      const docId = `${student.id}_${selectedYear}_${selectedMonth + 1}`;
-      const saved = dbPayments[docId] || (student.migratedFrom ? dbPayments[`${student.migratedFrom}_${selectedYear}_${selectedMonth + 1}`] : undefined);
+    const records: PaymentRecord[] = [];
 
-      const { totalAmount: calculatedAmount, isAllExempt, activeClassesCount } = calculateStudentMonthlyFee(
-        student.id,
-        student.migratedFrom,
-        classes,
-        courses
-      );
-
+    studentUsers.forEach(student => {
       const activeStudentClasses = classes.filter(c => {
-        if (!c.studentIds) return false;
+        if (!c.isActive || !c.studentIds) return false;
         const isEnrolled = c.studentIds.includes(student.id) || Boolean(student.migratedFrom && c.studentIds.includes(student.migratedFrom));
         if (!isEnrolled) return false;
         const status = c.studentEnrollmentStatuses?.[student.id] || (student.migratedFrom ? c.studentEnrollmentStatuses?.[student.migratedFrom] : undefined);
         return status !== "Inativo" && status !== "Trancado";
       });
 
-      const classNameStr = activeStudentClasses.map(c => `${c.type} (${c.code})`).join(", ") || (activeClassesCount === 0 ? "Sem turma ativa" : "Sem turma");
+      // Se o aluno não está matriculado em nenhuma turma ativa, NÃO exibir na lista de pagamentos
+      if (activeStudentClasses.length === 0) {
+        return;
+      }
+
+      const docId = `${student.id}_${selectedYear}_${selectedMonth + 1}`;
+      const saved = dbPayments[docId] || (student.migratedFrom ? dbPayments[`${student.migratedFrom}_${selectedYear}_${selectedMonth + 1}`] : undefined);
+
+      const { totalAmount: calculatedAmount, isAllExempt } = calculateStudentMonthlyFee(
+        student.id,
+        student.migratedFrom,
+        classes,
+        courses
+      );
+
+      const classNameStr = activeStudentClasses.map(c => `${c.type} (${c.code})`).join(", ");
 
       const defaultDueDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-10`;
 
@@ -302,7 +313,7 @@ export const FinancialManagementView = ({
       }
 
       if (saved) {
-        return {
+        records.push({
           id: docId,
           studentId: student.id,
           studentName: student.name,
@@ -317,23 +328,25 @@ export const FinancialManagementView = ({
           paidAt: saved.paidAt,
           notes: saved.notes,
           isExempt: isAllExempt
-        };
+        });
+      } else {
+        records.push({
+          id: docId,
+          studentId: student.id,
+          studentName: student.name,
+          studentCpf: student.cpf || "Não informado",
+          className: classNameStr,
+          month: selectedMonth,
+          year: selectedYear,
+          amount: finalAmount,
+          dueDate: defaultDueDate,
+          status: isAllExempt ? "Isento" : "Pendente",
+          isExempt: isAllExempt
+        });
       }
+    });
 
-      return {
-        id: docId,
-        studentId: student.id,
-        studentName: student.name,
-        studentCpf: student.cpf || "Não informado",
-        className: classNameStr,
-        month: selectedMonth,
-        year: selectedYear,
-        amount: finalAmount,
-        dueDate: defaultDueDate,
-        status: isAllExempt ? "Isento" : "Pendente",
-        isExempt: isAllExempt
-      };
-    }).sort((a, b) => a.studentName.localeCompare(b.studentName, "pt-BR"));
+    return records.sort((a, b) => a.studentName.localeCompare(b.studentName, "pt-BR"));
   }, [users, classes, courses, dbPayments, selectedMonth, selectedYear]);
 
   // Filtered Payments
@@ -391,7 +404,20 @@ export const FinancialManagementView = ({
     }
     setIsResetting(true);
     try {
-      const studentUsers = users.filter(u => u.role === "Aluno" && !u.inactive);
+      const studentUsers = users.filter(u => {
+        if (u.role !== "Aluno") return false;
+        if (u.inactive || (u as any).status === "Inativo" || (u as any).status === "Desmatriculado") return false;
+        
+        const activeStudentClasses = classes.filter(c => {
+          if (!c.isActive || !c.studentIds) return false;
+          const isEnrolled = c.studentIds.includes(u.id) || Boolean(u.migratedFrom && c.studentIds.includes(u.migratedFrom));
+          if (!isEnrolled) return false;
+          const status = c.studentEnrollmentStatuses?.[u.id] || (u.migratedFrom ? c.studentEnrollmentStatuses?.[u.migratedFrom] : undefined);
+          return status !== "Inativo" && status !== "Trancado";
+        });
+
+        return activeStudentClasses.length > 0;
+      });
       const promises = studentUsers.map(async (student) => {
         const docId = `${student.id}_${selectedYear}_${selectedMonth + 1}`;
         const { totalAmount, isAllExempt } = calculateStudentMonthlyFee(
