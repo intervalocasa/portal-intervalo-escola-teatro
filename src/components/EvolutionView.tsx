@@ -269,22 +269,15 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                           <div className="text-center md:pl-8 md:border-l border-slate-100">
                             <p className="text-[10px] font-black text-pro-teal uppercase tracking-widest mb-1">Status de Evolução</p>
                             <div className="flex items-center gap-3">
-                              {finalGrade ? (
+                              {finalGrade !== null ? (
                                 <div className="flex flex-col items-end max-w-[200px]">
                                   <div className={`font-black text-slate-900 uppercase tracking-tight text-right leading-tight ${isProfessional ? 'text-2xl' : 'text-sm md:text-base'}`}>
                                     {(() => {
                                       if (isProfessional) {
                                         return (
-                                          <div className="flex items-center gap-2" onClick={(e) => {
-                                            e.stopPropagation();
-                                            setMeetingModal({ 
-                                              classId: period.classId, 
-                                              className: classes.find(c => c.id === period.classId)?.code || "Turma"
-                                            });
-                                          }}>
-                                            <div className="bg-slate-100 p-2 rounded-xl text-slate-400 hover:text-pro-teal transition-all">
-                                              <Drama size={32} />
-                                            </div>
+                                          <div className="flex items-baseline gap-1">
+                                            <span>{finalGrade.toFixed(1)}</span>
+                                            <span className="text-xs text-slate-400 font-bold">/ 10</span>
                                           </div>
                                         );
                                       }
@@ -297,12 +290,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                       return item.studentLabel;
                                     })()}
                                   </div>
-                                  {!isProfessional && (
-                                    <p className="text-[8px] font-black text-pro-teal uppercase opacity-50">Média Calculada</p>
-                                  )}
-                                  {isProfessional && (
-                                    <p className="text-[8px] font-black text-slate-400 uppercase">Ver Notas</p>
-                                  )}
+                                  <p className="text-[8px] font-black text-pro-teal uppercase opacity-60">Média Calculada</p>
                                 </div>
                               ) : (
                                 <p className="text-4xl font-black text-slate-100">—</p>
@@ -342,7 +330,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                 </button>
                               )}
 
-                              {finalGrade && !isProfessional && (
+                              {finalGrade !== null && (
                                 <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isExpanded ? 'bg-pro-teal text-white' : 'bg-slate-50 text-slate-400'}`}>
                                   <TrendingUp size={20} className={isExpanded ? "rotate-180 transition-transform" : ""} />
                                 </div>
@@ -468,57 +456,73 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                           ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                               {PROFESSIONAL_COURSE_CRITERIA.map(c => {
-                                const selfNote = Number(period.selfAssessment?.notes?.[c.id] || 0);
-                                const profNote = Number(period.professorDiary?.grades?.[c.id] || 0);
-                                const compAvg = (selfNote * weightSelf + profNote * weightProf) / 4;
+                                const selfNote = period.selfAssessment?.notes?.[c.id] !== undefined ? Number(period.selfAssessment.notes[c.id]) : null;
+                                const profGradeRaw = period.professorDiary?.grades?.[c.id];
+                                const profNote = profGradeRaw !== undefined && profGradeRaw !== "" ? Number(profGradeRaw) : null;
                                 
-                                const selfLabel = SCALES.find(s => Number(selfNote) === Number(s.value))?.label || 
-                                                   SCALES.slice().reverse().find(s => Number(selfNote) >= Number(s.value))?.label || 
-                                                   "Sem avaliação";
+                                const hasBoth = selfNote !== null && profNote !== null;
+                                const compAvg = hasBoth ? (selfNote * weightSelf + profNote * weightProf) / 4 : (profNote ?? selfNote ?? 0);
+                                
+                                const selfLabel = selfNote !== null 
+                                  ? (SCALES.find(s => Number(selfNote) === Number(s.value))?.label || 
+                                     SCALES.slice().reverse().find(s => Number(selfNote) >= Number(s.value))?.label || 
+                                     `${selfNote}/10`)
+                                  : "Sem avaliação";
 
                                 return (
-                                  <div key={c.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
+                                  <div key={c.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3.5 hover:border-slate-200 transition-colors" onClick={(e) => e.stopPropagation()}>
                                     <div>
-                                      <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight line-clamp-1">{c.label}</h4>
-                                      <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Competência</p>
+                                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight line-clamp-1">{c.label}</h4>
+                                      <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Competência de Montagem</p>
                                     </div>
-                                      <div className="flex flex-col sm:flex-row items-stretch sm:items-end justify-between border-t border-slate-50 pt-2 gap-3 sm:gap-2">
-                                        <div className="text-left flex-1 min-w-0">
-                                          <p className="text-[7px] font-black text-pro-teal uppercase opacity-60 truncate">Nota dada por mim</p>
-                                          <p className="text-[10px] font-black text-pro-teal leading-none line-clamp-2">{selfLabel}</p>
-                                        </div>
-  
-                                        {period.professorDiary?.status === "concluido" ? (
-                                          <div className="text-center flex-1 border-x border-slate-50 px-2 min-w-0">
-                                            <p className="text-[7px] font-black text-slate-400 uppercase truncate">Média Final</p>
-                                            <p className="text-lg font-black text-slate-800 leading-none">{compAvg.toFixed(1)}</p>
+                                    
+                                    <div className="grid grid-cols-3 items-center justify-between border-t border-slate-100 pt-3 gap-2">
+                                      {/* Autoavaliação do Aluno */}
+                                      <div className="text-left min-w-0">
+                                        <p className="text-[7px] font-black text-pro-teal uppercase opacity-75 truncate mb-0.5">Minha Nota</p>
+                                        {selfNote !== null ? (
+                                          <div className="flex items-baseline gap-0.5">
+                                            <span className="text-base font-black text-pro-teal">{selfNote}</span>
+                                            <span className="text-[9px] text-slate-400 font-bold">/10</span>
                                           </div>
                                         ) : (
-                                          <div className="text-center flex-1 border-x border-slate-50 px-2">
-                                            <p className="text-[7px] font-black text-slate-400 uppercase">Processo</p>
-                                            <p className="text-lg font-black text-slate-200 leading-none">—</p>
+                                          <span className="text-sm font-black text-slate-300">—</span>
+                                        )}
+                                        <p className="text-[8px] font-medium text-slate-500 truncate italic mt-0.5">{selfLabel}</p>
+                                      </div>
+
+                                      {/* Nota do Professor */}
+                                      <div className="text-center border-x border-slate-100 px-2 min-w-0">
+                                        <p className="text-[7px] font-black text-pro-orange uppercase opacity-90 truncate mb-0.5">Nota do Professor</p>
+                                        {profNote !== null ? (
+                                          <div className="flex items-baseline justify-center gap-0.5">
+                                            <span className="text-lg font-black text-pro-orange">{profNote}</span>
+                                            <span className="text-[9px] text-slate-400 font-bold">/10</span>
+                                          </div>
+                                        ) : (
+                                          <div className="space-y-0.5">
+                                            <span className="text-sm font-black text-slate-300">—</span>
+                                            <p className="text-[7px] text-slate-400 font-bold uppercase tracking-tighter">Pendente</p>
                                           </div>
                                         )}
-  
-                                        <div className="flex flex-row sm:flex-col gap-2 justify-end sm:justify-center">
-                                          <button 
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setMeetingModal({ 
-                                                classId: period.classId, 
-                                                className: classes.find(c => c.id === period.classId)?.code || period.className || "Turma"
-                                              });
-                                            }}
-                                            className="flex flex-row sm:flex-col items-center sm:items-end gap-2 sm:gap-0 group/mask"
-                                          >
-                                            <p className="text-[7px] font-black text-slate-400 uppercase group-hover/mask:text-pro-teal transition-colors text-right hidden sm:block">Professor</p>
-                                            <div className="bg-slate-50 p-1 rounded-lg text-slate-200 group-hover/mask:bg-pro-teal group-hover/mask:text-white transition-all">
-                                              <Drama size={16} />
-                                            </div>
-                                            <p className="text-[7px] font-black text-slate-400 uppercase sm:hidden">Notas</p>
-                                          </button>
-                                        </div>
                                       </div>
+
+                                      {/* Média Consolidada */}
+                                      <div className="text-right min-w-0">
+                                        <p className="text-[7px] font-black text-slate-500 uppercase truncate mb-0.5">Média Final</p>
+                                        {period.professorDiary?.status === "concluido" && hasBoth ? (
+                                          <div className="flex items-baseline justify-end gap-0.5">
+                                            <span className="text-lg font-black text-slate-900">{compAvg.toFixed(1)}</span>
+                                            <span className="text-[9px] text-slate-400 font-bold">/10</span>
+                                          </div>
+                                        ) : (
+                                          <div className="space-y-0.5">
+                                            <span className="text-sm font-black text-slate-300">—</span>
+                                            <p className="text-[7px] text-slate-400 font-bold uppercase tracking-tighter">Em processo</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
                                     
                                     {period.professorDiary?.criteriaObs?.[c.id] && (
                                       <button
@@ -531,7 +535,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                             teacherPhoto: teacher?.photo
                                           });
                                         }}
-                                        className="mt-3 w-full p-2 bg-slate-50 hover:bg-pro-teal/5 border border-slate-100 rounded-xl flex items-center justify-center gap-2 group/comment transition-all active:scale-[0.98]"
+                                        className="mt-1 w-full p-2.5 bg-slate-50 hover:bg-pro-teal/5 border border-slate-100 rounded-xl flex items-center justify-center gap-2 group/comment transition-all active:scale-[0.98]"
                                       >
                                         {users.find(u => u.id === period.professorDiary.teacherId)?.photo ? (
                                           <img 
@@ -544,8 +548,8 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                             <UserIcon size={9} />
                                           </div>
                                         )}
-                                        <span className="text-[8px] font-black text-slate-500 group-hover/comment:text-pro-teal uppercase tracking-widest transition-colors">
-                                          Comentário
+                                        <span className="text-[8px] font-black text-slate-600 group-hover/comment:text-pro-teal uppercase tracking-widest transition-colors">
+                                          Comentário do Professor
                                         </span>
                                       </button>
                                     )}
