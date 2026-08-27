@@ -108,42 +108,99 @@ export const LessonPlansView = ({
     return getTeacherLinkedClasses(currentUser, users, classes, isGestor);
   }, [currentUser, users, classes, isGestor]);
 
-  // Teachers list for filter (professors + anyone who submitted plans)
+  const allowedClassIds = useMemo(() => {
+    return new Set(teacherClasses.map(c => c.id));
+  }, [teacherClasses]);
+
+  // Base list of visible plans: gestors see all, professors see only their linked classes or plans they authored
+  const userVisiblePlans = useMemo(() => {
+    if (isGestor) return lessonPlans;
+    const currentUserId = currentUser?.uid || currentUser?.id;
+    const currentTeacherId = currentTeacherUser?.id;
+    const currentTeacherName = currentTeacherUser?.name?.trim().toLowerCase();
+    const currentArtisticName = currentTeacherUser?.artisticName?.trim().toLowerCase();
+
+    return lessonPlans.filter(p => {
+      // 1. Plan belongs to a class linked to this teacher
+      if (p.classId && allowedClassIds.has(p.classId)) return true;
+
+      // 2. Plan was authored by this teacher
+      if (p.teacherId && (p.teacherId === currentUserId || p.teacherId === currentTeacherId)) return true;
+
+      // 3. Plan teacherName matches
+      if (p.teacherName) {
+        const pName = p.teacherName.trim().toLowerCase();
+        if (currentTeacherName && pName === currentTeacherName) return true;
+        if (currentArtisticName && pName === currentArtisticName) return true;
+      }
+
+      return false;
+    });
+  }, [lessonPlans, isGestor, allowedClassIds, currentUser?.uid, currentUser?.id, currentTeacherUser]);
+
+  // Teachers list for filter (for gestors: all teachers; for professors: only teachers linked to their classes / themselves)
   const teachersList = useMemo(() => {
     const list: { id: string; name: string }[] = [];
     const seen = new Set<string>();
 
-    // 1. Registered teachers in users list
-    users.forEach(u => {
-      if (u.role === "Professor" || u.role === "Diretor Pedagógico e Professor" || (u as any).isTeacher) {
-        const dName = getUserDisplayName(u) || u.name || u.email || "Professor";
-        if (!seen.has(u.id)) {
-          seen.add(u.id);
-          list.push({ id: u.id, name: dName });
+    if (isGestor) {
+      // 1. Registered teachers in users list
+      users.forEach(u => {
+        if (u.role === "Professor" || u.role === "Diretor Pedagógico e Professor" || (u as any).isTeacher) {
+          const dName = getUserDisplayName(u) || u.name || u.email || "Professor";
+          if (!seen.has(u.id)) {
+            seen.add(u.id);
+            list.push({ id: u.id, name: dName });
+          }
         }
-      }
-    });
+      });
 
-    // 2. Teachers found in existing lesson plans
-    lessonPlans.forEach(p => {
-      if (p.teacherId && !seen.has(p.teacherId)) {
-        seen.add(p.teacherId);
-        list.push({ id: p.teacherId, name: p.teacherName || "Professor" });
-      } else if (!p.teacherId && p.teacherName && !seen.has(p.teacherName)) {
-        seen.add(p.teacherName);
-        list.push({ id: p.teacherName, name: p.teacherName });
+      // 2. Teachers found in existing lesson plans
+      userVisiblePlans.forEach(p => {
+        if (p.teacherId && !seen.has(p.teacherId)) {
+          seen.add(p.teacherId);
+          list.push({ id: p.teacherId, name: p.teacherName || "Professor" });
+        } else if (!p.teacherId && p.teacherName && !seen.has(p.teacherName)) {
+          seen.add(p.teacherName);
+          list.push({ id: p.teacherName, name: p.teacherName });
+        }
+      });
+    } else {
+      // For professors: show their own name first
+      if (currentTeacherUser) {
+        const myName = getUserDisplayName(currentTeacherUser) || currentTeacherUser.name || "Meu Usuário";
+        seen.add(currentTeacherUser.id);
+        list.push({ id: currentTeacherUser.id, name: `${myName} (Você)` });
+      } else if (currentUser) {
+        const myName = currentUser.displayName || currentUser.email || "Meu Usuário";
+        const myId = currentUser.uid || currentUser.id;
+        seen.add(myId);
+        list.push({ id: myId, name: `${myName} (Você)` });
       }
-    });
+
+      // Teachers of their linked classes
+      teacherClasses.forEach(c => {
+        (c.teacherIds || []).forEach(tid => {
+          if (!seen.has(tid)) {
+            seen.add(tid);
+            const u = users.find(user => user.id === tid);
+            if (u) {
+              list.push({ id: u.id, name: getUserDisplayName(u) || u.name || "Professor" });
+            }
+          }
+        });
+      });
+    }
 
     return list.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }, [users, lessonPlans]);
+  }, [users, userVisiblePlans, isGestor, currentTeacherUser, currentUser, teacherClasses]);
 
   // Years list for filter
   const yearsList = useMemo(() => {
     const currentYr = new Date().getFullYear();
     const yearsSet = new Set<string>([String(currentYr), String(currentYr - 1), String(currentYr + 1)]);
     
-    lessonPlans.forEach(p => {
+    userVisiblePlans.forEach(p => {
       if (typeof p.date === "string") {
         const y = p.date.split("-")[0];
         if (y && y.length === 4) yearsSet.add(y);
@@ -153,7 +210,7 @@ export const LessonPlansView = ({
     });
 
     return Array.from(yearsSet).sort((a, b) => Number(b) - Number(a));
-  }, [lessonPlans]);
+  }, [userVisiblePlans]);
 
   // Load skills and lesson plans
   const loadData = async () => {
@@ -212,6 +269,12 @@ export const LessonPlansView = ({
   const handleSubmitPlan = async (formData: LessonPlanFormValues, planId?: string) => {
     setIsSubmitting(true);
     try {
+      if (!isGestor && !allowedClassIds.has(formData.classId)) {
+        showToast("Você só pode criar planos de aula para turmas vinculadas ao seu usuário.", "error");
+        setIsSubmitting(false);
+        return;
+      }
+
       const targetClass = classes.find(c => c.id === formData.classId);
       const teacherName = getUserDisplayName(currentTeacherUser) || currentUser?.displayName || currentUser?.name || "Professor";
 
@@ -292,7 +355,7 @@ export const LessonPlansView = ({
 
   // Filtered History
   const filteredPlans = useMemo(() => {
-    return lessonPlans.filter(p => {
+    return userVisiblePlans.filter(p => {
       // 1. Filter by Teacher
       const matchTeacher = filterTeacherId === "ALL" || 
         p.teacherId === filterTeacherId || 
@@ -337,7 +400,7 @@ export const LessonPlansView = ({
 
       return matchTeacher && matchClass && matchMonth && matchYear && matchQuery;
     });
-  }, [lessonPlans, filterTeacherId, filterClassId, filterMonth, filterYear, searchQuery, users]);
+  }, [userVisiblePlans, filterTeacherId, filterClassId, filterMonth, filterYear, searchQuery, users]);
 
   return (
     <motion.div
@@ -368,9 +431,13 @@ export const LessonPlansView = ({
             <UserCircle size={14} className="text-pro-yellow" />
             {getUserDisplayName(currentTeacherUser) || currentUser?.email || "Gestão"}
           </div>
-          {isGestor && (
+          {isGestor ? (
             <span className="px-3 py-1 bg-amber-400 text-slate-950 font-black text-[10px] uppercase tracking-widest rounded-full shadow-md shadow-amber-950/20">
               Acesso Gestor / Direção Pedagógica
+            </span>
+          ) : (
+            <span className="px-3 py-1 bg-emerald-400 text-slate-950 font-black text-[10px] uppercase tracking-widest rounded-full shadow-md shadow-emerald-950/20">
+              Portal do Professor • {teacherClasses.length} {teacherClasses.length === 1 ? "turma vinculada" : "turmas vinculadas"}
             </span>
           )}
         </div>
@@ -385,7 +452,7 @@ export const LessonPlansView = ({
                 : "text-white/80 hover:text-white hover:bg-white/10"
             }`}
           >
-            <BookOpen size={16} /> Planos Submetidos ({lessonPlans.length})
+            <BookOpen size={16} /> Planos Submetidos ({userVisiblePlans.length})
           </button>
           <button
             onClick={() => {
@@ -398,7 +465,7 @@ export const LessonPlansView = ({
                 : "text-white/80 hover:text-white hover:bg-white/10"
             }`}
           >
-            <Plus size={16} /> {editingPlan ? "Editar Plano" : "Novo Plano"}
+            <Plus size={16} /> {editingPlan ? "Editar Plano" : "Novo Plano de Aula"}
           </button>
         </div>
       </div>
@@ -526,8 +593,10 @@ export const LessonPlansView = ({
                       onChange={(e) => setFilterClassId(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:border-pro-teal transition-all"
                     >
-                      <option value="ALL">Todas as Turmas ({classes.length})</option>
-                      {classes.map(c => (
+                      <option value="ALL">
+                        {isGestor ? `Todas as Turmas (${classes.length})` : `Minhas Turmas Vinculadas (${teacherClasses.length})`}
+                      </option>
+                      {(isGestor ? classes : teacherClasses).map(c => (
                         <option key={c.id} value={c.id}>
                           {c.code} - {c.type}
                         </option>

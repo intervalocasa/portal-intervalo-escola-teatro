@@ -365,6 +365,36 @@ export const LessonPlanForm = ({
     setShowExpiredModal(false);
   };
 
+  if (teacherClasses.length === 0) {
+    return (
+      <div className="bg-white p-8 md:p-14 rounded-[32px] border border-slate-100 shadow-sm text-center space-y-5">
+        <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+          <AlertTriangle size={32} />
+        </div>
+        <div className="max-w-md mx-auto space-y-2">
+          <h3 className="text-xl font-black text-slate-800 tracking-tight">Nenhuma turma vinculada ao seu usuário</h3>
+          <p className="text-xs text-slate-500 font-bold leading-relaxed">
+            Para registrar novos planos de aula, é necessário que seu usuário esteja cadastrado e vinculado como professor responsável por pelo menos uma turma ativa no sistema.
+          </p>
+          <p className="text-[11px] text-teal-700 bg-teal-50/70 p-3 rounded-2xl border border-teal-100 font-medium">
+            Solicite à coordenação pedagógica ou gestão da escola para vincular você às suas turmas correspondentes.
+          </p>
+        </div>
+        {onCancel && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-black uppercase tracking-wider transition-all"
+            >
+              Voltar aos Planos Submetidos
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <>
       <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-8">

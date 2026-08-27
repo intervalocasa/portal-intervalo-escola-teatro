@@ -447,8 +447,6 @@ export async function fetchLessonPlans(filters?: {
 
     if (filters?.classId) {
       q = query(collection(db, collectionPath), where("classId", "==", filters.classId));
-    } else if (filters?.teacherId && !filters.isGestor) {
-      q = query(collection(db, collectionPath), where("teacherId", "==", filters.teacherId));
     }
 
     const snap = await getDocs(q);
@@ -519,10 +517,35 @@ export function getTeacherLinkedClasses(
   if (matchedUser?.id) validIds.add(matchedUser.id);
   if (matchedUser?.migratedFrom) validIds.add(matchedUser.migratedFrom);
   if (matchedUser?.migratedTo) validIds.add(matchedUser.migratedTo);
+  if (userEmail) validIds.add(userEmail);
+
+  const matchedName = matchedUser?.name?.trim().toLowerCase();
+  const matchedArtisticName = matchedUser?.artisticName?.trim().toLowerCase();
 
   return classes.filter(c => {
-    if (!c.isActive) return false;
+    if (c.isActive === false) return false;
     const teacherIds = c.teacherIds || [];
-    return teacherIds.some(id => validIds.has(id));
+    
+    // 1. Checa por ID / Email direto no array teacherIds
+    const matchId = teacherIds.some(id => validIds.has(id));
+    if (matchId) return true;
+
+    // 2. Checa campo singular teacherId
+    if ((c as any).teacherId && validIds.has((c as any).teacherId)) return true;
+
+    // 3. Checa correspondência por nome nos teacherIds ou professores cadastrados
+    if (matchedName || matchedArtisticName) {
+      const hasNameMatch = teacherIds.some(tid => {
+        const u = users.find(user => user.id === tid);
+        if (!u) return false;
+        const uName = u.name?.trim().toLowerCase();
+        const uArt = u.artisticName?.trim().toLowerCase();
+        return (matchedName && (uName === matchedName || uArt === matchedName)) ||
+               (matchedArtisticName && (uName === matchedArtisticName || uArt === matchedArtisticName));
+      });
+      if (hasNameMatch) return true;
+    }
+
+    return false;
   });
 }
