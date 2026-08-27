@@ -135,6 +135,12 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     };
   }, [currentUser, users]);
 
+  const availableCreators = useMemo(() => {
+    return (users || [])
+      .filter((u) => !u.inactive)
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }, [users]);
+
   const [bookings, setBookings] = useState<ExperimentalClassBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -152,6 +158,12 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const [deletingBooking, setDeletingBooking] = useState<ExperimentalClassBooking | null>(null);
   const [receiptViewingBooking, setReceiptViewingBooking] = useState<ExperimentalClassBooking | null>(null);
   const [uploadingBookingId, setUploadingBookingId] = useState<string | null>(null);
+
+  // Quick Modal for Adjusting Creator ("Quem fez o agendamento")
+  const [adjustCreatorBooking, setAdjustCreatorBooking] = useState<ExperimentalClassBooking | null>(null);
+  const [adjustCreatorUid, setAdjustCreatorUid] = useState<string>("");
+  const [adjustCreatorName, setAdjustCreatorName] = useState<string>("");
+  const [adjustCreatorRole, setAdjustCreatorRole] = useState<string>("");
 
   // Manual Confirmation Modal State
   const [manualConfirmBooking, setManualConfirmBooking] = useState<ExperimentalClassBooking | null>(null);
@@ -175,6 +187,11 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const [status, setStatus] = useState<"PAGAMENTO_PENDENTE" | "AGENDAMENTO_CONFIRMADO">("PAGAMENTO_PENDENTE");
   const [notes, setNotes] = useState("");
   const [manualConfirmationReason, setManualConfirmationReason] = useState("");
+
+  // Booking Creator State in Form
+  const [bookingCreatedByUid, setBookingCreatedByUid] = useState<string>("");
+  const [bookingCreatedByName, setBookingCreatedByName] = useState<string>("");
+  const [bookingCreatedByRole, setBookingCreatedByRole] = useState<string>("");
 
   // Reschedule state
   const [rescheduleReason, setRescheduleReason] = useState("");
@@ -219,6 +236,17 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setManualConfirmationReason("");
     setRescheduleReason("");
     setEditingBooking(null);
+
+    const defaultName = loggedUser?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "Usuário do Sistema";
+    let defaultRole = "Gestor / Auxiliar";
+    if (loggedUser?.role) {
+      if (loggedUser.role === "GESTOR" || loggedUser.role === "gestor") defaultRole = "Gestor";
+      else if (loggedUser.role === "AUXILIAR" || loggedUser.role === "auxiliar") defaultRole = "Auxiliar Administrativo";
+      else defaultRole = loggedUser.role;
+    }
+    setBookingCreatedByUid(currentUser?.uid || loggedUser?.id || "");
+    setBookingCreatedByName(defaultName);
+    setBookingCreatedByRole(defaultRole);
   };
 
   const openCreateModal = () => {
@@ -240,7 +268,49 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setNotes(booking.notes || "");
     setManualConfirmationReason(booking.manualConfirmationReason || "");
     setRescheduleReason("");
+    
+    setBookingCreatedByUid(booking.createdByUid || "");
+    setBookingCreatedByName(booking.createdByName || "");
+    setBookingCreatedByRole(booking.createdByRole || "");
+
     setIsCreateModalOpen(false);
+  };
+
+  // Open Quick Modal to adjust creator
+  const openAdjustCreatorModal = (booking: ExperimentalClassBooking) => {
+    setAdjustCreatorBooking(booking);
+    setAdjustCreatorUid(booking.createdByUid || "");
+    setAdjustCreatorName(booking.createdByName || "");
+    setAdjustCreatorRole(booking.createdByRole || "");
+  };
+
+  // Save adjusted creator directly
+  const handleSaveAdjustCreator = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustCreatorBooking) return;
+
+    if (!adjustCreatorName.trim()) {
+      showNotification?.("Informe o nome de quem realizou o agendamento.", "Campo Obrigatório", "error");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await updateDoc(doc(db, "experimental_classes", adjustCreatorBooking.id), {
+        createdByUid: adjustCreatorUid || null,
+        createdByName: adjustCreatorName.trim(),
+        createdByRole: adjustCreatorRole.trim() || null,
+        updatedAt: serverTimestamp()
+      });
+
+      showNotification?.("Responsável pelo agendamento atualizado com sucesso!", "Sucesso", "success");
+      setAdjustCreatorBooking(null);
+    } catch (err) {
+      console.error("Error updating booking creator:", err);
+      showNotification?.("Erro ao atualizar responsável pelo agendamento.", "Erro", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Open Triage Modal
@@ -367,9 +437,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setIsSubmitting(true);
     try {
       const computedDayOfWeek = dayOfWeek || getDayOfWeekInPortuguese(date);
-      const creatorName = loggedUser?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "Usuário do Sistema";
-      let creatorRole = "Gestor / Auxiliar";
-      if (loggedUser?.role) {
+      const creatorName = bookingCreatedByName.trim() || loggedUser?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "Usuário do Sistema";
+      let creatorRole = bookingCreatedByRole.trim() || "Gestor / Auxiliar";
+      if (!bookingCreatedByRole.trim() && loggedUser?.role) {
         if (loggedUser.role === "GESTOR" || loggedUser.role === "gestor") creatorRole = "Gestor";
         else if (loggedUser.role === "AUXILIAR" || loggedUser.role === "auxiliar") creatorRole = "Auxiliar Administrativo";
         else creatorRole = loggedUser.role;
@@ -390,7 +460,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         rescheduleCount: 0,
         rescheduleHistory: [],
         notes: notes.trim() || null,
-        createdByUid: currentUser?.uid || loggedUser?.id || null,
+        createdByUid: bookingCreatedByUid || currentUser?.uid || loggedUser?.id || null,
         createdByName: creatorName,
         createdByRole: creatorRole,
         // Initial triage is null (scheduled)
@@ -474,6 +544,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         rescheduleCount: updatedRescheduleCount,
         rescheduleHistory: updatedRescheduleHistory,
         notes: notes.trim() || null,
+        createdByUid: bookingCreatedByUid || null,
+        createdByName: bookingCreatedByName.trim() || null,
+        createdByRole: bookingCreatedByRole.trim() || null,
         updatedAt: serverTimestamp()
       };
 
@@ -1096,15 +1169,33 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                           {b.studentEmail && <span className="flex items-center gap-1"><Mail size={10} />{b.studentEmail}</span>}
                         </div>
                       )}
-                      {b.createdByName && (
-                        <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1 mt-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100 w-fit">
-                          <User size={10} className="text-slate-400 shrink-0" />
+                      {b.createdByName ? (
+                        <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5 mt-1 bg-slate-50 hover:bg-slate-100 px-2 py-1 rounded-lg border border-slate-200/80 w-fit transition-colors">
+                          <User size={11} className="text-[#016a86] shrink-0" />
                           <span>
                             Agendado por <strong className="text-slate-700 font-bold">{b.createdByName}</strong>
                             {b.createdByRole ? ` (${b.createdByRole})` : ""}
                             {formatCreationTimestamp(b.createdAt) && ` em ${formatCreationTimestamp(b.createdAt)}`}
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => openAdjustCreatorModal(b)}
+                            className="p-0.5 text-slate-400 hover:text-[#016a86] hover:bg-white rounded transition-colors cursor-pointer ml-0.5"
+                            title="Ajustar manualmente quem fez o agendamento"
+                          >
+                            <Pencil size={10} />
+                          </button>
                         </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openAdjustCreatorModal(b)}
+                          className="text-[10px] text-[#016a86] hover:text-teal-800 font-bold flex items-center gap-1 mt-1 bg-teal-50/70 hover:bg-teal-100/70 px-2 py-0.5 rounded-md border border-dashed border-teal-300 w-fit transition-colors cursor-pointer"
+                          title="Definir quem agendou esta aula experimental"
+                        >
+                          <User size={10} className="text-[#016a86]" />
+                          <span>+ Definir quem agendou</span>
+                        </button>
                       )}
                       {(b.rescheduleCount || 0) > 0 && (
                         <span className="inline-flex items-center gap-1 mt-1 text-[9px] font-black uppercase text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
@@ -1437,15 +1528,35 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   )}
                 </div>
 
-                {b.createdByName && (
-                  <div className="text-[10px] font-medium text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 flex items-center gap-1">
-                    <User size={12} className="text-slate-400 shrink-0" />
-                    <span>
-                      Agendado por <strong className="text-slate-700 font-bold">{b.createdByName}</strong>
-                      {b.createdByRole ? ` (${b.createdByRole})` : ""}
-                      {formatCreationTimestamp(b.createdAt) && ` em ${formatCreationTimestamp(b.createdAt)}`}
-                    </span>
+                {b.createdByName ? (
+                  <div className="text-[10px] font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 p-2 rounded-lg border border-slate-200/80 flex items-center justify-between gap-1 transition-colors">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <User size={12} className="text-[#016a86] shrink-0" />
+                      <span className="truncate">
+                        Agendado por <strong className="text-slate-700 font-bold">{b.createdByName}</strong>
+                        {b.createdByRole ? ` (${b.createdByRole})` : ""}
+                        {formatCreationTimestamp(b.createdAt) && ` em ${formatCreationTimestamp(b.createdAt)}`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAdjustCreatorModal(b)}
+                      className="p-1 text-slate-400 hover:text-[#016a86] hover:bg-white rounded transition-colors cursor-pointer shrink-0"
+                      title="Ajustar manualmente quem fez o agendamento"
+                    >
+                      <Pencil size={11} />
+                    </button>
                   </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openAdjustCreatorModal(b)}
+                    className="w-full text-[10px] text-[#016a86] hover:text-teal-800 font-bold flex items-center justify-center gap-1.5 p-2 bg-teal-50/70 hover:bg-teal-100/70 rounded-lg border border-dashed border-teal-300 transition-colors cursor-pointer"
+                    title="Definir quem agendou esta aula experimental"
+                  >
+                    <User size={12} className="text-[#016a86]" />
+                    <span>+ Definir quem fez o agendamento</span>
+                  </button>
                 )}
 
                 {b.manualConfirmationReason && (
@@ -1858,6 +1969,79 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   </motion.div>
                 )}
 
+                {/* Responsável pelo Agendamento */}
+                <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-[#016a86] flex items-center gap-1.5">
+                      <User size={13} /> Responsável pelo Agendamento
+                    </label>
+                    <span className="text-[10px] font-bold text-slate-400">Atribuição de registro</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                        Selecionar da Equipe
+                      </label>
+                      <select
+                        value={
+                          availableCreators.some(u => u.id === bookingCreatedByUid || (u.name && u.name === bookingCreatedByName))
+                            ? (availableCreators.find(u => u.id === bookingCreatedByUid || u.name === bookingCreatedByName)?.id || "")
+                            : "custom"
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "custom") {
+                            setBookingCreatedByUid("");
+                          } else {
+                            const selected = availableCreators.find(u => u.id === val);
+                            if (selected) {
+                              setBookingCreatedByUid(selected.id);
+                              setBookingCreatedByName(selected.name);
+                              setBookingCreatedByRole(selected.role || "Gestor");
+                            }
+                          }
+                        }}
+                        className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
+                      >
+                        <option value="custom">✏️ Digitar manualmente / Outro</option>
+                        {availableCreators.map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.role || "Usuário"})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                        Nome de quem agendou *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ex: João Silva"
+                        value={bookingCreatedByName}
+                        onChange={(e) => setBookingCreatedByName(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                      Cargo / Função (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Gestor, Auxiliar Administrativo, Recepção..."
+                      value={bookingCreatedByRole}
+                      onChange={(e) => setBookingCreatedByRole(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
+                    />
+                  </div>
+                </div>
+
                 {/* Observações */}
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
@@ -2231,6 +2415,123 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                       Salvar Triagem
                     </button>
                   </div>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ADJUST CREATOR MODAL */}
+        {adjustCreatorBooking && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-100 relative space-y-5"
+            >
+              <button
+                type="button"
+                onClick={() => setAdjustCreatorBooking(null)}
+                className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-teal-50 text-[#016a86] rounded-2xl">
+                  <User size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">Ajustar Quem Fez o Agendamento</h3>
+                  <p className="text-xs font-bold text-slate-400">
+                    Aluno(a): <strong className="text-slate-700">{adjustCreatorBooking.studentName}</strong> • {formatDateBR(adjustCreatorBooking.date)} ({adjustCreatorBooking.classTime})
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveAdjustCreator} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                    Selecionar Membro da Equipe
+                  </label>
+                  <select
+                    value={
+                      availableCreators.some(u => u.id === adjustCreatorUid || (u.name && u.name === adjustCreatorName))
+                        ? (availableCreators.find(u => u.id === adjustCreatorUid || u.name === adjustCreatorName)?.id || "")
+                        : "custom"
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "custom") {
+                        setAdjustCreatorUid("");
+                      } else {
+                        const selected = availableCreators.find(u => u.id === val);
+                        if (selected) {
+                          setAdjustCreatorUid(selected.id);
+                          setAdjustCreatorName(selected.name);
+                          setAdjustCreatorRole(selected.role || "Gestor");
+                        }
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
+                  >
+                    <option value="custom">✏️ Digitar manualmente / Outro</option>
+                    {availableCreators.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.role || "Usuário"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                    Nome de Quem Fez o Agendamento *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: João Silva"
+                    value={adjustCreatorName}
+                    onChange={(e) => setAdjustCreatorName(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                    Cargo / Função (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Gestor, Auxiliar Administrativo, Atendimento..."
+                    value={adjustCreatorRole}
+                    onChange={(e) => setAdjustCreatorRole(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setAdjustCreatorBooking(null)}
+                    className="px-5 py-2.5 text-slate-500 hover:bg-slate-100 rounded-xl text-xs font-bold uppercase transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-6 py-2.5 bg-pro-teal hover:bg-teal-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    {isSubmitting ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    Salvar Alteração
+                  </button>
                 </div>
               </form>
             </motion.div>
