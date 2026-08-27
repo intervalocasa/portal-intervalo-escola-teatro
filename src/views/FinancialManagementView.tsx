@@ -50,6 +50,47 @@ const DEFAULT_COURSES: Course[] = [
   { id: "pratica_profissional_montagem", name: "Prática Profissional de Montagem", monthlyFee: 320 },
 ];
 
+export function isStudentUserInactive(student: User | any): boolean {
+  if (!student) return true;
+  if (student.inactive === true || student.isInactive === true || student.active === false || student.desmatriculado === true) {
+    return true;
+  }
+  const status = String(student.status || "").trim().toLowerCase();
+  if (status === "inativo" || status === "desmatriculado" || status === "trancado" || status === "cancelado") {
+    return true;
+  }
+  const enrollmentStatus = String(student.enrollmentStatus || "").trim().toLowerCase();
+  if (enrollmentStatus === "inativo" || enrollmentStatus === "desmatriculado" || enrollmentStatus === "trancado" || enrollmentStatus === "cancelado") {
+    return true;
+  }
+  if (student.migratedTo) {
+    return true; // legacy migrated marker document
+  }
+  return false;
+}
+
+export function getActiveClassesForStudent(student: User | any, classes: Class[]): Class[] {
+  if (!student || isStudentUserInactive(student)) return [];
+  
+  const studentId = student.id;
+  const migratedFrom = student.migratedFrom;
+
+  return classes.filter(c => {
+    if (c.isActive === false || !c.studentIds) return false;
+    const isEnrolled = c.studentIds.includes(studentId) || Boolean(migratedFrom && c.studentIds.includes(migratedFrom));
+    if (!isEnrolled) return false;
+    
+    const status = c.studentEnrollmentStatuses?.[studentId] || (migratedFrom ? c.studentEnrollmentStatuses?.[migratedFrom] : undefined);
+    if (status) {
+      const sLower = String(status).trim().toLowerCase();
+      if (sLower === "inativo" || sLower === "trancado" || sLower === "desmatriculado" || sLower === "cancelado" || sLower === "removido") {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
 export function calculateStudentMonthlyFee(
   studentId: string,
   migratedFrom: string | undefined,
@@ -57,13 +98,14 @@ export function calculateStudentMonthlyFee(
   courses?: Course[],
   studentUser?: User
 ): { totalAmount: number; isAllExempt: boolean; activeClassesCount: number; isCustomFee: boolean } {
-  const activeStudentClasses = classes.filter(c => {
-    if (!c.isActive || !c.studentIds) return false;
-    const isEnrolled = c.studentIds.includes(studentId) || Boolean(migratedFrom && c.studentIds.includes(migratedFrom));
-    if (!isEnrolled) return false;
-    const status = c.studentEnrollmentStatuses?.[studentId] || (migratedFrom ? c.studentEnrollmentStatuses?.[migratedFrom] : undefined);
-    return status !== "Inativo" && status !== "Trancado";
-  });
+  if (studentUser && isStudentUserInactive(studentUser)) {
+    return { totalAmount: 0, isAllExempt: false, activeClassesCount: 0, isCustomFee: false };
+  }
+
+  const activeStudentClasses = getActiveClassesForStudent(
+    studentUser || ({ id: studentId, migratedFrom, role: "Aluno" } as User),
+    classes
+  );
 
   if (activeStudentClasses.length === 0) {
     return { totalAmount: 0, isAllExempt: false, activeClassesCount: 0, isCustomFee: false };
@@ -224,13 +266,16 @@ export const FinancialManagementView = ({
         const student = studentUsers.find(u => u.id === sId) || users.find(u => u.id === sId);
         if (!student) return;
 
-        const isStudentInactive = Boolean(student.inactive);
-        const isClassActive = Boolean(c.isActive);
+        const isStudentInactive = isStudentUserInactive(student);
+        const isClassActive = c.isActive !== false;
         const studentClassStatus = c.studentEnrollmentStatuses?.[sId] ||
                                     (student.id && c.studentEnrollmentStatuses?.[student.id]) ||
                                     (student.migratedFrom && c.studentEnrollmentStatuses?.[student.migratedFrom]);
 
-        const isStudentClassInactive = studentClassStatus === "Inativo" || studentClassStatus === "Trancado";
+        const isStudentClassInactive = Boolean(
+          studentClassStatus && 
+          ["inativo", "trancado", "desmatriculado", "cancelado", "removido"].includes(String(studentClassStatus).trim().toLowerCase())
+        );
         const isEnrollmentActive = !isStudentInactive && isClassActive && !isStudentClassInactive;
 
         const dateStr = c.enrollmentDates?.[sId] || 
@@ -300,20 +345,14 @@ export const FinancialManagementView = ({
   const paymentRecords = useMemo<PaymentRecord[]>(() => {
     const studentUsers = users.filter(u => {
       if (u.role !== "Aluno") return false;
-      if (u.inactive || (u as any).status === "Inativo" || (u as any).status === "Desmatriculado") return false;
+      if (isStudentUserInactive(u)) return false;
       return true;
     });
 
     const records: PaymentRecord[] = [];
 
     studentUsers.forEach(student => {
-      const activeStudentClasses = classes.filter(c => {
-        if (!c.isActive || !c.studentIds) return false;
-        const isEnrolled = c.studentIds.includes(student.id) || Boolean(student.migratedFrom && c.studentIds.includes(student.migratedFrom));
-        if (!isEnrolled) return false;
-        const status = c.studentEnrollmentStatuses?.[student.id] || (student.migratedFrom ? c.studentEnrollmentStatuses?.[student.migratedFrom] : undefined);
-        return status !== "Inativo" && status !== "Trancado";
-      });
+      const activeStudentClasses = getActiveClassesForStudent(student, classes);
 
       // Se o aluno não está matriculado em nenhuma turma ativa, NÃO exibir na lista de pagamentos
       if (activeStudentClasses.length === 0) {
@@ -323,7 +362,7 @@ export const FinancialManagementView = ({
       const docId = `${student.id}_${selectedYear}_${selectedMonth + 1}`;
       const saved = dbPayments[docId] || (student.migratedFrom ? dbPayments[`${student.migratedFrom}_${selectedYear}_${selectedMonth + 1}`] : undefined);
 
-      const { totalAmount: calculatedAmount, isAllExempt } = calculateStudentMonthlyFee(
+      const { totalAmount: calculatedAmount, isAllExempt, isCustomFee } = calculateStudentMonthlyFee(
         student.id,
         student.migratedFrom,
         classes,
@@ -331,7 +370,7 @@ export const FinancialManagementView = ({
         student
       );
 
-      const hasStudentCustomFee = student.customMonthlyFee !== undefined && student.customMonthlyFee !== null && !isNaN(Number(student.customMonthlyFee));
+      const hasStudentCustomFee = isCustomFee || (student.customMonthlyFee !== undefined && student.customMonthlyFee !== null && !isNaN(Number(student.customMonthlyFee)));
 
       const classNameStr = activeStudentClasses.map(c => `${c.type} (${c.code})`).join(", ");
 
@@ -340,7 +379,7 @@ export const FinancialManagementView = ({
       let finalAmount = calculatedAmount;
       if (isAllExempt) {
         finalAmount = 0;
-      } else if (saved && saved.amount !== undefined && saved.amount !== null) {
+      } else if (saved && saved.amount !== undefined && saved.amount !== null && !hasStudentCustomFee) {
         finalAmount = Number(saved.amount);
       }
 
@@ -435,23 +474,15 @@ export const FinancialManagementView = ({
 
   // Recalculate & Reset Payment Values for selected month/year
   const handleResetPaymentValues = async () => {
-    if (!window.confirm(`Deseja recalcular e resetar todos os valores de mensalidades de ${MONTHS_PT[selectedMonth]} de ${selectedYear} com base nos cursos vinculados às turmas dos alunos?`)) {
+    if (!window.confirm(`Deseja recalcular e sincronizar todos os valores de mensalidades de ${MONTHS_PT[selectedMonth]} de ${selectedYear} com base nos cursos vinculados às turmas e mensalidades fixadas dos alunos?`)) {
       return;
     }
     setIsResetting(true);
     try {
       const studentUsers = users.filter(u => {
         if (u.role !== "Aluno") return false;
-        if (u.inactive || (u as any).status === "Inativo" || (u as any).status === "Desmatriculado") return false;
-        
-        const activeStudentClasses = classes.filter(c => {
-          if (!c.isActive || !c.studentIds) return false;
-          const isEnrolled = c.studentIds.includes(u.id) || Boolean(u.migratedFrom && c.studentIds.includes(u.migratedFrom));
-          if (!isEnrolled) return false;
-          const status = c.studentEnrollmentStatuses?.[u.id] || (u.migratedFrom ? c.studentEnrollmentStatuses?.[u.migratedFrom] : undefined);
-          return status !== "Inativo" && status !== "Trancado";
-        });
-
+        if (isStudentUserInactive(u)) return false;
+        const activeStudentClasses = getActiveClassesForStudent(u, classes);
         return activeStudentClasses.length > 0;
       });
       const promises = studentUsers.map(async (student) => {
@@ -1331,51 +1362,60 @@ export const FinancialManagementView = ({
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 justify-between md:justify-end">
                           <div className="text-left md:text-right">
                             {editingAmountId === item.id ? (
-                              <div className="flex flex-col items-start md:items-end gap-2 bg-slate-50 p-2.5 rounded-xl border border-[#016a86]/30 shadow-sm">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs text-slate-500 font-bold">R$</span>
+                              <div className="flex flex-col items-start md:items-end gap-2.5 bg-slate-50 p-3 rounded-2xl border-2 border-[#016a86]/40 shadow-md">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-600 font-extrabold">R$</span>
                                   <input
                                     type="number"
                                     step="0.01"
+                                    min="0"
                                     value={tempAmountValue}
                                     onChange={(e) => setTempAmountValue(e.target.value)}
-                                    className="w-24 px-2 py-1 bg-white border border-slate-300 rounded-lg font-black text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#016a86]"
+                                    className="w-28 px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl font-black text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#016a86]"
                                     autoFocus
+                                    placeholder="0,00"
                                   />
                                   <button
                                     onClick={() => handleSaveCustomAmount(item, Number(tempAmountValue), fixAmountForFuture)}
                                     disabled={isUpdatingPayment === item.id}
-                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                                     title="Salvar valor"
                                   >
-                                    <Check size={12} />
+                                    <Check size={14} />
                                     <span>Salvar</span>
                                   </button>
                                   <button
                                     onClick={() => setEditingAmountId(null)}
-                                    className="p-1 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-lg transition-colors cursor-pointer"
+                                    className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-xl transition-colors cursor-pointer"
                                     title="Cancelar"
                                   >
-                                    <XCircle size={14} />
+                                    <XCircle size={16} />
                                   </button>
                                 </div>
 
-                                <label className="flex items-center gap-1.5 text-[11px] text-slate-700 font-semibold cursor-pointer select-none">
-                                  <input
-                                    type="checkbox"
-                                    checked={fixAmountForFuture}
-                                    onChange={(e) => setFixAmountForFuture(e.target.checked)}
-                                    className="w-3.5 h-3.5 text-[#016a86] rounded border-slate-300 focus:ring-[#016a86] cursor-pointer"
-                                  />
-                                  <span>Fixar valor dali por diante (próximos meses)</span>
-                                </label>
+                                <div className="bg-white/80 p-2 rounded-xl border border-slate-200 w-full text-left md:text-right space-y-1">
+                                  <label className="flex items-center gap-2 text-xs text-slate-800 font-bold cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={fixAmountForFuture}
+                                      onChange={(e) => setFixAmountForFuture(e.target.checked)}
+                                      className="w-4 h-4 text-[#016a86] rounded border-slate-300 focus:ring-[#016a86] cursor-pointer"
+                                    />
+                                    <span>Fixar valor dali por diante (próximos meses)</span>
+                                  </label>
+                                  <p className="text-[10px] text-slate-500 font-medium pl-6">
+                                    {fixAmountForFuture 
+                                      ? "✓ O novo valor será automaticamente carregado nos próximos meses na gestão financeira." 
+                                      : "Apenas aplicará a este mês específico."}
+                                  </p>
+                                </div>
 
                                 {item.hasStudentCustomFee && (
                                   <button
                                     type="button"
                                     onClick={() => handleRestoreCourseStandardFee(item)}
                                     disabled={isUpdatingPayment === item.id}
-                                    className="text-[10px] text-rose-600 hover:text-rose-700 font-bold underline transition-colors cursor-pointer"
+                                    className="text-[11px] text-rose-600 hover:text-rose-700 font-bold underline transition-colors cursor-pointer self-start md:self-end"
                                   >
                                     Restaurar valor padrão do curso
                                   </button>
@@ -1383,7 +1423,7 @@ export const FinancialManagementView = ({
                               </div>
                             ) : (
                               <div>
-                                <div className="text-xs font-black text-slate-800 flex items-center justify-start md:justify-end gap-1.5">
+                                <div className="text-sm font-black text-slate-800 flex items-center justify-start md:justify-end gap-1.5">
                                   <span>R$ {item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                                   <button
                                     onClick={() => {
@@ -1391,16 +1431,19 @@ export const FinancialManagementView = ({
                                       setTempAmountValue(String(item.amount));
                                       setFixAmountForFuture(true);
                                     }}
-                                    className="p-1 text-slate-400 hover:text-[#016a86] hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
-                                    title="Editar ou fixar valor da mensalidade"
+                                    className="p-1.5 text-slate-400 hover:text-[#016a86] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                    title="Editar ou fixar novo valor de mensalidade"
                                   >
-                                    <Edit3 size={13} />
+                                    <Edit3 size={14} />
                                   </button>
                                 </div>
                                 {item.hasStudentCustomFee && (
-                                  <span className="inline-block text-[9px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded mt-0.5" title="Valor customizado fixado para os próximos meses">
-                                    Valor fixado
-                                  </span>
+                                  <div className="flex justify-start md:justify-end">
+                                    <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-teal-800 bg-teal-50 border border-teal-200/80 px-2 py-0.5 rounded-md mt-0.5" title="Valor customizado fixado para os próximos meses">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+                                      Valor fixado (R$ {item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })})
+                                    </span>
+                                  </div>
                                 )}
                                 <div className="text-[11px] font-bold text-slate-400 mt-0.5">
                                   Vencimento: {item.dueDate ? item.dueDate.split("-").reverse().join("/") : "10/" + String(selectedMonth + 1).padStart(2, '0')}

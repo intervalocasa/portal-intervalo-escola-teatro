@@ -37,7 +37,14 @@ import {
   MessageSquare,
   ArrowRight,
   Filter,
-  Users
+  Users,
+  DollarSign,
+  Wallet,
+  TrendingUp,
+  Coins,
+  Award,
+  FileSpreadsheet,
+  Info
 } from "lucide-react";
 import { 
   collection, 
@@ -137,7 +144,12 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
 
   const availableCreators = useMemo(() => {
     return (users || [])
-      .filter((u) => !u.inactive)
+      .filter((u) => {
+        if (!u || u.inactive) return false;
+        // Colaboradores: Professor, Diretor Pedagógico, Gestor, Auxiliar Administrativo (não Alunos)
+        if (u.role === "Aluno") return false;
+        return true;
+      })
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [users]);
 
@@ -146,6 +158,8 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"TODOS" | "PAGAMENTO_PENDENTE" | "AGENDAMENTO_CONFIRMADO">("TODOS");
   const [classFilter, setClassFilter] = useState<string>("TODOS");
+  const [creatorFilter, setCreatorFilter] = useState<string>("TODOS"); // "TODOS" | "MEUS" | id/name
+  const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
   
   // Specific Tabs Filter
   const [tabFilter, setTabFilter] = useState<
@@ -237,16 +251,24 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setRescheduleReason("");
     setEditingBooking(null);
 
-    const defaultName = loggedUser?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "Usuário do Sistema";
-    let defaultRole = "Gestor / Auxiliar";
-    if (loggedUser?.role) {
-      if (loggedUser.role === "GESTOR" || loggedUser.role === "gestor") defaultRole = "Gestor";
-      else if (loggedUser.role === "AUXILIAR" || loggedUser.role === "auxiliar") defaultRole = "Auxiliar Administrativo";
-      else defaultRole = loggedUser.role;
+    // Find matching collaborator from team or fallback to logged user
+    const defaultStaff = availableCreators.find(u => u.id === currentUser?.uid || u.id === loggedUser?.id) || availableCreators[0];
+    if (defaultStaff) {
+      setBookingCreatedByUid(defaultStaff.id);
+      setBookingCreatedByName(defaultStaff.name);
+      setBookingCreatedByRole(defaultStaff.role || "Gestor");
+    } else {
+      const defaultName = loggedUser?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "Usuário do Sistema";
+      let defaultRole = "Gestor";
+      if (loggedUser?.role) {
+        if (loggedUser.role === "GESTOR" || loggedUser.role === "gestor") defaultRole = "Gestor";
+        else if (loggedUser.role === "AUXILIAR" || loggedUser.role === "auxiliar") defaultRole = "Auxiliar Administrativo";
+        else defaultRole = loggedUser.role;
+      }
+      setBookingCreatedByUid(currentUser?.uid || loggedUser?.id || "");
+      setBookingCreatedByName(defaultName);
+      setBookingCreatedByRole(defaultRole);
     }
-    setBookingCreatedByUid(currentUser?.uid || loggedUser?.id || "");
-    setBookingCreatedByName(defaultName);
-    setBookingCreatedByRole(defaultRole);
   };
 
   const openCreateModal = () => {
@@ -269,9 +291,21 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setManualConfirmationReason(booking.manualConfirmationReason || "");
     setRescheduleReason("");
     
-    setBookingCreatedByUid(booking.createdByUid || "");
-    setBookingCreatedByName(booking.createdByName || "");
-    setBookingCreatedByRole(booking.createdByRole || "");
+    // Match creator with available registered collaborators
+    const matchedCreator = availableCreators.find(
+      u => (booking.createdByUid && u.id === booking.createdByUid) || 
+           (booking.createdByName && u.name.trim().toLowerCase() === booking.createdByName.trim().toLowerCase())
+    );
+
+    if (matchedCreator) {
+      setBookingCreatedByUid(matchedCreator.id);
+      setBookingCreatedByName(matchedCreator.name);
+      setBookingCreatedByRole(matchedCreator.role || "Colaborador");
+    } else {
+      setBookingCreatedByUid(booking.createdByUid || "");
+      setBookingCreatedByName(booking.createdByName || "");
+      setBookingCreatedByRole(booking.createdByRole || "");
+    }
 
     setIsCreateModalOpen(false);
   };
@@ -279,9 +313,27 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   // Open Quick Modal to adjust creator
   const openAdjustCreatorModal = (booking: ExperimentalClassBooking) => {
     setAdjustCreatorBooking(booking);
-    setAdjustCreatorUid(booking.createdByUid || "");
-    setAdjustCreatorName(booking.createdByName || "");
-    setAdjustCreatorRole(booking.createdByRole || "");
+
+    // Match creator with available registered collaborators
+    const matchedCreator = availableCreators.find(
+      u => (booking.createdByUid && u.id === booking.createdByUid) || 
+           (booking.createdByName && u.name.trim().toLowerCase() === booking.createdByName.trim().toLowerCase())
+    );
+
+    if (matchedCreator) {
+      setAdjustCreatorUid(matchedCreator.id);
+      setAdjustCreatorName(matchedCreator.name);
+      setAdjustCreatorRole(matchedCreator.role || "Colaborador");
+    } else if (availableCreators.length > 0) {
+      const defaultStaff = availableCreators.find(u => u.id === currentUser?.uid || u.id === loggedUser?.id) || availableCreators[0];
+      setAdjustCreatorUid(defaultStaff.id);
+      setAdjustCreatorName(defaultStaff.name);
+      setAdjustCreatorRole(defaultStaff.role || "Colaborador");
+    } else {
+      setAdjustCreatorUid(booking.createdByUid || "");
+      setAdjustCreatorName(booking.createdByName || "");
+      setAdjustCreatorRole(booking.createdByRole || "");
+    }
   };
 
   // Save adjusted creator directly
@@ -289,17 +341,22 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     e.preventDefault();
     if (!adjustCreatorBooking) return;
 
-    if (!adjustCreatorName.trim()) {
-      showNotification?.("Informe o nome de quem realizou o agendamento.", "Campo Obrigatório", "error");
+    const selectedUser = availableCreators.find(u => u.id === adjustCreatorUid);
+    if (!selectedUser && !adjustCreatorName.trim()) {
+      showNotification?.("Selecione um colaborador cadastrado no sistema.", "Campo Obrigatório", "error");
       return;
     }
+
+    const finalUid = selectedUser ? selectedUser.id : (adjustCreatorUid || null);
+    const finalName = selectedUser ? selectedUser.name : adjustCreatorName.trim();
+    const finalRole = selectedUser ? (selectedUser.role || "Colaborador") : (adjustCreatorRole.trim() || null);
 
     setIsSubmitting(true);
     try {
       await updateDoc(doc(db, "experimental_classes", adjustCreatorBooking.id), {
-        createdByUid: adjustCreatorUid || null,
-        createdByName: adjustCreatorName.trim(),
-        createdByRole: adjustCreatorRole.trim() || null,
+        createdByUid: finalUid,
+        createdByName: finalName,
+        createdByRole: finalRole,
         updatedAt: serverTimestamp()
       });
 
@@ -641,6 +698,34 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     }
   };
 
+  // Attendance and Revenue Helpers (R$ 25 per attended student)
+  const isBookingAttended = (b: ExperimentalClassBooking): boolean => {
+    if (b.attended === true) return true;
+    if (b.triageStatus && b.triageStatus !== "NAO_COMPARECEU" && b.attended !== false) return true;
+    return false;
+  };
+
+  const isBookingAbsent = (b: ExperimentalClassBooking): boolean => {
+    if (b.triageStatus === "NAO_COMPARECEU" || b.attended === false) return true;
+    return false;
+  };
+
+  const isBookingPending = (b: ExperimentalClassBooking): boolean => {
+    return !b.triageStatus && b.attended === undefined;
+  };
+
+  const isBookingCreatedByUser = (
+    b: ExperimentalClassBooking,
+    uid?: string,
+    name?: string,
+    email?: string
+  ): boolean => {
+    if (uid && b.createdByUid && b.createdByUid === uid) return true;
+    if (name && b.createdByName && b.createdByName.trim().toLowerCase() === name.trim().toLowerCase()) return true;
+    if (email && b.createdByName && b.createdByName.toLowerCase() === email.split("@")[0].toLowerCase()) return true;
+    return false;
+  };
+
   // Tab counts
   const totalCount = bookings.length;
   const agendadosCount = bookings.filter(b => !b.triageStatus).length;
@@ -651,6 +736,99 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
 
   const confirmedCount = bookings.filter(b => b.status === "AGENDAMENTO_CONFIRMADO").length;
   const pendingCount = bookings.filter(b => b.status === "PAGAMENTO_PENDENTE").length;
+
+  // Logged-in User Metrics & Revenue
+  const myBookings = useMemo(() => {
+    return bookings.filter(b => 
+      isBookingCreatedByUser(b, currentUser?.uid || loggedUser?.id, loggedUser?.name, currentUser?.email)
+    );
+  }, [bookings, currentUser, loggedUser]);
+
+  const myTotalCount = myBookings.length;
+  const myAttendedBookings = useMemo(() => myBookings.filter(isBookingAttended), [myBookings]);
+  const myAttendedCount = myAttendedBookings.length;
+  const myAbsentCount = useMemo(() => myBookings.filter(isBookingAbsent).length, [myBookings]);
+  const myPendingCount = useMemo(() => myBookings.filter(isBookingPending).length, [myBookings]);
+
+  // Revenue for user: exactly R$ 25 per ATTENDED student only!
+  const myGeneratedRevenue = myAttendedCount * 25;
+  const myProjectedRevenue = myPendingCount * 25;
+
+  // Total school metrics
+  const totalAttendedCount = useMemo(() => bookings.filter(isBookingAttended).length, [bookings]);
+  const totalAbsentCount = useMemo(() => bookings.filter(isBookingAbsent).length, [bookings]);
+  const totalPendingAttendanceCount = useMemo(() => bookings.filter(isBookingPending).length, [bookings]);
+  const totalGeneratedRevenue = totalAttendedCount * 25;
+
+  // Breakdown per Creator/User
+  const creatorRevenueStats = useMemo(() => {
+    const map = new Map<string, {
+      id: string;
+      name: string;
+      role: string;
+      total: number;
+      attended: number;
+      absent: number;
+      pending: number;
+      revenue: number;
+      projected: number;
+      isCurrentUser: boolean;
+    }>();
+
+    bookings.forEach(b => {
+      const isMe = isBookingCreatedByUser(b, currentUser?.uid || loggedUser?.id, loggedUser?.name, currentUser?.email);
+      const name = b.createdByName?.trim() || "Não Informado / Sistema";
+      const id = b.createdByUid || name.toLowerCase();
+      const role = b.createdByRole || (isMe ? loggedUser?.role || "Usuário" : "");
+
+      if (!map.has(id)) {
+        map.set(id, {
+          id,
+          name,
+          role,
+          total: 0,
+          attended: 0,
+          absent: 0,
+          pending: 0,
+          revenue: 0,
+          projected: 0,
+          isCurrentUser: isMe,
+        });
+      }
+
+      const item = map.get(id)!;
+      item.total += 1;
+      if (isBookingAttended(b)) {
+        item.attended += 1;
+        item.revenue += 25;
+      } else if (isBookingAbsent(b)) {
+        item.absent += 1;
+      } else {
+        item.pending += 1;
+        item.projected += 25;
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+      return b.attended - a.attended;
+    });
+  }, [bookings, currentUser, loggedUser]);
+
+  // List of distinct creators in bookings for the filter dropdown
+  const distinctBookingCreators = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number; isMe: boolean }>();
+    bookings.forEach(b => {
+      const isMe = isBookingCreatedByUser(b, currentUser?.uid || loggedUser?.id, loggedUser?.name, currentUser?.email);
+      const name = b.createdByName?.trim() || "Não Informado / Sistema";
+      const id = b.createdByUid || name;
+      if (!map.has(id)) {
+        map.set(id, { id, name, count: 0, isMe });
+      }
+      map.get(id)!.count += 1;
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [bookings, currentUser, loggedUser]);
 
   // Available Turmas (Class Groups) for Filter Dropdown
   const availableClassGroups = useMemo(() => {
@@ -709,9 +887,17 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         matchTab = b.triageStatus === "NAO_COMPARECEU" || b.attended === false;
       }
 
-      return matchSearch && matchStatus && matchClass && matchTab;
+      let matchCreator = true;
+      if (creatorFilter === "MEUS") {
+        matchCreator = isBookingCreatedByUser(b, currentUser?.uid || loggedUser?.id, loggedUser?.name, currentUser?.email);
+      } else if (creatorFilter !== "TODOS") {
+        matchCreator = (b.createdByUid && b.createdByUid === creatorFilter) ||
+                       (b.createdByName && b.createdByName.trim().toLowerCase() === creatorFilter.trim().toLowerCase());
+      }
+
+      return matchSearch && matchStatus && matchClass && matchTab && matchCreator;
     });
-  }, [bookings, searchTerm, statusFilter, classFilter, tabFilter]);
+  }, [bookings, searchTerm, statusFilter, classFilter, tabFilter, creatorFilter, currentUser, loggedUser]);
 
   return (
     <motion.div
@@ -730,22 +916,129 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               <h1 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Aulas Experimentais</h1>
             </div>
             <p className="text-slate-500 font-medium text-xs sm:text-sm mt-1">
-              Agendamentos, controle de presença e triagem pós-aula com acompanhamento de matrículas
+              Agendamentos, controle de presença, acompanhamento de matrículas e receita gerada
             </p>
           </div>
         </div>
 
-        <button
-          onClick={openCreateModal}
-          className="flex items-center justify-center gap-2 px-6 py-3.5 bg-pro-teal hover:bg-teal-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-teal-900/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
-        >
-          <Plus size={18} />
-          Novo Agendamento
-        </button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsRevenueModalOpen(true)}
+            className="flex items-center justify-center gap-2 px-5 py-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300/80 rounded-2xl font-black text-xs uppercase tracking-wider transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+          >
+            <DollarSign size={16} className="text-emerald-700" />
+            Extrato de Receita (R$ 25)
+          </button>
+
+          <button
+            onClick={openCreateModal}
+            className="flex items-center justify-center gap-2 px-6 py-3.5 bg-pro-teal hover:bg-teal-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-teal-900/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+          >
+            <Plus size={18} />
+            Novo Agendamento
+          </button>
+        </div>
+      </div>
+
+      {/* PAINEL DE RECEITA GERADA (AULAS EXPERIMENTAIS) */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-teal-950 text-white rounded-3xl p-5 sm:p-7 shadow-xl shadow-slate-950/20 border border-slate-700/50 relative overflow-hidden">
+        {/* Background glow effects */}
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 -mb-16 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6">
+          {/* Main User Revenue Block */}
+          <div className="space-y-3 max-w-2xl">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-black uppercase tracking-wider">
+                <Coins size={13} className="text-emerald-400" />
+                Receita de Aulas Experimentais
+              </span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-300">
+                <Info size={12} className="text-teal-400" />
+                R$ 25,00 por aluno que compareceu
+              </span>
+            </div>
+
+            <div>
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-widest block">
+                Sua Receita Gerada ({loggedUser?.name || "Você"})
+              </span>
+              <div className="flex items-baseline gap-3 mt-1 flex-wrap">
+                <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                  R$ {myGeneratedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-xs font-bold text-emerald-300 bg-emerald-950/80 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+                  {myAttendedCount} {myAttendedCount === 1 ? "aluno compareceu" : "alunos compareceram"} (R$ 25 cada)
+                </span>
+              </div>
+            </div>
+
+            {/* Breakdown Submetrics */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap text-xs text-slate-300 font-semibold pt-1">
+              <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl">
+                <Calendar size={13} className="text-teal-300" />
+                <span>{myTotalCount} agendados por você</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl">
+                <CheckCircle size={13} className="text-emerald-400" />
+                <span>{myAttendedCount} presenças (R$ {myGeneratedRevenue},00)</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl" title="Aguardando realização da aula e triagem de presença">
+                <Clock size={13} className="text-amber-300" />
+                <span>{myPendingCount} a realizar (R$ {myProjectedRevenue},00 previstos)</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl" title="Alunos que faltaram não geram receita (R$ 0,00)">
+                <UserX size={13} className="text-rose-400" />
+                <span>{myAbsentCount} faltas (R$ 0,00)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions & Total School Overview */}
+          <div className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end justify-between gap-3 bg-white/5 p-4 rounded-2xl border border-white/10 shrink-0">
+            <div className="text-left sm:text-right lg:text-right">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                Total Geral da Escola
+              </span>
+              <div className="text-xl font-black text-white mt-0.5">
+                R$ {totalGeneratedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <span className="text-[10px] font-medium text-slate-300">
+                {totalAttendedCount} presenças confirmadas no total
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setCreatorFilter(creatorFilter === "MEUS" ? "TODOS" : "MEUS")}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  creatorFilter === "MEUS"
+                    ? "bg-amber-400 text-slate-900 shadow-md shadow-amber-400/20"
+                    : "bg-white/15 hover:bg-white/25 text-white border border-white/20"
+                }`}
+              >
+                <Sparkles size={13} />
+                {creatorFilter === "MEUS" ? "Vendo Minhas Aulas" : "Ver Minhas Aulas"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsRevenueModalOpen(true)}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-pro-teal hover:bg-teal-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-teal-900/40 cursor-pointer"
+              >
+                <FileSpreadsheet size={14} />
+                Demonstrativo por Agendador
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Metrics Cards Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
         {/* Total */}
         <div 
           onClick={() => setTabFilter("TODOS")}
@@ -763,6 +1056,27 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           <span className="text-[10px] text-slate-400 font-medium block mt-0.5">Todos registros</span>
         </div>
 
+        {/* Minha Receita */}
+        <div 
+          onClick={() => setCreatorFilter(creatorFilter === "MEUS" ? "TODOS" : "MEUS")}
+          className={`cursor-pointer bg-white p-4 rounded-2xl border transition-all hover:shadow-md ${
+            creatorFilter === "MEUS" ? "border-emerald-600 ring-2 ring-emerald-600/20 shadow-sm bg-emerald-50/20" : "border-slate-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Minha Receita</span>
+            <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
+              <DollarSign size={16} />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-emerald-700 mt-2">
+            R$ {myGeneratedRevenue}
+          </p>
+          <span className="text-[10px] text-emerald-700/80 font-bold block mt-0.5">
+            {myAttendedCount} {myAttendedCount === 1 ? "presença" : "presenças"}
+          </span>
+        </div>
+
         {/* A Realizar / Agendados */}
         <div 
           onClick={() => setTabFilter("AGENDADOS")}
@@ -777,7 +1091,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
             </div>
           </div>
           <p className="text-2xl font-black text-amber-600 mt-2">{agendadosCount}</p>
-          <span className="text-[10px] text-amber-600/80 font-medium block mt-0.5">Sem triagem pós-aula</span>
+          <span className="text-[10px] text-amber-600/80 font-medium block mt-0.5">Sem triagem</span>
         </div>
 
         {/* Matriculados */}
@@ -813,7 +1127,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
             </div>
           </div>
           <p className="text-2xl font-black text-blue-600 mt-2">{aguardandoCount}</p>
-          <span className="text-[10px] text-blue-600/80 font-medium block mt-0.5">Aguardando resposta</span>
+          <span className="text-[10px] text-blue-600/80 font-medium block mt-0.5">Aguardando resp.</span>
         </div>
 
         {/* Não Matriculados */}
@@ -968,11 +1282,11 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
           {/* Search Input */}
-          <div className="relative flex-1 min-w-[240px]">
+          <div className="relative flex-1 min-w-[220px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
-              placeholder="Buscar por aluno, curso, turma ou telefone..."
+              placeholder="Buscar por aluno, curso, turma ou agendador..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-pro-teal"
@@ -989,8 +1303,49 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
             )}
           </div>
 
+          {/* Agendador / Responsável Filter Dropdown */}
+          <div className="flex items-center gap-2 min-w-[200px]">
+            <div className="relative w-full">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none flex items-center gap-1">
+                <User size={14} />
+              </div>
+              <select
+                value={creatorFilter}
+                onChange={(e) => setCreatorFilter(e.target.value)}
+                className={`w-full pl-9 pr-8 py-2.5 rounded-xl text-xs font-bold appearance-none transition-all cursor-pointer border focus:outline-none focus:border-pro-teal ${
+                  creatorFilter !== "TODOS"
+                    ? "bg-amber-50 border-amber-300 text-amber-950 font-black shadow-xs"
+                    : "bg-slate-50 border-slate-200 text-slate-700"
+                }`}
+              >
+                <option value="TODOS">Todos os Agendadores ({bookings.length})</option>
+                <option value="MEUS">⭐ Meus Agendamentos ({myTotalCount})</option>
+                {distinctBookingCreators
+                  .filter(c => !c.isMe)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.count})
+                    </option>
+                  ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                <Filter size={12} />
+              </div>
+            </div>
+            {creatorFilter !== "TODOS" && (
+              <button
+                type="button"
+                onClick={() => setCreatorFilter("TODOS")}
+                className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-all"
+                title="Limpar filtro de agendador"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
           {/* Turma (Class) Filter Dropdown */}
-          <div className="flex items-center gap-2 min-w-[220px]">
+          <div className="flex items-center gap-2 min-w-[200px]">
             <div className="relative w-full">
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-pro-teal pointer-events-none flex items-center gap-1">
                 <Users size={14} />
@@ -1030,7 +1385,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           {/* Payment Status Filter Buttons */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
             <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider whitespace-nowrap mr-1">
-              Status Pgto:
+              Pgto:
             </span>
             {(["TODOS", "PAGAMENTO_PENDENTE", "AGENDAMENTO_CONFIRMADO"] as const).map(f => (
               <button
@@ -1049,12 +1404,20 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         </div>
 
         {/* Active Filters Summary Chips */}
-        {(searchTerm || classFilter !== "TODOS" || statusFilter !== "TODOS" || tabFilter !== "TODOS") && (
+        {(searchTerm || classFilter !== "TODOS" || statusFilter !== "TODOS" || tabFilter !== "TODOS" || creatorFilter !== "TODOS") && (
           <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 text-xs flex-wrap gap-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                 Filtros Ativos ({filteredBookings.length} encontrados):
               </span>
+              {creatorFilter !== "TODOS" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-950 rounded-lg text-[11px] font-bold border border-amber-200">
+                  <User size={12} className="text-amber-800" /> Agendador: {creatorFilter === "MEUS" ? "Meus Agendamentos" : (distinctBookingCreators.find(c => c.id === creatorFilter)?.name || creatorFilter)}
+                  <button type="button" onClick={() => setCreatorFilter("TODOS")} className="hover:text-amber-950 ml-0.5">
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
               {classFilter !== "TODOS" && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-100 text-teal-800 rounded-lg text-[11px] font-bold border border-teal-200">
                   <Users size={12} /> Turma: {classFilter}
@@ -1101,8 +1464,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                 setClassFilter("TODOS");
                 setStatusFilter("TODOS");
                 setTabFilter("TODOS");
+                setCreatorFilter("TODOS");
               }}
-              className="text-[10px] font-black uppercase tracking-wider text-rose-600 hover:text-rose-700 hover:underline shrink-0 ml-auto"
+              className="text-[10px] font-black uppercase tracking-wider text-rose-600 hover:text-rose-700 hover:underline shrink-0 ml-auto cursor-pointer"
             >
               Limpar Todos os Filtros
             </button>
@@ -1153,6 +1517,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   <th className="py-4 px-6">Data & Dia</th>
                   <th className="py-4 px-6">Pagamento</th>
                   <th className="py-4 px-6">Triagem Pós-Aula</th>
+                  <th className="py-4 px-6 text-center">Receita (R$ 25)</th>
                   <th className="py-4 px-6 text-center">Comprovante</th>
                   <th className="py-4 px-6 text-right">Ações</th>
                 </tr>
@@ -1342,6 +1707,40 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                       )}
                     </td>
 
+                    {/* Receita do Agendamento (R$ 25) */}
+                    <td className="py-4 px-6 text-center">
+                      {isBookingAttended(b) ? (
+                        <div className="inline-flex flex-col items-center">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-black bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs">
+                            <DollarSign size={13} className="text-emerald-600" />
+                            R$ 25,00
+                          </span>
+                          <span className="text-[9px] text-emerald-700 font-black block mt-0.5">
+                            Presença confirmada
+                          </span>
+                        </div>
+                      ) : isBookingAbsent(b) ? (
+                        <div className="inline-flex flex-col items-center">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            R$ 0,00
+                          </span>
+                          <span className="text-[9px] text-rose-500 font-medium block mt-0.5">
+                            Falta (sem receita)
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex flex-col items-center">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                            <Clock size={11} className="text-slate-400" />
+                            R$ 25,00
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-medium block mt-0.5">
+                            Previsto (pendente)
+                          </span>
+                        </div>
+                      )}
+                    </td>
+
                     {/* Comprovante / Confirmação Manual */}
                     <td className="py-4 px-6 text-center">
                       <div className="flex flex-col items-center justify-center gap-1.5">
@@ -1483,6 +1882,27 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     <span className="text-[9px] text-slate-400 block uppercase font-black mb-0.5">Data & Dia</span>
                     {formatDateBR(b.date)} ({b.dayOfWeek})
                   </div>
+                </div>
+
+                {/* RECEITA STATUS NO MOBILE */}
+                <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100 text-xs">
+                  <span className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1">
+                    <DollarSign size={12} className="text-emerald-600" />
+                    Receita do Agendamento:
+                  </span>
+                  {isBookingAttended(b) ? (
+                    <span className="font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px] shadow-2xs">
+                      + R$ 25,00 (Compareceu)
+                    </span>
+                  ) : isBookingAbsent(b) ? (
+                    <span className="font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100 text-[11px]">
+                      R$ 0,00 (Falta)
+                    </span>
+                  ) : (
+                    <span className="font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200 text-[11px]">
+                      R$ 25,00 previstos
+                    </span>
+                  )}
                 </div>
 
                 {/* TRIAGE STATUS ON MOBILE */}
@@ -1973,73 +2393,64 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                 <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] font-black uppercase tracking-widest text-[#016a86] flex items-center gap-1.5">
-                      <User size={13} /> Responsável pelo Agendamento
+                      <User size={13} /> Responsável pelo Agendamento *
                     </label>
-                    <span className="text-[10px] font-bold text-slate-400">Atribuição de registro</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 block mb-1">
-                        Selecionar da Equipe
-                      </label>
-                      <select
-                        value={
-                          availableCreators.some(u => u.id === bookingCreatedByUid || (u.name && u.name === bookingCreatedByName))
-                            ? (availableCreators.find(u => u.id === bookingCreatedByUid || u.name === bookingCreatedByName)?.id || "")
-                            : "custom"
-                        }
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === "custom") {
-                            setBookingCreatedByUid("");
-                          } else {
-                            const selected = availableCreators.find(u => u.id === val);
-                            if (selected) {
-                              setBookingCreatedByUid(selected.id);
-                              setBookingCreatedByName(selected.name);
-                              setBookingCreatedByRole(selected.role || "Gestor");
-                            }
-                          }
-                        }}
-                        className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
-                      >
-                        <option value="custom">✏️ Digitar manualmente / Outro</option>
-                        {availableCreators.map(u => (
-                          <option key={u.id} value={u.id}>
-                            {u.name} ({u.role || "Usuário"})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 block mb-1">
-                        Nome de quem agendou *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ex: João Silva"
-                        value={bookingCreatedByName}
-                        onChange={(e) => setBookingCreatedByName(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
-                      />
-                    </div>
+                    <span className="text-[10px] font-bold text-slate-400">Colaborador cadastrado</span>
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 block mb-1">
-                      Cargo / Função (Opcional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Gestor, Auxiliar Administrativo, Recepção..."
-                      value={bookingCreatedByRole}
-                      onChange={(e) => setBookingCreatedByRole(e.target.value)}
-                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
-                    />
+                    <select
+                      required
+                      value={
+                        availableCreators.some(u => u.id === bookingCreatedByUid || (u.name && u.name.toLowerCase() === bookingCreatedByName.toLowerCase()))
+                          ? (availableCreators.find(u => u.id === bookingCreatedByUid || u.name.toLowerCase() === bookingCreatedByName.toLowerCase())?.id || "")
+                          : ""
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const selected = availableCreators.find(u => u.id === val);
+                        if (selected) {
+                          setBookingCreatedByUid(selected.id);
+                          setBookingCreatedByName(selected.name);
+                          setBookingCreatedByRole(selected.role || "Gestor");
+                        } else {
+                          setBookingCreatedByUid("");
+                          setBookingCreatedByName("");
+                          setBookingCreatedByRole("");
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86] cursor-pointer"
+                    >
+                      <option value="">-- Selecione o colaborador responsável --</option>
+                      {availableCreators.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} — {u.role || "Colaborador"}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+
+                  {(() => {
+                    const selected = availableCreators.find(u => u.id === bookingCreatedByUid) ||
+                      (bookingCreatedByName ? availableCreators.find(u => u.name.toLowerCase() === bookingCreatedByName.toLowerCase()) : null);
+
+                    if (selected) {
+                      return (
+                        <div className="p-2.5 bg-white border border-[#016a86]/20 rounded-xl flex items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-7 h-7 rounded-lg bg-[#016a86] text-white font-bold text-xs flex items-center justify-center shrink-0">
+                              {selected.name?.charAt(0).toUpperCase() || "C"}
+                            </div>
+                            <span className="font-bold text-slate-800 truncate">{selected.name}</span>
+                          </div>
+                          <span className="px-2 py-0.5 bg-teal-50 border border-teal-200 text-[#016a86] rounded-md text-[10px] font-bold shrink-0">
+                            {selected.role || "Colaborador"}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
 
                 {/* Observações */}
@@ -2450,67 +2861,72 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                 </div>
               </div>
 
-              <form onSubmit={handleSaveAdjustCreator} className="space-y-4">
+              <form onSubmit={handleSaveAdjustCreator} className="space-y-5">
                 <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
-                    Selecionar Membro da Equipe
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 block mb-2 flex items-center justify-between">
+                    <span>Colaborador Responsável *</span>
+                    <span className="text-[10px] text-slate-400 font-semibold lowercase">professores, gestores e auxiliares</span>
                   </label>
                   <select
+                    required
                     value={
-                      availableCreators.some(u => u.id === adjustCreatorUid || (u.name && u.name === adjustCreatorName))
-                        ? (availableCreators.find(u => u.id === adjustCreatorUid || u.name === adjustCreatorName)?.id || "")
-                        : "custom"
+                      availableCreators.some(u => u.id === adjustCreatorUid || (u.name && u.name.toLowerCase() === adjustCreatorName.toLowerCase()))
+                        ? (availableCreators.find(u => u.id === adjustCreatorUid || u.name.toLowerCase() === adjustCreatorName.toLowerCase())?.id || "")
+                        : ""
                     }
                     onChange={(e) => {
                       const val = e.target.value;
-                      if (val === "custom") {
-                        setAdjustCreatorUid("");
+                      setAdjustCreatorUid(val);
+                      const selected = availableCreators.find(u => u.id === val);
+                      if (selected) {
+                        setAdjustCreatorName(selected.name);
+                        setAdjustCreatorRole(selected.role || "Colaborador");
                       } else {
-                        const selected = availableCreators.find(u => u.id === val);
-                        if (selected) {
-                          setAdjustCreatorUid(selected.id);
-                          setAdjustCreatorName(selected.name);
-                          setAdjustCreatorRole(selected.role || "Gestor");
-                        }
+                        setAdjustCreatorName("");
+                        setAdjustCreatorRole("");
                       }
                     }}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
+                    className="w-full px-4 py-3.5 bg-slate-50 border-2 border-slate-200 focus:border-[#016a86] focus:bg-white rounded-2xl text-xs sm:text-sm font-bold text-slate-800 focus:outline-none transition-all cursor-pointer shadow-xs"
                   >
-                    <option value="custom">✏️ Digitar manualmente / Outro</option>
+                    <option value="">-- Selecione o colaborador responsável --</option>
                     {availableCreators.map(u => (
                       <option key={u.id} value={u.id}>
-                        {u.name} ({u.role || "Usuário"})
+                        {u.name} — {u.role || "Colaborador"}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
-                    Nome de Quem Fez o Agendamento *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: João Silva"
-                    value={adjustCreatorName}
-                    onChange={(e) => setAdjustCreatorName(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
-                  />
-                </div>
+                {/* Card de pré-visualização do colaborador selecionado */}
+                {(() => {
+                  const selectedUser = availableCreators.find(u => u.id === adjustCreatorUid) || 
+                    (adjustCreatorName ? availableCreators.find(u => u.name.toLowerCase() === adjustCreatorName.toLowerCase()) : null);
 
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
-                    Cargo / Função (Opcional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Gestor, Auxiliar Administrativo, Atendimento..."
-                    value={adjustCreatorRole}
-                    onChange={(e) => setAdjustCreatorRole(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#016a86]"
-                  />
-                </div>
+                  if (selectedUser) {
+                    return (
+                      <div className="p-4 bg-teal-50/70 border border-[#016a86]/20 rounded-2xl flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-[#016a86] text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                            {selectedUser.name?.charAt(0).toUpperCase() || "C"}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-slate-800 truncate">{selectedUser.name}</p>
+                            <p className="text-xs font-semibold text-slate-500 truncate">{selectedUser.email || "Sem e-mail cadastrado"}</p>
+                          </div>
+                        </div>
+                        <span className="shrink-0 px-2.5 py-1 bg-white border border-[#016a86]/30 text-[#016a86] rounded-xl text-[10px] font-black uppercase tracking-wider shadow-2xs">
+                          {selectedUser.role || "Colaborador"}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-center gap-2.5 text-amber-800 text-xs font-bold">
+                      <AlertCircle size={16} className="shrink-0 text-amber-600" />
+                      <span>Selecione um dos colaboradores cadastrados na lista acima para vincular ao agendamento.</span>
+                    </div>
+                  );
+                })()}
 
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
                   <button
@@ -2534,6 +2950,174 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* REVENUE BREAKDOWN MODAL (Extrato de Receita por Agendador) */}
+        {isRevenueModalOpen && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl border border-slate-100 relative space-y-6 max-h-[90vh] flex flex-col"
+            >
+              <button
+                type="button"
+                onClick={() => setIsRevenueModalOpen(false)}
+                className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-emerald-50 text-emerald-800 rounded-2xl">
+                  <Coins size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">Extrato de Receita de Aulas Experimentais</h3>
+                  <p className="text-xs font-bold text-slate-400">
+                    Regra: <strong className="text-emerald-700">R$ 25,00</strong> por agendamento com presença confirmada na aula
+                  </p>
+                </div>
+              </div>
+
+              {/* Summary Cards inside modal */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
+                <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200/80 rounded-2xl">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                      <DollarSign size={13} />
+                      Minha Receita Gerada
+                    </span>
+                    <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-full">
+                      Você ({loggedUser?.name || "Usuário"})
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-emerald-950">
+                    R$ {myGeneratedRevenue.toFixed(2).replace(".", ",")}
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-emerald-800 font-bold mt-2 pt-2 border-t border-emerald-200/60">
+                    <span>{myAttendedCount} presenças confirmadas</span>
+                    {myPendingCount > 0 && (
+                      <span className="text-slate-500 font-medium">
+                        + R$ {myProjectedRevenue.toFixed(2).replace(".", ",")} a realizar
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1">
+                      <Coins size={13} />
+                      Receita Total da Escola
+                    </span>
+                    <span className="text-[10px] font-black px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full">
+                      Geral
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-slate-800">
+                    R$ {totalGeneratedRevenue.toFixed(2).replace(".", ",")}
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-600 font-bold mt-2 pt-2 border-t border-slate-200">
+                    <span>{totalAttendedCount} presenças na escola</span>
+                    <span className="text-slate-400 font-medium">{bookings.length} agendamentos totais</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Table / List of Creators */}
+              <div className="flex-1 overflow-y-auto pr-1">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+                  <span>Detalhamento por Agendador ({creatorRevenueStats.length})</span>
+                  <span>R$ 25 / presença</span>
+                </div>
+
+                {creatorRevenueStats.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 text-xs font-bold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    Nenhum agendamento registrado até o momento.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {creatorRevenueStats.map((stat, idx) => (
+                      <div
+                        key={stat.id || idx}
+                        className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                          stat.isMe
+                            ? "bg-emerald-50/60 border-emerald-300 ring-1 ring-emerald-200"
+                            : "bg-slate-50 border-slate-200/80 hover:bg-slate-100/70"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2.5 rounded-xl ${stat.isMe ? "bg-emerald-100 text-emerald-800 font-black" : "bg-white text-slate-600 border border-slate-200"}`}>
+                            <User size={18} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-black text-slate-800 text-sm">{stat.name}</span>
+                              {stat.isMe && (
+                                <span className="text-[9px] font-black px-2 py-0.5 bg-emerald-600 text-white rounded-full uppercase tracking-wider">
+                                  Você
+                                </span>
+                              )}
+                              {stat.role && (
+                                <span className="text-[10px] text-slate-400 font-medium">({stat.role})</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium mt-0.5">
+                              <span>Total: <strong>{stat.totalBookings}</strong> agendamento(s)</span>
+                              <span>•</span>
+                              <span className="text-emerald-700 font-bold">Compareceram: <strong>{stat.attendedBookings}</strong></span>
+                              {stat.absentBookings > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-rose-600">Faltas: {stat.absentBookings}</span>
+                                </>
+                              )}
+                              {stat.pendingBookings > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-slate-400">A realizar: {stat.pendingBookings}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200/60 shrink-0">
+                          <div className="text-right">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block sm:inline mr-1">Receita:</span>
+                            <span className="text-base font-black text-emerald-800">
+                              R$ {stat.earnedRevenue.toFixed(2).replace(".", ",")}
+                            </span>
+                          </div>
+                          {stat.pendingRevenue > 0 && (
+                            <span className="text-[10px] font-bold text-slate-400">
+                              + R$ {stat.pendingRevenue.toFixed(2).replace(".", ",")} a confirmar
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100 shrink-0">
+                <p className="text-[11px] text-slate-400 font-medium">
+                  A receita é creditada automaticamente assim que a triagem confirma a presença do aluno.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsRevenueModalOpen(false)}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Fechar Extrato
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
