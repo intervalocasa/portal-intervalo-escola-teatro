@@ -11,6 +11,7 @@ import {
   SENIOR_COURSE_CRITERIA,
   is60PlusClass,
   isProfessionalClassType,
+  isCriterionUnworked,
   GRADE_LEGEND 
 } from "../constants";
 import { Evaluation, UserBadge } from "../types";
@@ -27,6 +28,7 @@ export interface PDFExportData {
   absences: number;
   frequencyObs?: string;
   grades: Record<string, number | string>;
+  unworkedCriteria?: Record<string, boolean>;
   criteriaObs?: Record<string, string>;
   generalPedagogicalObs?: string;
   averageGrade?: number;
@@ -246,14 +248,20 @@ export function generateDiaryPDF(data: PDFExportData) {
   // 3. Criteria Table
   const tableRows = criteriaList.map(c => {
     const profGradeVal = data.grades?.[c.id];
-    const profGradeStr = profGradeVal !== undefined && profGradeVal !== "" ? `${profGradeVal}` : "-";
+    const isUnworked = isCriterionUnworked(profGradeVal, data.unworkedCriteria, c.id);
 
+    let profGradeStr = profGradeVal !== undefined && profGradeVal !== "" ? `${profGradeVal}` : "-";
     const selfGradeVal = data.studentEval?.notes?.[c.id];
-    const selfGradeStr = selfGradeVal !== undefined ? `${selfGradeVal}` : "-";
+    let selfGradeStr = selfGradeVal !== undefined ? `${selfGradeVal}` : "-";
 
     // Consolidated indicator level
     let indicatorStr = "-";
-    if (isSenior) {
+
+    if (isUnworked) {
+      profGradeStr = "Sem nota (N/T)";
+      selfGradeStr = selfGradeVal !== undefined ? `${selfGradeVal} (Desconsiderada)` : "-";
+      indicatorStr = "Não trabalhado em sala de aula";
+    } else if (isSenior) {
       if (profGradeVal !== undefined && profGradeVal !== "" && selfGradeVal !== undefined) {
         const selfVal = Number(selfGradeVal);
         const profVal = Number(profGradeVal);

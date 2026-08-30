@@ -14,6 +14,9 @@ import {
   SENIOR_COURSE_CRITERIA,
   is60PlusClass,
   isProfessionalClassType,
+  isCriterionUnworked,
+  UNWORKED_CRITERION_LABEL,
+  UNWORKED_TEACHER_OPTION,
   GRADE_LEGEND,
   SCALES
 } from "../constants";
@@ -177,8 +180,9 @@ export const StudentDiaryFormView = ({
   }, [targetClass, users]);
 
   const handleDownloadPDF = () => {
-    const gradeValues = Object.values(diaryFormData.grades || {})
-      .map(v => Number(v))
+    const gradeValues = Object.entries(diaryFormData.grades || {})
+      .filter(([cid, val]) => !isCriterionUnworked(val, diaryFormData.unworkedCriteria, cid))
+      .map(([_, v]) => Number(v))
       .filter(v => !isNaN(v));
     const avgGrade = gradeValues.length > 0 
       ? gradeValues.reduce((a, b) => a + b, 0) / gradeValues.length 
@@ -196,6 +200,7 @@ export const StudentDiaryFormView = ({
       absences: diaryFormData.absences || 0,
       frequencyObs: diaryFormData.frequencyObs,
       grades: diaryFormData.grades || {},
+      unworkedCriteria: diaryFormData.unworkedCriteria || {},
       criteriaObs: diaryFormData.criteriaObs || {},
       generalPedagogicalObs: diaryFormData.generalPedagogicalObs || "",
       averageGrade: avgGrade,
@@ -410,7 +415,21 @@ export const StudentDiaryFormView = ({
                                  {(() => {
                                    const studentNote = studentEval?.notes?.[c.id];
                                    const currentProfGrade = diaryFormData.grades[c.id];
-                                   
+                                   const isUnworked = isCriterionUnworked(currentProfGrade, diaryFormData.unworkedCriteria, c.id);
+
+                                   if (isUnworked) {
+                                     return (
+                                       <div className="border-t border-slate-800 pt-2">
+                                         <div className="font-black uppercase tracking-widest text-amber-400 text-[9px] mb-1">
+                                           Status do Critério
+                                         </div>
+                                         <p className="text-[10px] text-amber-300 font-bold">
+                                           {UNWORKED_CRITERION_LABEL}
+                                         </p>
+                                       </div>
+                                     );
+                                   }
+
                                    if (studentNote !== undefined && currentProfGrade !== undefined && currentProfGrade !== "") {
                                      const selfVal = Number(studentNote);
                                      const profVal = Number(currentProfGrade);
@@ -445,6 +464,24 @@ export const StudentDiaryFormView = ({
                               <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Autoavaliação do Aluno</div>
                               {(() => {
                                 const studentNote = studentEval?.notes?.[c.id];
+                                const currentProfGrade = diaryFormData.grades[c.id];
+                                const isUnworked = isCriterionUnworked(currentProfGrade, diaryFormData.unworkedCriteria, c.id);
+
+                                if (isUnworked) {
+                                  return (
+                                    <div className="space-y-0.5">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-black text-slate-400">
+                                          {studentNote !== undefined ? `${studentNote} / 10 (Desconsiderada)` : "—"}
+                                        </span>
+                                      </div>
+                                      <p className="text-[10px] text-amber-700/80 leading-normal italic font-medium">
+                                        Autoavaliação desconsiderada pelo critério não ter sido trabalhado em sala.
+                                      </p>
+                                    </div>
+                                  );
+                                }
+
                                 if (studentNote !== undefined) {
                                   const scaleObj = SCALES.find(s => Number(s.value) === Number(studentNote));
                                   return (
@@ -476,8 +513,24 @@ export const StudentDiaryFormView = ({
                               {(() => {
                                 const studentNote = studentEval?.notes?.[c.id];
                                 const currentProfGrade = diaryFormData.grades[c.id];
-                                const hasProfGrade = currentProfGrade !== undefined && currentProfGrade !== "";
+                                const isUnworked = isCriterionUnworked(currentProfGrade, diaryFormData.unworkedCriteria, c.id);
+                                const hasProfGrade = currentProfGrade !== undefined && currentProfGrade !== "" && !isUnworked;
                                 const hasStudentNote = studentNote !== undefined;
+
+                                if (isUnworked) {
+                                  return (
+                                    <div className="space-y-1">
+                                      <span className="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-black inline-block">
+                                        {UNWORKED_CRITERION_LABEL}
+                                      </span>
+                                      {hasStudentNote && (
+                                        <p className="text-[9px] font-bold text-slate-400 italic">
+                                          * Nota da autoavaliação desconsiderada no cálculo global.
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                }
                                 
                                 if (isSenior60) {
                                   if (hasStudentNote && hasProfGrade) {
@@ -593,37 +646,100 @@ export const StudentDiaryFormView = ({
                           />
                        </div>
 
-                       <div className="flex flex-col items-center gap-3 bg-slate-50 p-6 rounded-[40px] border border-slate-100 group-hover:bg-white transition-all min-w-[200px]">
+                       <div className="flex flex-col items-center gap-3 bg-slate-50 p-6 rounded-[40px] border border-slate-100 group-hover:bg-white transition-all min-w-[220px] max-w-[240px] w-full">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nota do Professor</label>
-                          <input 
-                            type="number"
-                            min="0"
-                            max="10"
-                            step="0.5"
-                            placeholder="0.0"
-                            value={diaryFormData.grades[c.id] === undefined ? "" : diaryFormData.grades[c.id]}
-                            onChange={(e) => {
-                               const val = e.target.value === "" ? 0 : Math.min(10, Math.max(0, Number(e.target.value)));
-                               setDiaryFormData({
-                                 ...diaryFormData,
-                                 grades: { ...diaryFormData.grades, [c.id]: val }
-                               });
+                          {(() => {
+                            const isUnworked = isCriterionUnworked(diaryFormData.grades[c.id], diaryFormData.unworkedCriteria, c.id);
+                            
+                            if (isUnworked) {
+                              return (
+                                <div className="w-full py-3 flex flex-col items-center justify-center">
+                                  <span className="text-4xl font-black text-amber-500 tracking-wider">N/T</span>
+                                  <span className="text-[9px] font-black text-amber-800 uppercase tracking-widest mt-1 bg-amber-100/90 px-3 py-0.5 rounded-full">
+                                    Sem nota
+                                  </span>
+                                  <p className="text-[8px] font-bold text-slate-400 mt-2 text-center leading-tight">
+                                    Desconsiderado do cálculo da média global
+                                  </p>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <>
+                                <input 
+                                  type="number"
+                                  min="0"
+                                  max="10"
+                                  step="0.5"
+                                  placeholder="0.0"
+                                  value={diaryFormData.grades[c.id] === undefined ? "" : diaryFormData.grades[c.id]}
+                                  onChange={(e) => {
+                                     const val = e.target.value === "" ? 0 : Math.min(10, Math.max(0, Number(e.target.value)));
+                                     setDiaryFormData({
+                                       ...diaryFormData,
+                                       grades: { ...diaryFormData.grades, [c.id]: val }
+                                     });
+                                  }}
+                                  className="w-full text-center text-5xl font-black text-pro-orange bg-transparent focus:outline-none placeholder:text-slate-200"
+                                />
+                                <div className="mt-2 text-center px-4">
+                                  <p className="text-[9px] font-black text-pro-orange uppercase tracking-tighter italic border-t border-pro-orange/10 pt-2 w-full">
+                                    {(() => {
+                                      const val = Number(diaryFormData.grades[c.id] || 0);
+                                      const legend = val === 0 ? GRADE_LEGEND[0] : 
+                                                     val <= 3 ? GRADE_LEGEND[1] : 
+                                                     val <= 6 ? GRADE_LEGEND[2] : 
+                                                     val <= 9 ? GRADE_LEGEND[3] : 
+                                                     GRADE_LEGEND[4];
+                                      return (legend as any).desc;
+                                    })()}
+                                  </p>
+                                </div>
+                              </>
+                            );
+                          })()}
+
+                          {/* Toggle unworked button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const isUnworked = isCriterionUnworked(diaryFormData.grades[c.id], diaryFormData.unworkedCriteria, c.id);
+                              if (isUnworked) {
+                                const newGrades = { ...diaryFormData.grades };
+                                delete newGrades[c.id];
+                                const newUnworked = { ...(diaryFormData.unworkedCriteria || {}) };
+                                delete newUnworked[c.id];
+                                setDiaryFormData({
+                                  ...diaryFormData,
+                                  grades: newGrades,
+                                  unworkedCriteria: newUnworked
+                                });
+                              } else {
+                                setDiaryFormData({
+                                  ...diaryFormData,
+                                  grades: { ...diaryFormData.grades, [c.id]: "unworked" },
+                                  unworkedCriteria: { ...(diaryFormData.unworkedCriteria || {}), [c.id]: true }
+                                });
+                              }
                             }}
-                            className="w-full text-center text-5xl font-black text-pro-orange bg-transparent focus:outline-none placeholder:text-slate-200"
-                          />
-                          <div className="mt-2 text-center px-4">
-                            <p className="text-[9px] font-black text-pro-orange uppercase tracking-tighter italic border-t border-pro-orange/10 pt-2 w-full">
-                              {(() => {
-                                const val = Number(diaryFormData.grades[c.id] || 0);
-                                const legend = val === 0 ? GRADE_LEGEND[0] : 
-                                               val <= 3 ? GRADE_LEGEND[1] : 
-                                               val <= 6 ? GRADE_LEGEND[2] : 
-                                               val <= 9 ? GRADE_LEGEND[3] : 
-                                               GRADE_LEGEND[4];
-                                return (legend as any).desc;
-                              })()}
-                            </p>
-                          </div>
+                            className={`w-full mt-2 p-2.5 rounded-2xl border text-[9px] font-black tracking-tight text-left transition-all flex items-start gap-2 cursor-pointer shadow-sm ${
+                              isCriterionUnworked(diaryFormData.grades[c.id], diaryFormData.unworkedCriteria, c.id)
+                                ? "bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400/30" 
+                                : "bg-white hover:bg-slate-100/80 text-slate-700 border-slate-200"
+                            }`}
+                          >
+                            <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] shrink-0 border font-black transition-all ${
+                              isCriterionUnworked(diaryFormData.grades[c.id], diaryFormData.unworkedCriteria, c.id)
+                                ? "bg-white text-amber-600 border-white" 
+                                : "border-slate-300 bg-slate-50 text-transparent"
+                            }`}>
+                              ✓
+                            </span>
+                            <span className="leading-snug">
+                              {UNWORKED_TEACHER_OPTION}
+                            </span>
+                          </button>
                        </div>
                     </div>
                   </div>

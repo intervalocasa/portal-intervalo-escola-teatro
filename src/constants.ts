@@ -43,6 +43,16 @@ export const PROFESSIONAL_CRITERIA_MONTAGEM = PROFESSIONAL_COURSE_CRITERIA;
 export const ADULT_CRITERIA = ADULT_COURSE_CRITERIA;
 export const SENIOR_CRITERIA = SENIOR_COURSE_CRITERIA;
 
+export const UNWORKED_CRITERION_VALUE = "unworked";
+export const UNWORKED_CRITERION_LABEL = "Critério ainda não trabalhado em sala de aula pelo professor";
+export const UNWORKED_TEACHER_OPTION = "Sem nota: Critério ainda não trabalhado em sala de aula.";
+
+export function isCriterionUnworked(gradeVal: any, unworkedMap?: Record<string, boolean>, criterionId?: string): boolean {
+  if (gradeVal === "unworked" || gradeVal === "nao_trabalhado" || gradeVal === -1 || gradeVal === null) return true;
+  if (unworkedMap && criterionId && unworkedMap[criterionId]) return true;
+  return false;
+}
+
 export function is60PlusClass(classType?: string, className?: string): boolean {
   if (!classType && !className) return false;
   const str = `${classType || ""} ${className || ""}`.toLowerCase();

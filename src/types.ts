@@ -182,7 +182,8 @@ export interface Diary {
   absences: number;
   frequencyObs?: string;
   weeklyAttendance?: Record<string, any>;
-  grades: Record<string, number>;
+  grades: Record<string, number | string>;
+  unworkedCriteria?: Record<string, boolean>;
   criteriaObs?: Record<string, string>;
   generalPedagogicalObs?: string;
   averageGrade: number;

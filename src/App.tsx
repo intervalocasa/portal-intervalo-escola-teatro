@@ -39,6 +39,7 @@ import {
   SENIOR_COURSE_CRITERIA,
   is60PlusClass,
   isProfessionalClassType,
+  isCriterionUnworked,
   GRADE_LEGEND,
   PROFESSIONAL_CRITERIA_BASE,
   PROFESSIONAL_CRITERIA_MONTAGEM,
@@ -1559,9 +1560,13 @@ export default function App() {
           ? PROFESSIONAL_COURSE_CRITERIA 
           : ADULT_COURSE_CRITERIA;
       
-      const missingGrades = criteriaList.filter(c => diaryFormData.grades[c.id] === undefined);
+      const missingGrades = criteriaList.filter(c => {
+        const val = diaryFormData.grades[c.id];
+        const isUnworked = isCriterionUnworked(val, diaryFormData.unworkedCriteria, c.id);
+        return val === undefined || (!isUnworked && val === "");
+      });
       if (missingGrades.length > 0) {
-        showNotification("Por favor, preencha as notas de todos os critérios antes de concluir.", "Aviso", "warning");
+        showNotification("Por favor, preencha as notas de todos os critérios ou marque como não trabalhado antes de concluir.", "Aviso", "warning");
         return;
       }
 
@@ -1580,9 +1585,13 @@ export default function App() {
         d.year === diaryFilterYear
       );
 
-      const gradesCount = Object.keys(diaryFormData.grades).length;
-      const averageGrade = gradesCount > 0 
-        ? (Object.values(diaryFormData.grades) as any[]).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0) / gradesCount
+      const validGrades = Object.entries(diaryFormData.grades || {})
+        .filter(([cid, val]) => !isCriterionUnworked(val, diaryFormData.unworkedCriteria, cid))
+        .map(([_, val]) => Number(val))
+        .filter(val => !isNaN(val));
+
+      const averageGrade = validGrades.length > 0 
+        ? validGrades.reduce((acc: number, val: number) => acc + val, 0) / validGrades.length
         : 0;
 
       const diaryData = {
@@ -1601,6 +1610,7 @@ export default function App() {
         frequencyObs: diaryFormData.frequencyObs || "",
         weeklyAttendance: diaryFormData.weeklyAttendance || {},
         grades: diaryFormData.grades,
+        unworkedCriteria: diaryFormData.unworkedCriteria || {},
         criteriaObs: diaryFormData.criteriaObs || {},
         generalPedagogicalObs: diaryFormData.generalPedagogicalObs || "",
         averageGrade,
