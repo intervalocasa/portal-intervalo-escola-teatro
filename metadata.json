@@ -1,6 +1,6 @@
 {
   "name": "Intervalo - Escola de Teatro",
-  "description": "Plataforma completa de gestão pedagógica para a escola de teatro Intervalo, com portais para alunos, professores e gestores, diário de aula, curadoria de montagens e apresentações teatrais.",
+  "description": "Plataforma completa de gestão pedagógica para a escola de teatro Intervalo, com portais para alunos, professores e gestores, acervo de documentos formativos em PDF, diário de aula, curadoria de montagens e apresentações teatrais.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

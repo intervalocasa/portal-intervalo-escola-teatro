@@ -429,4 +429,20 @@ export interface StageProductionProposal {
   updatedAt?: any;
 }
 
+export interface FormativeDocument {
+  id: string;
+  title: string; // Nome do arquivo exibido na página
+  fileName: string; // Nome original do arquivo PDF anexado
+  fileUrl: string; // Base64 data URL ou URL pública do PDF
+  fileSize?: number; // Tamanho em bytes
+  fileType?: string; // MIME type (application/pdf)
+  category?: string; // Categoria do documento (Diretrizes, Formação, etc.)
+  description?: string; // Descrição / orientações
+  uploadedBy: string; // ID do usuário que enviou
+  uploadedByName: string; // Nome do usuário que enviou
+  uploadedByRole?: string; // Cargo do usuário que enviou
+  createdAt: any; // Timestamp do Firestore
+  updatedAt?: any;
+}
+
 

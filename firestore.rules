@@ -127,6 +127,11 @@ service cloud.firestore {
       allow create, update, delete: if isGestor() || isProfessor();
     }
 
+    match /formative_documents/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isGestor();
+    }
+
     match /system/{docId} {
       allow read: if true;
     }

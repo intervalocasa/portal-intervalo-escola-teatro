@@ -11,7 +11,8 @@ import {
   UserCircle, 
   Calendar, 
   LogOut,
-  Sparkles
+  Sparkles,
+  FolderArchive
 } from "lucide-react";
 import { Logo, Avatar } from "../components/CommonComponents";
 import { AnnouncementPanel } from "../components/AnnouncementPanel";
@@ -188,6 +189,26 @@ export const AuxiliarDashboard = ({
               <div>
                 <div className="font-bold text-lg leading-none">Agenda da Escola</div>
                 <div className="text-xs opacity-70 mt-1">Ensaios, apresentações e eventos</div>
+              </div>
+            </motion.button>
+
+            {/* Documentos Formativos */}
+            <motion.button
+              onClick={() => setView("formative_documents")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full p-6 bg-gradient-to-r from-teal-700 to-cyan-800 rounded-2xl flex items-center gap-5 text-white shadow-xl shadow-teal-950/15 transition-all text-left group border border-teal-400/20 relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-400/10 rounded-full -mr-10 -mt-10 blur-xl group-hover:scale-110 transition-transform" />
+              <div className="bg-white/20 p-3.5 rounded-xl group-hover:scale-110 transition-transform text-white shadow-md relative z-10">
+                <FolderArchive size={24} />
+              </div>
+              <div className="relative z-10">
+                <div className="font-black text-lg leading-none uppercase tracking-tight text-white flex items-center gap-2">
+                  Documentos Formativos
+                  <span className="px-2 py-0.5 bg-cyan-300 text-slate-900 text-[9px] font-black rounded-md">PDFs</span>
+                </div>
+                <div className="text-xs text-cyan-100/90 mt-1 font-bold">Acervo de materiais pedagógicos e diretrizes</div>
               </div>
             </motion.button>
 

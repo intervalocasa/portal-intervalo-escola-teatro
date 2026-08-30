@@ -105,6 +105,7 @@ import { ExperimentalClassesView } from "./views/ExperimentalClassesView";
 import { LessonPlansView } from "./views/LessonPlansView";
 import { ClassDiaryView } from "./views/ClassDiaryView";
 import { StageProductionsView } from "./views/StageProductionsView";
+import { FormativeDocumentsView } from "./views/FormativeDocumentsView";
 import { getMonthlyDeadline } from "./lib/deadlineUtils";
 
 export default function App() {
@@ -2982,6 +2983,14 @@ export default function App() {
           />
         ) : view === "stage_productions" || view === "montagens_apresentacoes" ? (
           <StageProductionsView 
+            currentUser={currentUser}
+            users={users}
+            userRole={role}
+            setView={setView}
+            showNotification={showNotification}
+          />
+        ) : view === "formative_documents" || view === "documentos_formativos" ? (
+          <FormativeDocumentsView 
             currentUser={currentUser}
             users={users}
             userRole={role}
