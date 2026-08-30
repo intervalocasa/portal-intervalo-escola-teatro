@@ -5,7 +5,14 @@
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { ADULT_COURSE_CRITERIA, PROFESSIONAL_COURSE_CRITERIA, GRADE_LEGEND } from "../constants";
+import { 
+  ADULT_COURSE_CRITERIA, 
+  PROFESSIONAL_COURSE_CRITERIA, 
+  SENIOR_COURSE_CRITERIA,
+  is60PlusClass,
+  isProfessionalClassType,
+  GRADE_LEGEND 
+} from "../constants";
 import { Evaluation, UserBadge } from "../types";
 
 export interface PDFExportData {
@@ -228,8 +235,13 @@ export function generateDiaryPDF(data: PDFExportData) {
   currentY += 39;
 
   // Determine criteria set
-  const isProfessional = data.classType?.includes("Profissional") || data.classType?.includes("Montagem");
-  const criteriaList = isProfessional ? PROFESSIONAL_COURSE_CRITERIA : ADULT_COURSE_CRITERIA;
+  const isSenior = is60PlusClass(data.classType, data.className);
+  const isProfessional = !isSenior && isProfessionalClassType(data.classType, data.className);
+  const criteriaList = isSenior 
+    ? SENIOR_COURSE_CRITERIA 
+    : isProfessional 
+      ? PROFESSIONAL_COURSE_CRITERIA 
+      : ADULT_COURSE_CRITERIA;
 
   // 3. Criteria Table
   const tableRows = criteriaList.map(c => {
@@ -241,7 +253,27 @@ export function generateDiaryPDF(data: PDFExportData) {
 
     // Consolidated indicator level
     let indicatorStr = "-";
-    if (profGradeVal !== undefined && profGradeVal !== "" && selfGradeVal !== undefined) {
+    if (isSenior) {
+      if (profGradeVal !== undefined && profGradeVal !== "" && selfGradeVal !== undefined) {
+        const selfVal = Number(selfGradeVal);
+        const profVal = Number(profGradeVal);
+        const compAvg = (selfVal + profVal) / 2;
+        const legendItem = compAvg === 0 ? GRADE_LEGEND[0] : 
+                         compAvg <= 3 ? GRADE_LEGEND[1] : 
+                         compAvg <= 6 ? GRADE_LEGEND[2] : 
+                         compAvg <= 9 ? GRADE_LEGEND[3] : 
+                         GRADE_LEGEND[4];
+        indicatorStr = `${legendItem.label} (${compAvg.toFixed(1)})`;
+      } else if (profGradeVal !== undefined && profGradeVal !== "") {
+        const profVal = Number(profGradeVal);
+        const legendItem = profVal === 0 ? GRADE_LEGEND[0] : 
+                         profVal <= 3 ? GRADE_LEGEND[1] : 
+                         profVal <= 6 ? GRADE_LEGEND[2] : 
+                         profVal <= 9 ? GRADE_LEGEND[3] : 
+                         GRADE_LEGEND[4];
+        indicatorStr = `${legendItem.label} (${profVal.toFixed(1)})`;
+      }
+    } else if (profGradeVal !== undefined && profGradeVal !== "" && selfGradeVal !== undefined) {
       const selfVal = Number(selfGradeVal);
       const profVal = Number(profGradeVal);
       const weightSelf = isProfessional ? 2 : 3;

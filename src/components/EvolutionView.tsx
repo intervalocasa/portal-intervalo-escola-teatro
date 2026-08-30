@@ -24,6 +24,9 @@ import { generateDiaryPDF } from '../lib/pdfExporter';
 import { 
   ADULT_COURSE_CRITERIA, 
   PROFESSIONAL_COURSE_CRITERIA, 
+  SENIOR_COURSE_CRITERIA,
+  is60PlusClass,
+  isProfessionalClassType,
   GRADE_LEGEND,
   SCALES
 } from '../constants';
@@ -204,9 +207,11 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
               <div className="space-y-6">
                 {sortedPeriods.map(period => {
                   const key = `${period.month}-${period.year}-${period.classId}`;
-                  const isProfessional = period.classType?.toLowerCase().includes("prof") || period.classType?.toLowerCase().includes("montagem");
-                  const weightSelf = isProfessional ? 2 : 3;
-                  const weightProf = isProfessional ? 2 : 1;
+                  const targetClassObj = classes.find(c => c.id === period.classId);
+                  const is60Plus = is60PlusClass(period.classType, targetClassObj?.code);
+                  const isProfessional = !is60Plus && isProfessionalClassType(period.classType, targetClassObj?.code);
+                  const weightSelf = isProfessional ? 2 : is60Plus ? 2 : 3;
+                  const weightProf = isProfessional ? 2 : is60Plus ? 2 : 1;
                   
                   const selfCompleted = period.selfAssessment && period.selfAssessment.notes;
                   const profCompleted = period.professorDiary && period.professorDiary.status === "concluido";
@@ -221,7 +226,20 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                   let statusText = "Aguardando dados";
                   let statusColor = "text-slate-400 bg-slate-50";
 
-                  if (selfCompleted && profCompleted) {
+                  if (is60Plus) {
+                    if (selfCompleted && profCompleted) {
+                      finalGrade = (selfAvg! + profAvg!) / 2;
+                      statusText = "Concluída";
+                      statusColor = "text-green-600 bg-green-50 border-green-100";
+                    } else if (profCompleted && !selfCompleted) {
+                      finalGrade = profAvg!;
+                      statusText = "Concluída (Nota do Professor)";
+                      statusColor = "text-green-600 bg-green-50 border-green-100";
+                    } else if (selfCompleted) {
+                      statusText = "Aguardando professor";
+                      statusColor = "text-pro-teal bg-pro-teal/5 border-pro-teal/10";
+                    }
+                  } else if (selfCompleted && profCompleted) {
                     finalGrade = (selfAvg! * weightSelf + profAvg! * weightProf) / 4;
                     statusText = "Concluída";
                     statusColor = "text-green-600 bg-green-50 border-green-100";
@@ -367,10 +385,14 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                               </div>
                               
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {ADULT_COURSE_CRITERIA.map(c => {
-                                  const selfNote = Number(period.selfAssessment?.notes?.[c.id] || 0);
-                                  const profNote = Number(period.professorDiary?.grades?.[c.id] || 0);
-                                  const compAvg = (selfNote * weightSelf + profNote * weightProf) / 4;
+                                {(is60Plus ? SENIOR_COURSE_CRITERIA : ADULT_COURSE_CRITERIA).map(c => {
+                                  const selfNote = period.selfAssessment?.notes?.[c.id] !== undefined ? Number(period.selfAssessment.notes[c.id]) : null;
+                                  const profGradeRaw = period.professorDiary?.grades?.[c.id];
+                                  const profNote = profGradeRaw !== undefined && profGradeRaw !== "" ? Number(profGradeRaw) : null;
+                                  
+                                  const compAvg = is60Plus 
+                                    ? ((selfNote !== null && profNote !== null) ? (selfNote + profNote) / 2 : (profNote ?? selfNote ?? 0))
+                                    : ((Number(selfNote || 0) * weightSelf + Number(profNote || 0) * weightProf) / 4);
                                   
                                   const legendItem = compAvg === 0 ? GRADE_LEGEND[0] : 
                                                    compAvg <= 3 ? GRADE_LEGEND[1] : 

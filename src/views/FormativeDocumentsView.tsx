@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, ChangeEvent, FormEvent } from "react";
+import React, { useState, useEffect, useMemo, ChangeEvent, FormEvent, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   FolderArchive,
@@ -24,10 +24,13 @@ import {
   AlertCircle,
   ShieldCheck,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  ExternalLink,
+  Maximize2
 } from "lucide-react";
 import { FormativeDocument, User, UserRole } from "../types";
 import { BackButton, Logo } from "../components/CommonComponents";
+import { isDirectorOrGestor } from "../lib/userUtils";
 import { 
   collection, 
   setDoc,
@@ -62,6 +65,51 @@ const CATEGORY_OPTIONS = [
 // Helper to chunk large base64 strings safely under Firestore's 1MB limit
 const CHUNK_SIZE = 380000; // ~380KB per chunk
 
+// Helper to convert base64 (with or without data URI prefix) into a Blob URL
+const createPdfBlobUrl = (dataOrBase64: string): string => {
+  try {
+    let base64 = dataOrBase64.trim();
+    let mimeType = "application/pdf";
+
+    if (base64.startsWith("data:")) {
+      const match = base64.match(/^data:([^;]+);base64,/);
+      if (match) {
+        mimeType = match[1] || "application/pdf";
+        base64 = base64.substring(match[0].length);
+      } else {
+        const commaIdx = base64.indexOf(",");
+        if (commaIdx !== -1) {
+          base64 = base64.substring(commaIdx + 1);
+        }
+      }
+    }
+
+    // Clean whitespace and linebreaks
+    const cleanBase64 = base64.replace(/[\s\r\n]+/g, "");
+    const byteCharacters = atob(cleanBase64);
+    const byteArrays: Uint8Array[] = [];
+    const sliceSize = 1024;
+
+    for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+      const slice = byteCharacters.slice(offset, offset + sliceSize);
+      const byteNumbers = new Uint8Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      byteArrays.push(byteNumbers);
+    }
+
+    const blob = new Blob(byteArrays, { type: mimeType });
+    return URL.createObjectURL(blob);
+  } catch (err) {
+    console.error("Erro ao converter base64 para Blob URL:", err);
+    if (dataOrBase64.startsWith("data:")) {
+      return dataOrBase64;
+    }
+    return `data:application/pdf;base64,${dataOrBase64}`;
+  }
+};
+
 export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
   currentUser,
   users,
@@ -79,8 +127,14 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
   const [isViewerModalOpen, setIsViewerModalOpen] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<FormativeDocument | null>(null);
   const [viewingDocUrl, setViewingDocUrl] = useState<string | null>(null);
+  const [viewingDocRawUrl, setViewingDocRawUrl] = useState<string | null>(null);
+  const [viewingDocLoading, setViewingDocLoading] = useState<boolean>(false);
+  const [viewingDocError, setViewingDocError] = useState<string | null>(null);
   const [editingDoc, setEditingDoc] = useState<FormativeDocument | null>(null);
   
+  // Track active blob URLs to clean them up on unmount or closing
+  const activeBlobUrlsRef = useRef<Set<string>>(new Set());
+
   // Form fields
   const [formTitle, setFormTitle] = useState("");
   const [formCategory, setFormCategory] = useState("Diretrizes Pedagógicas");
@@ -98,8 +152,24 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // In-memory cache for resolved full URLs/Base64 of chunked PDFs
+  // In-memory cache for resolved full URLs/Base64
   const [resolvedUrlsCache, setResolvedUrlsCache] = useState<Record<string, string>>({});
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      activeBlobUrlsRef.current.forEach((url) => {
+        if (url.startsWith("blob:")) {
+          try {
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            console.warn("Erro ao revogar URL blob:", e);
+          }
+        }
+      });
+      activeBlobUrlsRef.current.clear();
+    };
+  }, []);
 
   // Determine current user profile and permission
   const userProfile = useMemo(() => {
@@ -114,6 +184,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
   // Gestores, Diretor Pedagógico and Diretor Pedagógico e Professor can upload/edit/delete files
   const canManageDocs = useMemo(() => {
     return (
+      isDirectorOrGestor(effectiveRole) ||
       effectiveRole === "Gestor" ||
       effectiveRole === "Diretor Pedagógico" ||
       effectiveRole === "Diretor Pedagógico e Professor" ||
@@ -202,36 +273,84 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
     return "Data recente";
   };
 
-  // Resolve full file URL (either from cache, direct URL, or by stitching Firestore subcollection chunks)
-  const resolveFileUrl = async (docItem: FormativeDocument): Promise<string> => {
+  // Resolve full file URL & Preview URL (supporting Base64 -> Blob, Storage URLs, Chunked Subcollections, Drive URLs)
+  const resolveFileUrl = async (docItem: FormativeDocument): Promise<{ rawUrl: string; previewUrl: string }> => {
     // 1. Check in-memory cache
     if (resolvedUrlsCache[docItem.id]) {
-      return resolvedUrlsCache[docItem.id];
+      const cached = resolvedUrlsCache[docItem.id];
+      let preview = cached;
+      if (cached.startsWith("data:") || (!cached.startsWith("http://") && !cached.startsWith("https://") && cached.length > 50)) {
+        preview = createPdfBlobUrl(cached);
+        activeBlobUrlsRef.current.add(preview);
+      } else if (cached.includes("drive.google.com")) {
+        preview = cached.replace(/\/view(\?.*)?$/, "/preview").replace(/\/edit(\?.*)?$/, "/preview");
+      }
+      return { rawUrl: cached, previewUrl: preview };
     }
 
-    // 2. If it's a direct URL or non-empty base64
-    if (docItem.fileUrl && (docItem.fileUrl.startsWith("http") || docItem.fileUrl.startsWith("data:"))) {
-      setResolvedUrlsCache(prev => ({ ...prev, [docItem.id]: docItem.fileUrl }));
-      return docItem.fileUrl;
-    }
+    // Identify candidate URL from all potential fields
+    let candidate = (docItem.fileUrl || (docItem as any).url || (docItem as any).downloadUrl || (docItem as any).pdfUrl || "").trim();
 
-    // 3. If it has chunks stored in subcollection
-    if (docItem.hasChunks) {
+    // 2. If storagePath exists and candidate is empty or invalid, fetch from Storage
+    if ((!candidate || candidate === "") && docItem.storagePath) {
       try {
-        const chunksSnap = await getDocs(collection(db, "formative_documents", docItem.id, "chunks"));
-        const chunksList = chunksSnap.docs.map(d => d.data() as { index: number; data: string });
-        chunksList.sort((a, b) => a.index - b.index);
-        const fullBase64 = chunksList.map(c => c.data).join("");
-        if (fullBase64) {
-          setResolvedUrlsCache(prev => ({ ...prev, [docItem.id]: fullBase64 }));
-          return fullBase64;
-        }
-      } catch (err) {
-        console.error("Erro ao reconstruir PDF a partir dos fragmentos do Firestore:", err);
+        const storageRef = ref(storage, docItem.storagePath);
+        candidate = await getDownloadURL(storageRef);
+      } catch (storageErr) {
+        console.warn("Não foi possível recuperar download URL do Storage via storagePath:", storageErr);
       }
     }
 
-    return docItem.fileUrl || "";
+    // 3. If chunks exist in Firestore subcollection or if candidate is still empty
+    if ((docItem.hasChunks || !candidate) && docItem.id) {
+      try {
+        const chunksSnap = await getDocs(collection(db, "formative_documents", docItem.id, "chunks"));
+        if (!chunksSnap.empty) {
+          const chunksList = chunksSnap.docs.map(d => {
+            const data = d.data() as any;
+            return {
+              index: typeof data.index === "number" ? data.index : parseInt(d.id, 10) || 0,
+              content: data.data || data.chunk || data.content || data.base64 || ""
+            };
+          });
+          chunksList.sort((a, b) => a.index - b.index);
+          const fullBase64 = chunksList.map(c => c.content).join("");
+          if (fullBase64) {
+            candidate = fullBase64;
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao recuperar fragmentos da subcoleção:", err);
+      }
+    }
+
+    if (!candidate) {
+      return { rawUrl: "", previewUrl: "" };
+    }
+
+    // Cache the raw resolved data/URL
+    setResolvedUrlsCache(prev => ({ ...prev, [docItem.id]: candidate }));
+
+    // Prepare preview URL
+    let preview = candidate;
+
+    // A) If it's Base64 or Data URI
+    if (candidate.startsWith("data:") || (!candidate.startsWith("http://") && !candidate.startsWith("https://") && candidate.length > 50)) {
+      preview = createPdfBlobUrl(candidate);
+      activeBlobUrlsRef.current.add(preview);
+    } 
+    // B) If it's a Google Drive URL
+    else if (candidate.includes("drive.google.com")) {
+      preview = candidate.replace(/\/view(\?.*)?$/, "/preview").replace(/\/edit(\?.*)?$/, "/preview");
+      if (!preview.includes("/preview")) {
+        const match = candidate.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+          preview = `https://drive.google.com/file/d/${match[1]}/preview`;
+        }
+      }
+    }
+
+    return { rawUrl: candidate, previewUrl: preview };
   };
 
   // Open add document modal
@@ -528,6 +647,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
         setIsViewerModalOpen(false);
         setViewingDoc(null);
         setViewingDocUrl(null);
+        setViewingDocRawUrl(null);
       }
     } catch (err: any) {
       console.error("Erro ao excluir documento formativo:", err);
@@ -541,20 +661,24 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
   const handleDownload = async (docItem: FormativeDocument) => {
     setDownloadingId(docItem.id);
     try {
-      const url = await resolveFileUrl(docItem);
-      if (!url) {
+      const { rawUrl, previewUrl } = await resolveFileUrl(docItem);
+      const downloadTarget = previewUrl && previewUrl.startsWith("blob:") ? previewUrl : (rawUrl || previewUrl);
+      
+      if (!downloadTarget) {
         alert("Arquivo indisponível para download.");
         return;
       }
 
-      const link = document.createElement("a");
-      link.href = url;
-      // Sanitized download filename
       const safeTitle = (docItem.title || docItem.fileName || "documento_formativo")
         .trim()
         .replace(/[/\\?%*:|"<>]/g, "-");
-      link.download = safeTitle.toLowerCase().endsWith(".pdf") ? safeTitle : `${safeTitle}.pdf`;
+      const finalFileName = safeTitle.toLowerCase().endsWith(".pdf") ? safeTitle : `${safeTitle}.pdf`;
+
+      const link = document.createElement("a");
+      link.href = downloadTarget;
+      link.download = finalFileName;
       link.target = "_blank";
+      link.rel = "noopener noreferrer";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -574,14 +698,44 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
   const handleOpenViewer = async (docItem: FormativeDocument) => {
     setViewingDoc(docItem);
     setViewingDocUrl(null);
+    setViewingDocRawUrl(null);
+    setViewingDocError(null);
+    setViewingDocLoading(true);
     setIsViewerModalOpen(true);
 
     try {
-      const url = await resolveFileUrl(docItem);
-      setViewingDocUrl(url);
-    } catch (err) {
+      const { rawUrl, previewUrl } = await resolveFileUrl(docItem);
+      if (!previewUrl) {
+        setViewingDocError("Não foi possível carregar os dados deste documento. O arquivo pode ter sido removido ou está corrompido.");
+      } else {
+        setViewingDocUrl(previewUrl);
+        setViewingDocRawUrl(rawUrl);
+      }
+    } catch (err: any) {
       console.error("Erro ao abrir pré-visualização:", err);
+      setViewingDocError("Ocorreu um erro ao reconstruir o documento para visualização.");
+    } finally {
+      setViewingDocLoading(false);
     }
+  };
+
+  // Open currently viewing document in a fresh browser tab
+  const handleOpenInNewTab = () => {
+    if (!viewingDocUrl && !viewingDocRawUrl) return;
+    const targetUrl = viewingDocUrl || viewingDocRawUrl;
+    if (targetUrl) {
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  // Close viewer modal and clean up if needed
+  const handleCloseViewer = () => {
+    setIsViewerModalOpen(false);
+    setViewingDoc(null);
+    setViewingDocUrl(null);
+    setViewingDocRawUrl(null);
+    setViewingDocError(null);
+    setViewingDocLoading(false);
   };
 
   return (
@@ -1080,7 +1234,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
       </AnimatePresence>
 
       {/* ========================================================================= */}
-      {/* MODAL: Visualizador do PDF em Tela / Leitor Integrado */}
+      {/* MODAL: Visualizador do PDF em Tela / Leitor Integrado Resiliente */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {isViewerModalOpen && viewingDoc && (
@@ -1089,7 +1243,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-slate-900 w-full max-w-5xl h-[90vh] rounded-3xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col"
+              className="bg-slate-900 w-full max-w-5xl h-[92vh] rounded-3xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col"
             >
               {/* Viewer Header */}
               <div className="px-6 py-4 bg-slate-800 border-b border-slate-700 text-white flex items-center justify-between shrink-0">
@@ -1108,10 +1262,24 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  {/* Abrir em Nova Aba */}
+                  {(viewingDocUrl || viewingDocRawUrl) && (
+                    <button
+                      onClick={handleOpenInNewTab}
+                      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
+                      title="Abrir PDF em nova aba do navegador"
+                    >
+                      <ExternalLink size={14} />
+                      <span className="hidden sm:inline">Nova Aba</span>
+                    </button>
+                  )}
+
+                  {/* Baixar PDF */}
                   <button
                     onClick={() => handleDownload(viewingDoc)}
                     disabled={downloadingId === viewingDoc.id}
                     className="px-4 py-2 bg-pro-teal hover:bg-[#01566d] disabled:opacity-60 text-white rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-md"
+                    title="Baixar arquivo PDF"
                   >
                     {downloadingId === viewingDoc.id ? (
                       <Loader2 size={15} className="animate-spin" />
@@ -1122,43 +1290,107 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                       {downloadingId === viewingDoc.id ? "Baixando..." : "Baixar PDF"}
                     </span>
                   </button>
+
+                  {/* Recarregar */}
                   <button
-                    onClick={() => {
-                      setIsViewerModalOpen(false);
-                      setViewingDoc(null);
-                      setViewingDocUrl(null);
-                    }}
+                    onClick={() => handleOpenViewer(viewingDoc)}
                     className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-all"
+                    title="Recarregar visualização"
+                  >
+                    <RefreshCw size={16} />
+                  </button>
+
+                  {/* Fechar */}
+                  <button
+                    onClick={handleCloseViewer}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-all"
+                    title="Fechar visualizador"
                   >
                     <X size={20} />
                   </button>
                 </div>
               </div>
 
-              {/* Viewer Body (iframe/embed) */}
-              <div className="flex-1 bg-slate-950 p-2 overflow-hidden flex items-center justify-center">
-                {viewingDocUrl ? (
-                  <iframe
-                    src={viewingDocUrl}
-                    title={viewingDoc.title}
-                    className="w-full h-full rounded-2xl border border-slate-800 bg-white"
-                  />
-                ) : (
+              {/* Viewer Body (object / embed / iframe with fallback) */}
+              <div className="flex-1 bg-slate-950 p-2 md:p-3 overflow-hidden flex flex-col items-center justify-center relative">
+                {viewingDocLoading ? (
                   <div className="text-center text-slate-400 p-8 flex flex-col items-center gap-3">
-                    <Loader2 size={32} className="animate-spin text-pro-teal" />
-                    <p className="text-sm font-bold text-slate-300">Carregando visualização do PDF...</p>
+                    <Loader2 size={36} className="animate-spin text-pro-teal" />
+                    <p className="text-sm font-bold text-slate-200">Carregando visualização do PDF...</p>
                     <p className="text-xs text-slate-500 max-w-sm">
-                      Recuperando dados completos do acervo para visualização.
+                      Reconstruindo os fragmentos e renderizando o documento.
                     </p>
-                    <button
-                      onClick={() => handleDownload(viewingDoc)}
-                      className="mt-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700"
-                    >
-                      <Download size={14} />
-                      <span>Baixar Arquivo Diretamente</span>
-                    </button>
                   </div>
-                )}
+                ) : viewingDocError ? (
+                  <div className="text-center text-slate-400 p-8 max-w-md bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col items-center gap-3 shadow-xl">
+                    <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                      <AlertCircle size={24} />
+                    </div>
+                    <h4 className="text-sm font-black text-slate-200">Não foi possível exibir no leitor</h4>
+                    <p className="text-xs text-slate-400 text-center leading-relaxed">
+                      {viewingDocError}
+                    </p>
+                    <div className="flex items-center gap-2 pt-2">
+                      <button
+                        onClick={() => handleOpenViewer(viewingDoc)}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700"
+                      >
+                        <RefreshCw size={13} />
+                        <span>Tentar Novamente</span>
+                      </button>
+                      <button
+                        onClick={() => handleDownload(viewingDoc)}
+                        className="px-4 py-2 bg-pro-teal hover:bg-[#01566d] text-white rounded-xl text-xs font-bold flex items-center gap-2"
+                      >
+                        <Download size={13} />
+                        <span>Baixar Arquivo</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : viewingDocUrl ? (
+                  <div className="w-full h-full flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-800">
+                    <object
+                      data={viewingDocUrl}
+                      type="application/pdf"
+                      className="w-full flex-1 rounded-2xl bg-white"
+                    >
+                      {/* Fallback iframe inside object tag */}
+                      <iframe
+                        src={viewingDocUrl}
+                        title={viewingDoc.title}
+                        className="w-full h-full rounded-2xl border-0 bg-white"
+                      >
+                        {/* Final fallback inside iframe */}
+                        <div className="p-6 text-center text-slate-600 space-y-3">
+                          <p>O seu navegador não suporta visualização direta de PDFs incorporados.</p>
+                          <a
+                            href={viewingDocUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-pro-teal text-white rounded-xl font-bold text-xs"
+                          >
+                            <ExternalLink size={14} /> Abrir PDF
+                          </a>
+                        </div>
+                      </iframe>
+                    </object>
+
+                    {/* Bottom Helper Bar */}
+                    <div className="py-2 px-4 bg-slate-900 text-slate-400 text-[11px] flex items-center justify-between border-t border-slate-800">
+                      <span className="truncate">
+                        Arquivo: <strong className="text-slate-300">{viewingDoc.fileName || viewingDoc.title}</strong>
+                      </span>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <button
+                          onClick={handleOpenInNewTab}
+                          className="text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1 transition-colors"
+                        >
+                          <ExternalLink size={12} /> Abrir em tela cheia
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </motion.div>
           </div>

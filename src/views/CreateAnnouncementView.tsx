@@ -8,7 +8,7 @@ import { Megaphone, Calendar, Users, ArrowLeft, Send, Clock, Trash2, Edit2, Sear
 import { Logo, BackButton, Avatar } from "../components/CommonComponents";
 import { FormEvent, useState, useMemo } from "react";
 import { THEME } from "../theme";
-import { getUserDisplayName } from "../lib/userUtils";
+import { getUserDisplayName, isProfessorOrTeacher, isDirectorOrGestor } from "../lib/userUtils";
 
 interface CreateAnnouncementViewProps {
   handleAnnouncementSubmit: (announcement: any) => Promise<void>;
@@ -47,7 +47,7 @@ export const CreateAnnouncementView = ({
       .filter(u => {
         const displayName = getUserDisplayName(u).toLowerCase();
         const matchesSearch = displayName.includes(searchTerm.toLowerCase());
-        const isTeacher = u.role === "Professor" || u.role === "Diretor Pedagógico e Professor" || u.role === "Diretor Pedagógico";
+        const isTeacher = isProfessorOrTeacher(u.role) || isDirectorOrGestor(u.role) || u.role === "Professor" || u.role === "Diretor Pedagógico e Professor" || u.role === "Diretor Pedagógico";
         const matchesRole = formData.target === "Todos" || (formData.target === "Alunos" ? u.role === "Aluno" : isTeacher);
         return matchesSearch && matchesRole;
       })

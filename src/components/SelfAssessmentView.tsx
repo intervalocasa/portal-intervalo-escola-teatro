@@ -20,6 +20,9 @@ import {
   PROFESSIONAL_CRITERIA_BASE, 
   PROFESSIONAL_CRITERIA_MONTAGEM, 
   PROFESSIONAL_OPEN_QUESTIONS, 
+  SENIOR_CRITERIA,
+  is60PlusClass,
+  isProfessionalClassType,
   SCALES 
 } from '../constants';
 import { Class, User, Evaluation } from '../types';
@@ -357,9 +360,11 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
               )}
 
               <div className="grid gap-6">
-                {(viewingEvaluation.classType === "Prática Profissional de Montagem" 
-                  ? PROFESSIONAL_CRITERIA_MONTAGEM 
-                  : ADULT_CRITERIA
+                {(is60PlusClass(viewingEvaluation.classType)
+                  ? SENIOR_CRITERIA
+                  : isProfessionalClassType(viewingEvaluation.classType) 
+                    ? PROFESSIONAL_CRITERIA_MONTAGEM 
+                    : ADULT_CRITERIA
                 ).map((c, i) => (
                   <div key={c.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
                     <div className="space-y-4">
@@ -430,9 +435,11 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
               </div>
 
               <div className="space-y-8">
-                 {(classes.find(c => c.id === assessmentForm.classId)?.type === "Prática Profissional de Montagem"
-                   ? PROFESSIONAL_CRITERIA_MONTAGEM
-                   : ADULT_CRITERIA
+                 {(is60PlusClass(classes.find(c => c.id === assessmentForm.classId)?.type, classes.find(c => c.id === assessmentForm.classId)?.code)
+                   ? SENIOR_CRITERIA
+                   : isProfessionalClassType(classes.find(c => c.id === assessmentForm.classId)?.type, classes.find(c => c.id === assessmentForm.classId)?.code)
+                     ? PROFESSIONAL_CRITERIA_MONTAGEM
+                     : ADULT_CRITERIA
                  ).map((c, i) => (
                    <div key={c.id} className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
                      <div className="space-y-2">
@@ -477,7 +484,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                  ))}
 
                  {/* Open Questions */}
-                 {(classes.find(c => c.id === assessmentForm.classId)?.type === "Prática Profissional de Montagem"
+                 {(isProfessionalClassType(classes.find(c => c.id === assessmentForm.classId)?.type, classes.find(c => c.id === assessmentForm.classId)?.code)
                    ? PROFESSIONAL_OPEN_QUESTIONS
                    : ADULT_OPEN_QUESTIONS
                  ).map(q => (
@@ -509,7 +516,7 @@ export const SelfAssessmentView: React.FC<SelfAssessmentViewProps> = ({
                 <button
                   type="submit"
                   disabled={
-                    Object.keys(assessmentForm.notes).length < (classes.find(c => c.id === assessmentForm.classId)?.type === "Prática Profissional de Montagem" ? 20 : 10)
+                    Object.keys(assessmentForm.notes).length < (isProfessionalClassType(classes.find(c => c.id === assessmentForm.classId)?.type, classes.find(c => c.id === assessmentForm.classId)?.code) ? 20 : 10)
                   }
                   className="flex-[2] py-5 bg-pro-teal text-white font-black rounded-2xl shadow-xl shadow-teal-900/20 hover:brightness-110 active:scale-[0.98] transition-all uppercase tracking-widest text-[10px] disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
                 >

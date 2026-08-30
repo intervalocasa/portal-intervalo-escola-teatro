@@ -36,6 +36,9 @@ import getCroppedImg from "./lib/cropUtils";
 import { 
   ADULT_COURSE_CRITERIA, 
   PROFESSIONAL_COURSE_CRITERIA, 
+  SENIOR_COURSE_CRITERIA,
+  is60PlusClass,
+  isProfessionalClassType,
   GRADE_LEGEND,
   PROFESSIONAL_CRITERIA_BASE,
   PROFESSIONAL_CRITERIA_MONTAGEM,
@@ -107,6 +110,7 @@ import { ClassDiaryView } from "./views/ClassDiaryView";
 import { StageProductionsView } from "./views/StageProductionsView";
 import { FormativeDocumentsView } from "./views/FormativeDocumentsView";
 import { getMonthlyDeadline } from "./lib/deadlineUtils";
+import { isDirectorOrGestor, isStaffOrAdmin, isProfessorOrTeacher } from "./lib/userUtils";
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
@@ -1073,10 +1077,12 @@ export default function App() {
 
     // Filter logic for notification trigger
     const currentProfile = currentUsers.find(u => u.id === currentUserId || (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()));
-    const userRole = currentProfile?.role || role || currentUser?.role;
+    const userRole = currentProfile?.role || role || currentUser?.role || "";
     let shouldNotify = false;
 
     if (
+      isDirectorOrGestor(userRole) ||
+      isStaffOrAdmin(userRole) ||
       userRole === "Gestor" || 
       userRole === "Diretor Pedagógico" || 
       userRole === "Diretor Pedagógico e Professor" || 
@@ -1089,7 +1095,7 @@ export default function App() {
     } else {
       if (aviso.target === "Todos") shouldNotify = true;
       if (aviso.target === "Alunos" && userRole === "Aluno") shouldNotify = true;
-      if (aviso.target === "Professores" && (userRole === "Professor" || userRole === "Diretor Pedagógico e Professor" || userRole === "Diretor Pedagógico")) shouldNotify = true;
+      if (aviso.target === "Professores" && (isProfessorOrTeacher(userRole) || isDirectorOrGestor(userRole))) shouldNotify = true;
     }
 
     if (shouldNotify) {
@@ -1366,9 +1372,11 @@ export default function App() {
 
     // 2. Check target for current user role
     const currentProfile = users.find(u => u.id === currentUser?.uid || (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()));
-    const userRole = currentProfile?.role || role || currentUser?.role;
+    const userRole = currentProfile?.role || role || currentUser?.role || "";
 
     if (
+      isDirectorOrGestor(userRole) ||
+      isStaffOrAdmin(userRole) ||
       userRole === "Gestor" || 
       userRole === "Diretor Pedagógico" || 
       userRole === "Diretor Pedagógico e Professor" || 
@@ -1385,7 +1393,7 @@ export default function App() {
     
     if (aviso.target === "Todos") return true;
     if (aviso.target === "Alunos" && userRole === "Aluno") return true;
-    if (aviso.target === "Professores" && (userRole === "Professor" || userRole === "Diretor Pedagógico e Professor" || userRole === "Diretor Pedagógico")) return true;
+    if (aviso.target === "Professores" && (isProfessorOrTeacher(userRole) || isDirectorOrGestor(userRole) || userRole === "Professor" || userRole === "Diretor Pedagógico e Professor" || userRole === "Diretor Pedagógico")) return true;
 
     return false;
   });
@@ -1543,10 +1551,13 @@ export default function App() {
 
     // Validation for "concluido"
     if (status === "concluido") {
-      const isProfessional = selectedClass.type.includes("Profissional") || selectedClass.type.includes("Montagem");
-      const criteriaList = isProfessional 
-        ? PROFESSIONAL_COURSE_CRITERIA 
-        : ADULT_COURSE_CRITERIA;
+      const isSenior = is60PlusClass(selectedClass.type, selectedClass.code);
+      const isProfessional = !isSenior && isProfessionalClassType(selectedClass.type, selectedClass.code);
+      const criteriaList = isSenior 
+        ? SENIOR_COURSE_CRITERIA 
+        : isProfessional 
+          ? PROFESSIONAL_COURSE_CRITERIA 
+          : ADULT_COURSE_CRITERIA;
       
       const missingGrades = criteriaList.filter(c => diaryFormData.grades[c.id] === undefined);
       if (missingGrades.length > 0) {
@@ -2671,7 +2682,7 @@ export default function App() {
           </form>
         </motion.div>
         ) : view === "dashboard" ? (
-          (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") ? (
+          (isDirectorOrGestor(role) || isDirectorOrGestor(currentUser?.role) || role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") ? (
             <GestorDashboard 
               currentUser={currentUser}
               users={users}
@@ -2683,7 +2694,7 @@ export default function App() {
               onAwardBadge={handleAwardBadge}
               onHealDatabase={healDatabaseAndRelations}
             />
-          ) : role === "Auxiliar Administrativo" ? (
+          ) : (role === "Auxiliar Administrativo" || isStaffOrAdmin(role) || isStaffOrAdmin(currentUser?.role)) ? (
             <AuxiliarDashboard 
               currentUser={currentUser}
               users={users}
@@ -2693,7 +2704,7 @@ export default function App() {
               filteredAnnouncements={filteredAnnouncements}
               onAwardBadge={handleAwardBadge}
             />
-          ) : role === "Professor" ? (
+          ) : (role === "Professor" || isProfessorOrTeacher(role) || isProfessorOrTeacher(currentUser?.role)) ? (
             <ProfessorDashboard 
               currentUser={currentUser}
               users={users}

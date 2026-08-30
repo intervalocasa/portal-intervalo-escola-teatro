@@ -25,6 +25,9 @@ import {
 import { 
   ADULT_COURSE_CRITERIA, 
   PROFESSIONAL_COURSE_CRITERIA, 
+  SENIOR_COURSE_CRITERIA,
+  is60PlusClass,
+  isProfessionalClassType,
   GRADE_LEGEND 
 } from '../constants';
 
@@ -53,7 +56,9 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
   const eligibleIds = [currentUser?.uid, mappedUser?.id, mappedUser?.migratedFrom].filter(Boolean) as string[];
 
   const currentClass = classes.find(c => c.id === analyticsClassId);
-  const isAdultOr60 = currentClass?.type?.includes("Adulto") || currentClass?.type?.includes("60+");
+  const is60Plus = is60PlusClass(currentClass?.type, currentClass?.code);
+  const isProfessional = !is60Plus && isProfessionalClassType(currentClass?.type, currentClass?.code);
+  const isAdultOr60 = !isProfessional;
 
   const studentClassesWithData = React.useMemo(() => {
     const ids = new Set([
@@ -63,9 +68,11 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
     return classes.filter(c => ids.has(c.id));
   }, [evaluations, diaries, eligibleIds, classes]);
 
-  const criteria = currentClass?.type?.includes("Profissional") || currentClass?.type?.includes("Montagem")
-    ? PROFESSIONAL_COURSE_CRITERIA
-    : ADULT_COURSE_CRITERIA;
+  const criteria = is60Plus 
+    ? SENIOR_COURSE_CRITERIA 
+    : isProfessional 
+      ? PROFESSIONAL_COURSE_CRITERIA 
+      : ADULT_COURSE_CRITERIA;
 
   const chartData = React.useMemo(() => {
     const studentEvals = evaluations
@@ -105,11 +112,19 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
 
     // Calculate final combined evolution
     const results = Array.from(combinedMap.values()).map(point => {
-        const weightSelf = currentClass?.type?.includes("Profissional") ? 2 : 3;
-        const weightProf = currentClass?.type?.includes("Profissional") ? 2 : 1;
+        const weightSelf = isProfessional ? 2 : is60Plus ? 2 : 3;
+        const weightProf = isProfessional ? 2 : is60Plus ? 2 : 1;
         
         let final = null;
-        if (point.self !== undefined && point.prof !== undefined) {
+        if (is60Plus) {
+            if (point.self !== undefined && point.prof !== undefined) {
+                final = Number(((point.self + point.prof) / 2).toFixed(1));
+            } else if (point.prof !== undefined) {
+                final = point.prof;
+            } else if (point.self !== undefined) {
+                final = point.self;
+            }
+        } else if (point.self !== undefined && point.prof !== undefined) {
             final = Number(((point.self * weightSelf + point.prof * weightProf) / 4).toFixed(1));
         } else if (point.prof !== undefined) {
             final = point.prof;
@@ -121,7 +136,15 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
         criteria.forEach(c => {
             const s = point.selfNotes?.[c.id];
             const p = point.profGrades?.[c.id];
-            if (s !== undefined && p !== undefined) {
+            if (is60Plus) {
+                if (s !== undefined && p !== undefined) {
+                    criteriaAverages[c.id] = Number(((s + p) / 2).toFixed(1));
+                } else if (p !== undefined) {
+                    criteriaAverages[c.id] = p;
+                } else if (s !== undefined) {
+                    criteriaAverages[c.id] = s;
+                }
+            } else if (s !== undefined && p !== undefined) {
                 criteriaAverages[c.id] = Number(((s * weightSelf + p * weightProf) / 4).toFixed(1));
             } else if (p !== undefined) {
                 criteriaAverages[c.id] = p;
@@ -134,7 +157,7 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
     });
 
     return results.sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month));
-  }, [evaluations, diaries, currentUser, analyticsClassId, currentClass, criteria]);
+  }, [evaluations, diaries, currentUser, analyticsClassId, currentClass, criteria, is60Plus, isProfessional]);
 
   const formatYAxis = (val: number) => {
     if (!isAdultOr60) return val.toString();

@@ -20,7 +20,12 @@ import {
 import { db } from "../lib/firebase";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
 import { LessonPlan, Skill, Class, User } from "../types";
-import { ADULT_COURSE_CRITERIA, PROFESSIONAL_COURSE_CRITERIA } from "../constants";
+import { 
+  ADULT_COURSE_CRITERIA, 
+  PROFESSIONAL_COURSE_CRITERIA, 
+  SENIOR_COURSE_CRITERIA,
+  is60PlusClass 
+} from "../constants";
 
 // Seed skills representing the exact 20 pedagogical criteria from Diário de Classe
 export const DEFAULT_SKILLS: Array<{ 
@@ -87,8 +92,13 @@ export function getSkillsForClass(
     typeStr = `${classTypeOrObject.type || ""} ${classTypeOrObject.code || ""}`;
   }
 
-  const isProf = isProfessionalClass(typeStr);
-  const targetOfficialCriteria = isProf ? PROFESSIONAL_COURSE_CRITERIA : ADULT_COURSE_CRITERIA;
+  const isSenior = is60PlusClass(typeStr);
+  const isProf = !isSenior && isProfessionalClass(typeStr);
+  const targetOfficialCriteria = isSenior 
+    ? SENIOR_COURSE_CRITERIA 
+    : isProf 
+      ? PROFESSIONAL_COURSE_CRITERIA 
+      : ADULT_COURSE_CRITERIA;
   const targetOfficialIds = new Set(targetOfficialCriteria.map(c => c.id));
 
   // Matriz de habilidades oficiais sincronizadas com o Diário
@@ -99,7 +109,7 @@ export function getSkillsForClass(
       id: c.id,
       name: c.label,
       definition: customMatch?.definition || c.definition || defaultMeta?.definition || "",
-      category: customMatch?.category || defaultMeta?.category || (isProf && !ADULT_COURSE_CRITERIA.some(a => a.id === c.id) ? "Montagem & Ensaio" : "Interpretação"),
+      category: customMatch?.category || defaultMeta?.category || (isProf && !ADULT_COURSE_CRITERIA.some(a => a.id === c.id) ? "Montagem & Ensaio" : isSenior ? "Expressão & Convivência 60+" : "Interpretação"),
       courseScope: isProf ? (ADULT_COURSE_CRITERIA.some(a => a.id === c.id) ? "all" : "professional") : "adult",
       active: true
     };
@@ -117,7 +127,7 @@ export function getSkillsForClass(
     skills: [...officialSkills, ...additionalCustomSkills],
     isProfessional: isProf,
     totalOfficialCount: targetOfficialCriteria.length,
-    courseLabel: isProf ? "Prática Profissional de Montagem" : "Curso Livre Adulto (Adulto Amador)",
+    courseLabel: isSenior ? "Turma 60+ Teatro e Bem-Estar" : isProf ? "Prática Profissional de Montagem" : "Curso Livre Adulto (Adulto Amador)",
     officialCriteriaIds: targetOfficialCriteria.map(c => c.id)
   };
 }

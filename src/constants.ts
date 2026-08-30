@@ -11,6 +11,19 @@ export const ADULT_COURSE_CRITERIA = [
   { id: "autonomy", label: "Autonomia e compromisso com o processo", definition: "Responsabilidade do aluno com o trabalho, prontidão para aula/ensaio e capacidade de avançar no processo com iniciativa." }
 ];
 
+export const SENIOR_COURSE_CRITERIA = [
+  { id: "presence_sensory", label: "Presença Viva e Atenção Sensorial", definition: "Sustentação do foco e prontidão para o jogo, estimulando a capacidade cognitiva e sensorial." },
+  { id: "body_organic", label: "Consciência Corporal e Expressão Orgânica", definition: "Uso do corpo no seu próprio tempo, respeitando articulações e promovendo saúde física sem exaustão." },
+  { id: "vocal_conscious", label: "Voz Natural e Comunicação Articulada e Consciente", definition: "Projeção e dicção trabalhadas sem pressão, valorizando a oralidade genuína de cada um." },
+  { id: "listening_democratic", label: "Escuta Democrática e Vínculo Social", definition: "Capacidade de acolher a fala do colega na roda e reagir de forma cúmplice aos estímulos de cena." },
+  { id: "free_play", label: "Jogo Livre e Desbloqueio Expressivo", definition: "Disposição para criar em situações abertas a partir do próprio repertório de vida." },
+  { id: "narrative_identity", label: "Apropriação Narrativa e Identidade", definition: "Experimentação de tipos, papeis e memórias sem cobrança por rigor metodológico." },
+  { id: "coexistence_empathy", label: "Convivência, Empatia e Pertencimento", definition: "Construção de afeto coletivo, sociabilidade e integração horizontal entre os participantes." },
+  { id: "memory_reading", label: "Estímulo à Memória e Leitura Orgânica", definition: "Exercício da memória como ginástica cerebral, sem a angústia da decoração exata." },
+  { id: "spatial_perception", label: "Percepção Espacial e Conexão Coletiva", definition: "Orientação no espaço de cena e ocupação consciente do ambiente compartilhado." },
+  { id: "engagement_selfcare", label: "Engajamento Acolhedor e Autocuidado", definition: "Frequência sustentada pelo prazer do encontro, lazer e bem-estar em sala de aula." }
+];
+
 export const PROFESSIONAL_COURSE_CRITERIA = [
   ...ADULT_COURSE_CRITERIA,
   { id: "discipline", label: "Disciplina de ensaio", definition: "Capacidade de manter foco, constância, organização e conduta adequada durante os ensaios." },
@@ -28,6 +41,29 @@ export const PROFESSIONAL_COURSE_CRITERIA = [
 export const PROFESSIONAL_CRITERIA_BASE = ADULT_COURSE_CRITERIA;
 export const PROFESSIONAL_CRITERIA_MONTAGEM = PROFESSIONAL_COURSE_CRITERIA;
 export const ADULT_CRITERIA = ADULT_COURSE_CRITERIA;
+export const SENIOR_CRITERIA = SENIOR_COURSE_CRITERIA;
+
+export function is60PlusClass(classType?: string, className?: string): boolean {
+  if (!classType && !className) return false;
+  const str = `${classType || ""} ${className || ""}`.toLowerCase();
+  return str.includes("60") || str.includes("60+");
+}
+
+export function isProfessionalClassType(classType?: string, className?: string): boolean {
+  if (!classType && !className) return false;
+  const str = `${classType || ""} ${className || ""}`.toLowerCase();
+  return str.includes("profissional") || str.includes("montagem");
+}
+
+export function getCriteriaForClass(classType?: string, className?: string) {
+  if (is60PlusClass(classType, className)) {
+    return SENIOR_COURSE_CRITERIA;
+  }
+  if (isProfessionalClassType(classType, className)) {
+    return PROFESSIONAL_COURSE_CRITERIA;
+  }
+  return ADULT_COURSE_CRITERIA;
+}
 
 export const GRADE_LEGEND = [
   { 

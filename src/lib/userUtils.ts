@@ -78,3 +78,44 @@ export function getUserCivilNameIfAllowed(
   }
   return undefined;
 }
+
+/**
+ * Checks if a given role string corresponds to a Director, Pedagogical Director, or Gestor.
+ * Robust to accents, casing, and variations.
+ */
+export function isDirectorOrGestor(role?: string | null): boolean {
+  if (!role) return false;
+  const norm = role.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  return (
+    norm.includes("gestor") || 
+    norm.includes("diretor") || 
+    norm.includes("diretora") ||
+    norm.includes("pedagogic") ||
+    norm === "admin"
+  );
+}
+
+/**
+ * Checks if a given role string corresponds to staff (Gestor, Diretor, or Auxiliar Administrativo).
+ */
+export function isStaffOrAdmin(role?: string | null): boolean {
+  if (!role) return false;
+  const norm = role.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  return (
+    isDirectorOrGestor(role) ||
+    norm.includes("auxiliar")
+  );
+}
+
+/**
+ * Checks if a given role string corresponds to a teacher/professor.
+ */
+export function isProfessorOrTeacher(role?: string | null): boolean {
+  if (!role) return false;
+  const norm = role.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  return (
+    norm.includes("professor") ||
+    norm.includes("professora") ||
+    norm.includes("docente")
+  );
+}

@@ -11,6 +11,9 @@ import { Avatar, BackButton } from "../components/CommonComponents";
 import { 
   PROFESSIONAL_COURSE_CRITERIA, 
   ADULT_COURSE_CRITERIA, 
+  SENIOR_COURSE_CRITERIA,
+  is60PlusClass,
+  isProfessionalClassType,
   GRADE_LEGEND,
   SCALES
 } from "../constants";
@@ -56,8 +59,13 @@ export const StudentDiaryFormView = ({
   const [showExpiredModal, setShowExpiredModal] = useState(false);
   const student = users.find(u => u.id === selectedDiaryStudentId);
   const targetClass = classes.find(c => c.id === selectedClassId);
-  const isProfessional = targetClass?.type?.includes("Profissional") || targetClass?.type?.includes("Montagem");
-  const criteria = isProfessional ? PROFESSIONAL_COURSE_CRITERIA : ADULT_COURSE_CRITERIA;
+  const isSenior60 = is60PlusClass(targetClass?.type, targetClass?.code);
+  const isProfessional = !isSenior60 && isProfessionalClassType(targetClass?.type, targetClass?.code);
+  const criteria = isSenior60 
+    ? SENIOR_COURSE_CRITERIA 
+    : isProfessional 
+      ? PROFESSIONAL_COURSE_CRITERIA 
+      : ADULT_COURSE_CRITERIA;
 
   const deadlineInfo = useMemo(() => {
     return getMonthlyDeadline(diaryFilterMonth, diaryFilterYear);
@@ -468,8 +476,64 @@ export const StudentDiaryFormView = ({
                               {(() => {
                                 const studentNote = studentEval?.notes?.[c.id];
                                 const currentProfGrade = diaryFormData.grades[c.id];
+                                const hasProfGrade = currentProfGrade !== undefined && currentProfGrade !== "";
+                                const hasStudentNote = studentNote !== undefined;
                                 
-                                if (studentNote !== undefined && currentProfGrade !== undefined && currentProfGrade !== "") {
+                                if (isSenior60) {
+                                  if (hasStudentNote && hasProfGrade) {
+                                    const selfVal = Number(studentNote);
+                                    const profVal = Number(currentProfGrade);
+                                    const compAvg = (selfVal + profVal) / 2;
+                                    const legendItem = compAvg === 0 ? GRADE_LEGEND[0] : 
+                                                     compAvg <= 3 ? GRADE_LEGEND[1] : 
+                                                     compAvg <= 6 ? GRADE_LEGEND[2] : 
+                                                     compAvg <= 9 ? GRADE_LEGEND[3] : 
+                                                     GRADE_LEGEND[4];
+                                    return (
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm font-black text-[#016a86]">{legendItem.label}</span>
+                                        <span className="text-[9px] font-bold text-slate-400">
+                                          ({compAvg.toFixed(1)} / 10)
+                                        </span>
+                                        <span className="px-2 py-0.5 bg-pro-teal/10 text-pro-teal rounded-full text-[8px] font-black uppercase tracking-widest">
+                                          Média 60+
+                                        </span>
+                                      </div>
+                                    );
+                                  } else if (!hasStudentNote && hasProfGrade) {
+                                    const profVal = Number(currentProfGrade);
+                                    const legendItem = profVal === 0 ? GRADE_LEGEND[0] : 
+                                                     profVal <= 3 ? GRADE_LEGEND[1] : 
+                                                     profVal <= 6 ? GRADE_LEGEND[2] : 
+                                                     profVal <= 9 ? GRADE_LEGEND[3] : 
+                                                     GRADE_LEGEND[4];
+                                    return (
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm font-black text-[#016a86]">{legendItem.label}</span>
+                                        <span className="text-[9px] font-bold text-slate-400">
+                                          ({profVal.toFixed(1)} / 10)
+                                        </span>
+                                        <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full text-[8px] font-black uppercase tracking-widest">
+                                          Apenas Professor
+                                        </span>
+                                      </div>
+                                    );
+                                  } else if (hasStudentNote && !hasProfGrade) {
+                                    return (
+                                      <div className="text-[10px] font-bold text-pro-orange uppercase tracking-tight italic">
+                                        Aguardando nota do professor...
+                                      </div>
+                                    );
+                                  } else {
+                                    return (
+                                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight italic">
+                                        Aguardando avaliação...
+                                      </div>
+                                    );
+                                  }
+                                }
+
+                                if (hasStudentNote && hasProfGrade) {
                                   const selfVal = Number(studentNote);
                                   const profVal = Number(currentProfGrade);
                                   const weightSelf = isProfessional ? 2 : 3;
@@ -502,7 +566,7 @@ export const StudentDiaryFormView = ({
                                   }
                                 }
                                 
-                                if (studentNote === undefined) {
+                                if (!hasStudentNote) {
                                   return (
                                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight italic">
                                       Indisponível (Sem autoavaliação)
