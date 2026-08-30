@@ -302,9 +302,36 @@
         "updatedAt": { "type": "object" }
       },
       "required": ["teacherId", "classId", "date", "generalObjective", "skills", "activities"]
+    },
+    "FormativeDocument": {
+      "title": "Documento Formativo",
+      "description": "Documentos e diretrizes formativas pedagógicas em PDF",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileSize": { "type": "number" },
+        "fileType": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "hasChunks": { "type": "boolean" },
+        "totalChunks": { "type": "number" },
+        "storagePath": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "uploadedByName": { "type": "string" },
+        "uploadedByRole": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["title", "fileName", "category"]
     }
   },
   "firestore": {
+    "formative_documents/{docId}": {
+      "schema": "FormativeDocument",
+      "description": "Acervo oficial de documentos formativos e diretrizes em PDF"
+    },
     "lesson_plans/{planId}": {
       "schema": "LessonPlan",
       "description": "Coleção de planos de aula cadastrados pelos professores"

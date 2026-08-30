@@ -1071,17 +1071,25 @@ export default function App() {
   const triggerNotification = useCallback((aviso: any, currentUsers: any[], currentUserId: string | undefined) => {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
 
-    // Filter logic repeated here for the notification trigger
-    const userRole = currentUsers.find(u => u.id === currentUserId)?.role;
+    // Filter logic for notification trigger
+    const currentProfile = currentUsers.find(u => u.id === currentUserId || (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()));
+    const userRole = currentProfile?.role || role || currentUser?.role;
     let shouldNotify = false;
 
-    if (userRole === "Gestor" || userRole === "Diretor Pedagógico" || userRole === "Auxiliar Administrativo") shouldNotify = true;
-    else if (aviso.targetSpecificUsers) {
-      shouldNotify = aviso.targetUserIds?.includes(currentUserId);
+    if (
+      userRole === "Gestor" || 
+      userRole === "Diretor Pedagógico" || 
+      userRole === "Diretor Pedagógico e Professor" || 
+      userRole === "Auxiliar Administrativo"
+    ) {
+      shouldNotify = true;
+    } else if (aviso.targetSpecificUsers) {
+      const currentId = currentUserId || currentProfile?.id || currentUser?.uid;
+      shouldNotify = Boolean(currentId && aviso.targetUserIds?.includes(currentId));
     } else {
       if (aviso.target === "Todos") shouldNotify = true;
       if (aviso.target === "Alunos" && userRole === "Aluno") shouldNotify = true;
-      if (aviso.target === "Professores" && userRole === "Professor") shouldNotify = true;
+      if (aviso.target === "Professores" && (userRole === "Professor" || userRole === "Diretor Pedagógico e Professor" || userRole === "Diretor Pedagógico")) shouldNotify = true;
     }
 
     if (shouldNotify) {
@@ -1090,7 +1098,7 @@ export default function App() {
         icon: "/logo.png"
       });
     }
-  }, []);
+  }, [currentUser, role]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -1357,17 +1365,27 @@ export default function App() {
     }
 
     // 2. Check target for current user role
-    const userRole = users.find(u => u.id === currentUser?.uid)?.role;
-    if (userRole === "Gestor" || userRole === "Diretor Pedagógico" || userRole === "Auxiliar Administrativo") return true; // Gestor/Diretor/Auxiliar sees everything
+    const currentProfile = users.find(u => u.id === currentUser?.uid || (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()));
+    const userRole = currentProfile?.role || role || currentUser?.role;
+
+    if (
+      userRole === "Gestor" || 
+      userRole === "Diretor Pedagógico" || 
+      userRole === "Diretor Pedagógico e Professor" || 
+      userRole === "Auxiliar Administrativo"
+    ) {
+      return true; // Gestor/Diretor/Auxiliar sees everything
+    }
     
     // 3. Check if it's targeted for specific users
     if (aviso.targetSpecificUsers) {
-      return aviso.targetUserIds?.includes(currentUser?.uid);
+      const currentId = currentUser?.uid || currentProfile?.id;
+      return Boolean(currentId && aviso.targetUserIds?.includes(currentId));
     }
     
     if (aviso.target === "Todos") return true;
     if (aviso.target === "Alunos" && userRole === "Aluno") return true;
-    if (aviso.target === "Professores" && userRole === "Professor") return true;
+    if (aviso.target === "Professores" && (userRole === "Professor" || userRole === "Diretor Pedagógico e Professor" || userRole === "Diretor Pedagógico")) return true;
 
     return false;
   });

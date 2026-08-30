@@ -434,6 +434,9 @@ export interface FormativeDocument {
   title: string; // Nome do arquivo exibido na página
   fileName: string; // Nome original do arquivo PDF anexado
   fileUrl: string; // Base64 data URL ou URL pública do PDF
+  storagePath?: string; // Caminho no Firebase Storage (opcional)
+  hasChunks?: boolean; // Se o PDF foi particionado em subcoleção no Firestore
+  totalChunks?: number; // Total de partes
   fileSize?: number; // Tamanho em bytes
   fileType?: string; // MIME type (application/pdf)
   category?: string; // Categoria do documento (Diretrizes, Formação, etc.)

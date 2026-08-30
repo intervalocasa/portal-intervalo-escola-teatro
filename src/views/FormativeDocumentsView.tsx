@@ -17,31 +17,29 @@ import {
   X, 
   Check, 
   UploadCloud, 
-  Sparkles, 
   BookOpen, 
   Calendar, 
   User as UserIcon,
   Filter,
   AlertCircle,
-  FileCheck,
-  Maximize2,
-  ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Loader2,
+  RefreshCw
 } from "lucide-react";
 import { FormativeDocument, User, UserRole } from "../types";
 import { BackButton, Logo } from "../components/CommonComponents";
 import { 
   collection, 
-  addDoc, 
-  updateDoc, 
+  setDoc,
   deleteDoc, 
   doc, 
   onSnapshot, 
   query, 
-  orderBy, 
+  getDocs,
   serverTimestamp 
 } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { db, storage } from "../lib/firebase";
 
 interface FormativeDocumentsViewProps {
   currentUser: any;
@@ -61,6 +59,9 @@ const CATEGORY_OPTIONS = [
   "Geral"
 ];
 
+// Helper to chunk large base64 strings safely under Firestore's 1MB limit
+const CHUNK_SIZE = 380000; // ~380KB per chunk
+
 export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
   currentUser,
   users,
@@ -77,6 +78,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isViewerModalOpen, setIsViewerModalOpen] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<FormativeDocument | null>(null);
+  const [viewingDocUrl, setViewingDocUrl] = useState<string | null>(null);
   const [editingDoc, setEditingDoc] = useState<FormativeDocument | null>(null);
   
   // Form fields
@@ -89,30 +91,41 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
     size: number;
     type: string;
   } | null>(null);
+  const [selectedFileObj, setSelectedFileObj] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [savingProgress, setSavingProgress] = useState<string>("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  // In-memory cache for resolved full URLs/Base64 of chunked PDFs
+  const [resolvedUrlsCache, setResolvedUrlsCache] = useState<Record<string, string>>({});
 
   // Determine current user profile and permission
   const userProfile = useMemo(() => {
-    return users.find(u => u.id === currentUser?.uid || u.email === currentUser?.email);
+    return users.find(u => 
+      u.id === currentUser?.uid || 
+      (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase())
+    );
   }, [users, currentUser]);
 
-  const effectiveRole = userRole || userProfile?.role;
+  const effectiveRole = userRole || userProfile?.role || currentUser?.role;
   
-  // Only Gestores, Diretor Pedagógico and Diretor Pedagógico e Professor can upload/edit/delete files
+  // Gestores, Diretor Pedagógico and Diretor Pedagógico e Professor can upload/edit/delete files
   const canManageDocs = useMemo(() => {
     return (
       effectiveRole === "Gestor" ||
       effectiveRole === "Diretor Pedagógico" ||
-      effectiveRole === "Diretor Pedagógico e Professor"
+      effectiveRole === "Diretor Pedagógico e Professor" ||
+      currentUser?.email?.toLowerCase() === "intervalocasa@gmail.com" ||
+      currentUser?.email?.toLowerCase() === "contato@intervalocasa.com"
     );
-  }, [effectiveRole]);
+  }, [effectiveRole, currentUser]);
 
-  // Real-time Firestore synchronization
+  // Real-time Firestore synchronization with robust client-side ordering
   useEffect(() => {
     setLoading(true);
-    const q = query(collection(db, "formative_documents"), orderBy("createdAt", "desc"));
+    const q = query(collection(db, "formative_documents"));
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
@@ -120,11 +133,26 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
           id: d.id,
           ...(d.data() as any)
         }));
+
+        // Sort descending by createdAt
+        docs.sort((a, b) => {
+          const getMillis = (docItem: FormativeDocument) => {
+            if (!docItem?.createdAt) return 0;
+            if (docItem.createdAt.toMillis) return docItem.createdAt.toMillis();
+            if (docItem.createdAt.seconds) return docItem.createdAt.seconds * 1000;
+            if (typeof docItem.createdAt === "string" || typeof docItem.createdAt === "number") {
+              return new Date(docItem.createdAt).getTime() || 0;
+            }
+            return 0;
+          };
+          return getMillis(b) - getMillis(a);
+        });
+
         setDocuments(docs);
         setLoading(false);
       },
       (error) => {
-        console.error("Erro ao carregar documentos formativos:", error);
+        console.error("Erro ao carregar documentos formativos da Firestore:", error);
         setLoading(false);
       }
     );
@@ -168,10 +196,42 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
         year: "numeric"
       });
     }
-    if (typeof timestamp === "string") {
+    if (typeof timestamp === "string" || typeof timestamp === "number") {
       return new Date(timestamp).toLocaleDateString("pt-BR");
     }
     return "Data recente";
+  };
+
+  // Resolve full file URL (either from cache, direct URL, or by stitching Firestore subcollection chunks)
+  const resolveFileUrl = async (docItem: FormativeDocument): Promise<string> => {
+    // 1. Check in-memory cache
+    if (resolvedUrlsCache[docItem.id]) {
+      return resolvedUrlsCache[docItem.id];
+    }
+
+    // 2. If it's a direct URL or non-empty base64
+    if (docItem.fileUrl && (docItem.fileUrl.startsWith("http") || docItem.fileUrl.startsWith("data:"))) {
+      setResolvedUrlsCache(prev => ({ ...prev, [docItem.id]: docItem.fileUrl }));
+      return docItem.fileUrl;
+    }
+
+    // 3. If it has chunks stored in subcollection
+    if (docItem.hasChunks) {
+      try {
+        const chunksSnap = await getDocs(collection(db, "formative_documents", docItem.id, "chunks"));
+        const chunksList = chunksSnap.docs.map(d => d.data() as { index: number; data: string });
+        chunksList.sort((a, b) => a.index - b.index);
+        const fullBase64 = chunksList.map(c => c.data).join("");
+        if (fullBase64) {
+          setResolvedUrlsCache(prev => ({ ...prev, [docItem.id]: fullBase64 }));
+          return fullBase64;
+        }
+      } catch (err) {
+        console.error("Erro ao reconstruir PDF a partir dos fragmentos do Firestore:", err);
+      }
+    }
+
+    return docItem.fileUrl || "";
   };
 
   // Open add document modal
@@ -182,6 +242,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
     setFormCategory("Diretrizes Pedagógicas");
     setFormDescription("");
     setAttachedFile(null);
+    setSelectedFileObj(null);
     setFileError(null);
     setIsFormModalOpen(true);
   };
@@ -199,6 +260,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
       size: docItem.fileSize || 0,
       type: docItem.fileType || "application/pdf"
     });
+    setSelectedFileObj(null); // Keeps existing file unless user picks a new one
     setFileError(null);
     setIsFormModalOpen(true);
   };
@@ -217,11 +279,13 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
       return;
     }
 
-    // Size limit: 12MB
-    if (file.size > 12 * 1024 * 1024) {
-      setFileError("O arquivo PDF é muito grande. O limite máximo permitido é de 12 MB.");
+    // Size limit: 15MB
+    if (file.size > 15 * 1024 * 1024) {
+      setFileError("O arquivo PDF é muito grande. O limite máximo permitido é de 15 MB.");
       return;
     }
+
+    setSelectedFileObj(file);
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -248,7 +312,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Save / submit document to Firestore
+  // Save / submit document to Firestore (With Storage + Chunked Firestore fallback)
   const handleSaveDocument = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -262,82 +326,208 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
       return;
     }
 
-    if (!attachedFile || !attachedFile.url) {
+    if (!attachedFile && !editingDoc) {
       setFileError("Por favor, anexe o arquivo PDF do documento formativo.");
       return;
     }
 
     setIsSaving(true);
+    setFileError(null);
+    setSavingProgress("Iniciando gravação...");
+
     try {
-      const authorName = userProfile?.name || currentUser?.displayName || "Direção Pedagógica";
+      const authorName = userProfile?.name || userProfile?.artisticName || currentUser?.displayName || currentUser?.email || "Direção Pedagógica";
       const authorRole = effectiveRole || "Gestor";
+      const authorUid = currentUser?.uid || userProfile?.id || "gestor";
 
-      if (editingDoc) {
-        // Update existing document
-        const docRef = doc(db, "formative_documents", editingDoc.id);
-        await updateDoc(docRef, {
-          title: formTitle.trim(),
-          category: formCategory,
-          description: formDescription.trim(),
-          fileName: attachedFile.name,
-          fileUrl: attachedFile.url,
-          fileSize: attachedFile.size,
-          fileType: attachedFile.type || "application/pdf",
-          updatedAt: serverTimestamp()
-        });
+      // Target document reference
+      const targetDocRef = editingDoc 
+        ? doc(db, "formative_documents", editingDoc.id)
+        : doc(collection(db, "formative_documents"));
 
-        if (showNotification) {
-          showNotification("Documento formativo atualizado com sucesso!", "Sucesso", "success");
+      const docId = targetDocRef.id;
+
+      let fileUrl = editingDoc?.fileUrl || "";
+      let storagePath = editingDoc?.storagePath || "";
+      let hasChunks = editingDoc?.hasChunks || false;
+      let totalChunks = editingDoc?.totalChunks || 0;
+      let fileName = attachedFile?.name || editingDoc?.fileName || "documento.pdf";
+      let fileSize = attachedFile?.size || editingDoc?.fileSize || 0;
+      let fileType = attachedFile?.type || editingDoc?.fileType || "application/pdf";
+
+      // If a new file was selected, upload or chunk it
+      if (selectedFileObj && attachedFile?.url) {
+        setSavingProgress("Otimizando armazenamento do PDF...");
+
+        let uploadedToStorage = false;
+
+        // 1. Try Firebase Storage first (fast & clean download URL)
+        try {
+          setSavingProgress("Enviando arquivo PDF...");
+          const cleanName = selectedFileObj.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const storageRef = ref(storage, `formative_documents/${Date.now()}_${cleanName}`);
+          
+          const timeoutPromise = new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error("Storage timeout")), 6000)
+          );
+          
+          const uploadPromise = (async () => {
+            const snap = await uploadBytes(storageRef, selectedFileObj);
+            return {
+              url: await getDownloadURL(snap.ref),
+              path: snap.ref.fullPath
+            };
+          })();
+
+          const res = await Promise.race([uploadPromise, timeoutPromise]);
+          fileUrl = res.url;
+          storagePath = res.path;
+          hasChunks = false;
+          totalChunks = 0;
+          uploadedToStorage = true;
+        } catch (storageErr) {
+          console.warn("Storage não disponível ou com timeout. Usando partição direta no Firestore:", storageErr);
         }
-      } else {
-        // Create new document
-        await addDoc(collection(db, "formative_documents"), {
-          title: formTitle.trim(),
-          fileName: attachedFile.name,
-          fileUrl: attachedFile.url,
-          fileSize: attachedFile.size,
-          fileType: attachedFile.type || "application/pdf",
-          category: formCategory,
-          description: formDescription.trim(),
-          uploadedBy: currentUser?.uid || "gestor",
-          uploadedByName: authorName,
-          uploadedByRole: authorRole,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
 
-        if (showNotification) {
-          showNotification("Documento formativo adicionado com sucesso ao acervo!", "Sucesso", "success");
+        // 2. If Storage was not used, use Firestore direct / chunked storage
+        if (!uploadedToStorage) {
+          const rawBase64 = attachedFile.url;
+
+          // If base64 is small (<650KB), save inline directly in document
+          if (rawBase64.length < 650000) {
+            fileUrl = rawBase64;
+            hasChunks = false;
+            totalChunks = 0;
+          } else {
+            // If base64 is large (>=650KB), partition into safe chunks in a subcollection
+            setSavingProgress("Armazenando fragmentos seguros no Firestore...");
+            hasChunks = true;
+            fileUrl = ""; // Keep main doc lightweight
+            
+            const chunks: string[] = [];
+            for (let i = 0; i < rawBase64.length; i += CHUNK_SIZE) {
+              chunks.push(rawBase64.slice(i, i + CHUNK_SIZE));
+            }
+            totalChunks = chunks.length;
+
+            const chunksColRef = collection(db, "formative_documents", docId, "chunks");
+            
+            // Delete old chunks if editing
+            if (editingDoc) {
+              const oldSnap = await getDocs(chunksColRef);
+              for (const cDoc of oldSnap.docs) {
+                await deleteDoc(cDoc.ref);
+              }
+            }
+
+            // Save new chunks sequentially or parallel in batches
+            for (let i = 0; i < chunks.length; i++) {
+              setSavingProgress(`Gravando no banco (${i + 1}/${chunks.length})...`);
+              await setDoc(doc(chunksColRef, String(i)), {
+                index: i,
+                data: chunks[i],
+                createdAt: serverTimestamp()
+              });
+            }
+
+            // Cache in memory for immediate view
+            setResolvedUrlsCache(prev => ({ ...prev, [docId]: rawBase64 }));
+          }
         }
+      }
+
+      setSavingProgress("Finalizando registro do documento...");
+
+      // Write / Update the main Firestore document
+      const payload: Partial<FormativeDocument> = {
+        title: formTitle.trim(),
+        fileName,
+        fileUrl,
+        fileSize,
+        fileType,
+        category: formCategory,
+        description: formDescription.trim(),
+        hasChunks,
+        totalChunks,
+        storagePath: storagePath || null as any,
+        uploadedBy: editingDoc?.uploadedBy || authorUid,
+        uploadedByName: editingDoc?.uploadedByName || authorName,
+        uploadedByRole: editingDoc?.uploadedByRole || authorRole,
+        updatedAt: serverTimestamp(),
+        ...(!editingDoc ? { createdAt: serverTimestamp() } : {})
+      };
+
+      await setDoc(targetDocRef, payload, { merge: true });
+
+      if (showNotification) {
+        showNotification(
+          editingDoc ? "Documento formativo atualizado com sucesso!" : "Documento formativo adicionado com sucesso ao acervo!",
+          "Sucesso",
+          "success"
+        );
       }
 
       setIsFormModalOpen(false);
       setEditingDoc(null);
+      setSelectedFileObj(null);
+      setAttachedFile(null);
     } catch (err: any) {
-      console.error("Erro ao salvar documento formativo:", err);
-      setFileError("Erro ao salvar documento. Tente novamente.");
+      console.error("Erro ao salvar documento formativo no Firestore:", err);
+      setFileError(`Erro ao salvar no banco de dados: ${err.message || "Tente novamente."}`);
     } finally {
       setIsSaving(false);
+      setSavingProgress("");
     }
   };
 
-  // Delete document
-  const handleDeleteDocument = async (docId: string, docTitle: string) => {
+  // Delete document (and subcollection chunks if applicable)
+  const handleDeleteDocument = async (docItem: FormativeDocument) => {
     if (!canManageDocs) return;
     const confirmDelete = window.confirm(
-      `Deseja realmente excluir o documento formativo "${docTitle}"? Esta ação não pode ser desfeita.`
+      `Deseja realmente excluir o documento formativo "${docItem.title}"? Esta ação não pode ser desfeita.`
     );
     if (!confirmDelete) return;
 
-    setDeletingId(docId);
+    setDeletingId(docItem.id);
     try {
-      await deleteDoc(doc(db, "formative_documents", docId));
-      if (showNotification) {
-        showNotification(`Documento "${docTitle}" removido com sucesso.`, "Excluído", "success");
+      // 1. Delete Storage object if present
+      if (docItem.storagePath) {
+        try {
+          await deleteObject(ref(storage, docItem.storagePath));
+        } catch (e) {
+          console.warn("Aviso ao remover arquivo do Storage:", e);
+        }
       }
-      if (viewingDoc?.id === docId) {
+
+      // 2. Delete chunks subcollection if present
+      if (docItem.hasChunks) {
+        try {
+          const chunksSnap = await getDocs(collection(db, "formative_documents", docItem.id, "chunks"));
+          for (const cDoc of chunksSnap.docs) {
+            await deleteDoc(cDoc.ref);
+          }
+        } catch (e) {
+          console.warn("Aviso ao remover fragmentos:", e);
+        }
+      }
+
+      // 3. Delete main document
+      await deleteDoc(doc(db, "formative_documents", docItem.id));
+      
+      // Clean cache
+      setResolvedUrlsCache(prev => {
+        const next = { ...prev };
+        delete next[docItem.id];
+        return next;
+      });
+
+      if (showNotification) {
+        showNotification(`Documento "${docItem.title}" removido com sucesso.`, "Excluído", "success");
+      }
+      if (viewingDoc?.id === docItem.id) {
         setIsViewerModalOpen(false);
         setViewingDoc(null);
+        setViewingDocUrl(null);
       }
     } catch (err: any) {
       console.error("Erro ao excluir documento formativo:", err);
@@ -348,32 +538,50 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
   };
 
   // Download PDF handler
-  const handleDownload = (docItem: FormativeDocument) => {
-    if (!docItem.fileUrl) {
-      alert("Arquivo indisponível para download.");
-      return;
-    }
+  const handleDownload = async (docItem: FormativeDocument) => {
+    setDownloadingId(docItem.id);
+    try {
+      const url = await resolveFileUrl(docItem);
+      if (!url) {
+        alert("Arquivo indisponível para download.");
+        return;
+      }
 
-    const link = document.createElement("a");
-    link.href = docItem.fileUrl;
-    // Sanitized download filename
-    const safeTitle = (docItem.title || docItem.fileName || "documento_formativo")
-      .trim()
-      .replace(/[/\\?%*:|"<>]/g, "-");
-    link.download = safeTitle.toLowerCase().endsWith(".pdf") ? safeTitle : `${safeTitle}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const link = document.createElement("a");
+      link.href = url;
+      // Sanitized download filename
+      const safeTitle = (docItem.title || docItem.fileName || "documento_formativo")
+        .trim()
+        .replace(/[/\\?%*:|"<>]/g, "-");
+      link.download = safeTitle.toLowerCase().endsWith(".pdf") ? safeTitle : `${safeTitle}.pdf`;
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-    if (showNotification) {
-      showNotification(`Download iniciado: ${docItem.title}`, "Download", "success");
+      if (showNotification) {
+        showNotification(`Download iniciado: ${docItem.title}`, "Download", "success");
+      }
+    } catch (err) {
+      console.error("Erro ao iniciar download:", err);
+      alert("Não foi possível transferir o arquivo. Tente novamente.");
+    } finally {
+      setDownloadingId(null);
     }
   };
 
   // Open PDF viewer
-  const handleOpenViewer = (docItem: FormativeDocument) => {
+  const handleOpenViewer = async (docItem: FormativeDocument) => {
     setViewingDoc(docItem);
+    setViewingDocUrl(null);
     setIsViewerModalOpen(true);
+
+    try {
+      const url = await resolveFileUrl(docItem);
+      setViewingDocUrl(url);
+    } catch (err) {
+      console.error("Erro ao abrir pré-visualização:", err);
+    }
   };
 
   return (
@@ -433,7 +641,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                 Documentos Formativos
               </h2>
               <p className="text-xs md:text-sm text-slate-500 font-medium mt-1">
-                Consulte e baixe os documentos formativos oficiais. {canManageDocs && "Como gestor/diretor, você pode adicionar e gerenciar novos arquivos."}
+                Consulte e baixe os documentos formativos oficiais salvos no acervo. {canManageDocs && "Como gestor/diretor, você pode adicionar e gerenciar novos arquivos."}
               </p>
             </div>
 
@@ -584,7 +792,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Document Title (Selected by gestor) */}
+                    {/* Document Title */}
                     <div>
                       <h3 className="font-black text-base md:text-lg text-slate-800 tracking-tight leading-snug line-clamp-2 group-hover:text-pro-teal transition-colors">
                         {docItem.title}
@@ -621,14 +829,19 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                   {/* Actions Bar */}
                   <div className="pt-5 mt-4 border-t border-slate-100 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-1">
-                      {/* Download Button (Available for all users) */}
+                      {/* Download Button */}
                       <button
                         onClick={() => handleDownload(docItem)}
-                        className="flex-1 py-2.5 px-3 bg-pro-teal hover:bg-[#01566d] active:scale-[0.98] text-white font-black text-xs rounded-xl shadow-md shadow-pro-teal/15 flex items-center justify-center gap-2 transition-all"
+                        disabled={downloadingId === docItem.id}
+                        className="flex-1 py-2.5 px-3 bg-pro-teal hover:bg-[#01566d] active:scale-[0.98] disabled:opacity-60 text-white font-black text-xs rounded-xl shadow-md shadow-pro-teal/15 flex items-center justify-center gap-2 transition-all"
                         title="Baixar arquivo PDF para seu dispositivo"
                       >
-                        <Download size={15} />
-                        <span>Baixar PDF</span>
+                        {downloadingId === docItem.id ? (
+                          <Loader2 size={15} className="animate-spin" />
+                        ) : (
+                          <Download size={15} />
+                        )}
+                        <span>{downloadingId === docItem.id ? "Baixando..." : "Baixar PDF"}</span>
                       </button>
 
                       {/* In-app Preview Button */}
@@ -652,12 +865,16 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                           <Edit3 size={15} />
                         </button>
                         <button
-                          onClick={() => handleDeleteDocument(docItem.id, docItem.title)}
+                          onClick={() => handleDeleteDocument(docItem)}
                           disabled={deletingId === docItem.id}
                           className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                           title="Excluir documento"
                         >
-                          <Trash2 size={15} />
+                          {deletingId === docItem.id ? (
+                            <Loader2 size={15} className="animate-spin text-red-500" />
+                          ) : (
+                            <Trash2 size={15} />
+                          )}
                         </button>
                       </div>
                     )}
@@ -692,12 +909,13 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                       {editingDoc ? "Editar Documento Formativo" : "Adicionar Documento Formativo"}
                     </h3>
                     <p className="text-xs text-teal-100/80 font-medium">
-                      Anexe o arquivo em PDF e escolha o nome de exibição oficial.
+                      Anexe o arquivo em PDF e escolha o nome de exibição oficial salvo no Firestore.
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setIsFormModalOpen(false)}
+                  disabled={isSaving}
                   className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors"
                 >
                   <X size={20} />
@@ -752,7 +970,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                 {/* 3. Upload do Arquivo PDF */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
-                    Arquivo PDF <span className="text-red-500">*</span>
+                    Arquivo PDF {!editingDoc && <span className="text-red-500">*</span>}
                   </label>
                   
                   {attachedFile ? (
@@ -767,7 +985,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                           </div>
                           <div className="text-[10px] text-teal-700 font-bold flex items-center gap-2 mt-0.5">
                             <span className="flex items-center gap-1 text-emerald-600">
-                              <Check size={12} /> PDF Carregado
+                              <Check size={12} /> PDF Selecionado
                             </span>
                             <span>•</span>
                             <span>{formatFileSize(attachedFile.size)}</span>
@@ -799,7 +1017,7 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                         Clique ou arraste o arquivo PDF aqui
                       </p>
                       <p className="text-[11px] text-slate-400 font-medium mt-1">
-                        Formato suportado: PDF (máx. 12 MB)
+                        Formato suportado: PDF (máx. 15 MB)
                       </p>
                     </label>
                   )}
@@ -819,6 +1037,14 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                   />
                 </div>
 
+                {/* Progress message if saving */}
+                {isSaving && savingProgress && (
+                  <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center gap-2.5 text-pro-teal text-xs font-bold animate-pulse">
+                    <Loader2 size={16} className="animate-spin shrink-0" />
+                    <span>{savingProgress}</span>
+                  </div>
+                )}
+
                 {/* Modal Footer */}
                 <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
                   <button
@@ -831,13 +1057,13 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                   </button>
                   <button
                     type="submit"
-                    disabled={isSaving || !attachedFile}
+                    disabled={isSaving || (!attachedFile && !editingDoc)}
                     className="px-6 py-2.5 bg-pro-teal hover:bg-[#01566d] disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-teal-900/10 transition-all flex items-center gap-2"
                   >
                     {isSaving ? (
                       <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span>Salvando...</span>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Salvando no Firestore...</span>
                       </>
                     ) : (
                       <>
@@ -884,15 +1110,23 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => handleDownload(viewingDoc)}
-                    className="px-4 py-2 bg-pro-teal hover:bg-[#01566d] text-white rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-md"
+                    disabled={downloadingId === viewingDoc.id}
+                    className="px-4 py-2 bg-pro-teal hover:bg-[#01566d] disabled:opacity-60 text-white rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-md"
                   >
-                    <Download size={15} />
-                    <span className="hidden sm:inline">Baixar PDF</span>
+                    {downloadingId === viewingDoc.id ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : (
+                      <Download size={15} />
+                    )}
+                    <span className="hidden sm:inline">
+                      {downloadingId === viewingDoc.id ? "Baixando..." : "Baixar PDF"}
+                    </span>
                   </button>
                   <button
                     onClick={() => {
                       setIsViewerModalOpen(false);
                       setViewingDoc(null);
+                      setViewingDocUrl(null);
                     }}
                     className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-all"
                   >
@@ -903,21 +1137,25 @@ export const FormativeDocumentsView: React.FC<FormativeDocumentsViewProps> = ({
 
               {/* Viewer Body (iframe/embed) */}
               <div className="flex-1 bg-slate-950 p-2 overflow-hidden flex items-center justify-center">
-                {viewingDoc.fileUrl ? (
+                {viewingDocUrl ? (
                   <iframe
-                    src={viewingDoc.fileUrl}
+                    src={viewingDocUrl}
                     title={viewingDoc.title}
                     className="w-full h-full rounded-2xl border border-slate-800 bg-white"
                   />
                 ) : (
-                  <div className="text-center text-slate-400 p-8">
-                    <AlertCircle size={32} className="mx-auto mb-2 text-amber-400" />
-                    <p className="text-sm font-bold">Não foi possível carregar a pré-visualização do PDF.</p>
+                  <div className="text-center text-slate-400 p-8 flex flex-col items-center gap-3">
+                    <Loader2 size={32} className="animate-spin text-pro-teal" />
+                    <p className="text-sm font-bold text-slate-300">Carregando visualização do PDF...</p>
+                    <p className="text-xs text-slate-500 max-w-sm">
+                      Recuperando dados completos do acervo para visualização.
+                    </p>
                     <button
                       onClick={() => handleDownload(viewingDoc)}
-                      className="mt-4 px-4 py-2 bg-pro-teal text-white rounded-xl text-xs font-bold"
+                      className="mt-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700"
                     >
-                      Baixar Arquivo Diretamente
+                      <Download size={14} />
+                      <span>Baixar Arquivo Diretamente</span>
                     </button>
                   </div>
                 )}

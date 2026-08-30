@@ -23,7 +23,8 @@ import {
   Layers,
   UserCheck,
   Clapperboard,
-  FolderArchive
+  FolderArchive,
+  Megaphone
 } from "lucide-react";
 import { Logo, Avatar } from "../components/CommonComponents";
 import { AnnouncementPanel } from "../components/AnnouncementPanel";
@@ -53,7 +54,7 @@ export const GestorDashboard = ({
   onHealDatabase
 }: GestorDashboardProps) => {
   const [isHealing, setIsHealing] = useState(false);
-  const user = users.find(u => u.id === currentUser?.uid);
+  const user = users.find(u => u.id === currentUser?.uid || (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase())) || currentUser;
   
   return (
     <motion.div
@@ -71,9 +72,9 @@ export const GestorDashboard = ({
         
         <div className="mt-auto flex flex-col items-center gap-4 pt-10">
            <div className="w-16 h-16 rounded-full border-4 border-white/20 overflow-hidden bg-white/10 mb-2 shadow-xl flex items-center justify-center">
-              <Avatar src={users.find(u => u.id === currentUser?.uid)?.photo} fallbackSize={40} />
+              <Avatar src={user?.photo} fallbackSize={40} />
            </div>
-           <span className="text-white font-bold text-sm tracking-tight">{users.find(u => u.id === currentUser?.uid)?.name || "Gestor(a)"}</span>
+           <span className="text-white font-bold text-sm tracking-tight">{user?.name || user?.artisticName || "Gestor(a)"}</span>
         </div>
       </div>
 
@@ -211,6 +212,7 @@ export const GestorDashboard = ({
               </div>
             </motion.button>
 
+            {/* Painel de Avisos */}
             <motion.button
               onClick={() => setView("create_announcement")}
               whileHover={{ scale: 1.02 }}
@@ -218,11 +220,11 @@ export const GestorDashboard = ({
               className={`w-full p-6 bg-pro-teal rounded-2xl flex items-center gap-5 text-white shadow-lg shadow-teal-900/10 transition-all text-left group`}
             >
               <div className="bg-white/20 p-3 rounded-xl group-hover:scale-110 transition-transform">
-                <Calendar size={24} />
+                <Megaphone size={24} />
               </div>
               <div>
                 <div className="font-bold text-lg leading-none">Painel de Avisos</div>
-                <div className="text-xs opacity-70 mt-1">Gerenciar comunicações</div>
+                <div className="text-xs opacity-70 mt-1">Gerenciar e publicar avisos</div>
               </div>
             </motion.button>
 

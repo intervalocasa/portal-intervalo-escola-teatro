@@ -47,7 +47,7 @@ export const CreateAnnouncementView = ({
       .filter(u => {
         const displayName = getUserDisplayName(u).toLowerCase();
         const matchesSearch = displayName.includes(searchTerm.toLowerCase());
-        const isTeacher = u.role === "Professor" || u.role === "Diretor Pedagógico e Professor";
+        const isTeacher = u.role === "Professor" || u.role === "Diretor Pedagógico e Professor" || u.role === "Diretor Pedagógico";
         const matchesRole = formData.target === "Todos" || (formData.target === "Alunos" ? u.role === "Aluno" : isTeacher);
         return matchesSearch && matchesRole;
       })
