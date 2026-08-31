@@ -290,6 +290,7 @@ export const ManageDiariesView = ({
                                     absences: d.absences || 0,
                                     frequencyObs: d.frequencyObs,
                                     grades: d.grades || {},
+                                    unworkedCriteria: d.unworkedCriteria || {},
                                     criteriaObs: d.criteriaObs || {},
                                     generalPedagogicalObs: d.generalPedagogicalObs || "",
                                     averageGrade: d.averageGrade,
@@ -313,6 +314,7 @@ export const ManageDiariesView = ({
                                     absences: d.absences || 0,
                                     frequencyObs: d.frequencyObs || "",
                                     grades: d.grades || {},
+                                    unworkedCriteria: d.unworkedCriteria || {},
                                     criteriaObs: d.criteriaObs || {},
                                     generalPedagogicalObs: d.generalPedagogicalObs || ""
                                   });

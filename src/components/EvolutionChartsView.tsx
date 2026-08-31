@@ -28,6 +28,7 @@ import {
   SENIOR_COURSE_CRITERIA,
   is60PlusClass,
   isProfessionalClassType,
+  isCriterionUnworked,
   GRADE_LEGEND 
 } from '../constants';
 
@@ -85,13 +86,32 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
 
     const combinedMap = new Map();
     
+    // First index teacher diaries to know which criteria are unworked per period
+    const diaryByPeriod = new Map();
+    studentDiaries.forEach(d => {
+      const key = `${d.month}/${d.year}`;
+      diaryByPeriod.set(key, d);
+    });
+
     studentEvals.forEach(e => {
         const key = `${e.month}/${e.year}`;
-        const selfAvg = (Object.values(e.notes) as any[]).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0) / Object.values(e.notes).length;
+        const diary = diaryByPeriod.get(key);
+        
+        let validSelfNotes = Object.entries(e.notes || {});
+        if (diary) {
+          validSelfNotes = validSelfNotes.filter(([critId]) => {
+            const pGrade = diary.grades?.[critId];
+            return !isCriterionUnworked(pGrade, diary.unworkedCriteria, critId);
+          });
+        }
+
+        const selfAvg = validSelfNotes.length > 0
+          ? validSelfNotes.reduce((acc: number, [_, val]: any) => acc + (Number(val) || 0), 0) / validSelfNotes.length
+          : null;
         
         const dataPoint: any = { 
             name: key, 
-            self: Number(selfAvg.toFixed(1)), 
+            self: selfAvg !== null ? Number(selfAvg.toFixed(1)) : undefined, 
             month: e.month, 
             year: e.year,
             selfNotes: e.notes
@@ -108,6 +128,7 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
         const point = combinedMap.get(key);
         point.prof = Number(d.averageGrade.toFixed(1));
         point.profGrades = d.grades;
+        point.unworkedCriteria = d.unworkedCriteria;
     });
 
     // Calculate final combined evolution
@@ -134,8 +155,14 @@ export const EvolutionChartsView: React.FC<EvolutionChartsViewProps> = ({
 
         const criteriaAverages: any = {};
         criteria.forEach(c => {
+            const isUnworked = isCriterionUnworked(point.profGrades?.[c.id], point.unworkedCriteria, c.id);
+            if (isUnworked) {
+              // Criterion was not worked in class; ignore and disregard student note
+              return;
+            }
+
             const s = point.selfNotes?.[c.id];
-            const p = point.profGrades?.[c.id];
+            const p = point.profGrades?.[c.id] !== undefined && point.profGrades?.[c.id] !== "" ? Number(point.profGrades[c.id]) : undefined;
             if (is60Plus) {
                 if (s !== undefined && p !== undefined) {
                     criteriaAverages[c.id] = Number(((s + p) / 2).toFixed(1));

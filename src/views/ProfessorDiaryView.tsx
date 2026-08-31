@@ -214,6 +214,7 @@ export const ProfessorDiaryView = ({
                               frequencyObs: diary.frequencyObs || "",
                               weeklyAttendance: diary.weeklyAttendance || {},
                               grades: diary.grades || {},
+                              unworkedCriteria: diary.unworkedCriteria || {},
                               criteriaObs: diary.criteriaObs || {},
                               generalPedagogicalObs: diary.generalPedagogicalObs || ""
                             });
@@ -224,6 +225,7 @@ export const ProfessorDiaryView = ({
                               frequencyObs: "",
                               weeklyAttendance: {},
                               grades: {},
+                              unworkedCriteria: {},
                               criteriaObs: {},
                               generalPedagogicalObs: ""
                             });
@@ -294,6 +296,7 @@ export const ProfessorDiaryView = ({
                                       absences: diary.absences || 0,
                                       frequencyObs: diary.frequencyObs,
                                       grades: diary.grades || {},
+                                      unworkedCriteria: diary.unworkedCriteria || {},
                                       criteriaObs: diary.criteriaObs || {},
                                       generalPedagogicalObs: diary.generalPedagogicalObs || "",
                                       averageGrade: diary.averageGrade,

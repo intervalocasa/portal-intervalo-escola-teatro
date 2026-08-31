@@ -27,6 +27,8 @@ import {
   SENIOR_COURSE_CRITERIA,
   is60PlusClass,
   isProfessionalClassType,
+  isCriterionUnworked,
+  UNWORKED_CRITERION_LABEL,
   GRADE_LEGEND,
   SCALES
 } from '../constants';
@@ -216,9 +218,28 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                   const selfCompleted = period.selfAssessment && period.selfAssessment.notes;
                   const profCompleted = period.professorDiary && period.professorDiary.status === "concluido";
                   
-                  const selfAvg = selfCompleted 
-                    ? (Object.values(period.selfAssessment.notes) as any[]).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0) / Object.values(period.selfAssessment.notes).length
-                    : null;
+                  const criteriaList = is60Plus 
+                    ? SENIOR_COURSE_CRITERIA 
+                    : isProfessional 
+                      ? PROFESSIONAL_COURSE_CRITERIA 
+                      : ADULT_COURSE_CRITERIA;
+
+                  const workedCriteria = criteriaList.filter(c => {
+                    if (!profCompleted) return true;
+                    const profGrade = period.professorDiary?.grades?.[c.id];
+                    return !isCriterionUnworked(profGrade, period.professorDiary?.unworkedCriteria, c.id);
+                  });
+
+                  const validSelfNotes = workedCriteria
+                    .map(c => period.selfAssessment?.notes?.[c.id])
+                    .filter(val => val !== undefined)
+                    .map(val => Number(val));
+
+                  const selfAvg = (selfCompleted && validSelfNotes.length > 0)
+                    ? validSelfNotes.reduce((acc: number, val: number) => acc + val, 0) / validSelfNotes.length
+                    : (selfCompleted && !profCompleted && Object.values(period.selfAssessment.notes).length > 0)
+                      ? (Object.values(period.selfAssessment.notes) as any[]).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0) / Object.values(period.selfAssessment.notes).length
+                      : null;
                   
                   const profAvg = profCompleted ? period.professorDiary.averageGrade : null;
                   
@@ -333,6 +354,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                       absences: period.professorDiary.absences || 0,
                                       frequencyObs: period.professorDiary.frequencyObs,
                                       grades: period.professorDiary.grades || {},
+                                      unworkedCriteria: period.professorDiary.unworkedCriteria || {},
                                       criteriaObs: period.professorDiary.criteriaObs || {},
                                       generalPedagogicalObs: period.professorDiary.generalPedagogicalObs || "",
                                       averageGrade: period.professorDiary.averageGrade,
@@ -388,8 +410,63 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                 {(is60Plus ? SENIOR_COURSE_CRITERIA : ADULT_COURSE_CRITERIA).map(c => {
                                   const selfNote = period.selfAssessment?.notes?.[c.id] !== undefined ? Number(period.selfAssessment.notes[c.id]) : null;
                                   const profGradeRaw = period.professorDiary?.grades?.[c.id];
-                                  const profNote = profGradeRaw !== undefined && profGradeRaw !== "" ? Number(profGradeRaw) : null;
+                                  const isUnworked = isCriterionUnworked(profGradeRaw, period.professorDiary?.unworkedCriteria, c.id);
+                                  const profNote = (!isUnworked && profGradeRaw !== undefined && profGradeRaw !== "") ? Number(profGradeRaw) : null;
                                   
+                                  if (isUnworked) {
+                                    return (
+                                      <div key={c.id} className="bg-amber-50/40 p-4 sm:p-5 rounded-2xl border border-amber-200/70 shadow-sm flex flex-col justify-between gap-4" onClick={(e) => e.stopPropagation()}>
+                                        <div>
+                                          <div className="flex items-center justify-between gap-2">
+                                            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-tight line-clamp-1">{c.label}</h4>
+                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-black uppercase rounded-full shrink-0">Sem nota</span>
+                                          </div>
+                                          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Competência</p>
+                                        </div>
+
+                                        <div className="bg-white/80 p-3 rounded-xl border border-amber-200/50 space-y-1">
+                                          <p className="text-[9px] font-black text-amber-900 leading-tight">
+                                            {UNWORKED_CRITERION_LABEL}
+                                          </p>
+                                          <p className="text-[8px] text-slate-500 font-medium leading-relaxed">
+                                            Não entra no cálculo da média global.
+                                            {selfNote !== null && " (Autoavaliação desconsiderada para este critério)"}
+                                          </p>
+                                        </div>
+
+                                        {period.professorDiary?.criteriaObs?.[c.id] && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const teacher = users.find(u => u.id === period.professorDiary.teacherId);
+                                              setTeacherCommentModal({
+                                                text: period.professorDiary.criteriaObs[c.id],
+                                                teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
+                                                teacherPhoto: teacher?.photo
+                                              });
+                                            }}
+                                            className="mt-1 w-full p-2.5 bg-white hover:bg-amber-100/50 border border-amber-200/50 rounded-xl flex items-center justify-center gap-2 group/comment transition-all active:scale-[0.98] shadow-sm"
+                                          >
+                                            {users.find(u => u.id === period.professorDiary.teacherId)?.photo ? (
+                                              <img 
+                                                src={users.find(u => u.id === period.professorDiary.teacherId)?.photo} 
+                                                alt="Professor" 
+                                                className="w-6 h-6 rounded-full object-cover border-2 border-white shadow-sm ring-1 ring-slate-100"
+                                              />
+                                            ) : (
+                                              <div className="w-6 h-6 rounded-full bg-pro-teal/10 flex items-center justify-center text-pro-teal shadow-sm">
+                                                <UserIcon size={12} />
+                                              </div>
+                                            )}
+                                            <span className="text-[9px] font-black text-slate-600 group-hover/comment:text-pro-teal uppercase tracking-widest transition-colors">
+                                              Comentário do Professor
+                                            </span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+
                                   const compAvg = is60Plus 
                                     ? ((selfNote !== null && profNote !== null) ? (selfNote + profNote) / 2 : (profNote ?? selfNote ?? 0))
                                     : ((Number(selfNote || 0) * weightSelf + Number(profNote || 0) * weightProf) / 4);
@@ -480,7 +557,74 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                               {PROFESSIONAL_COURSE_CRITERIA.map(c => {
                                 const selfNote = period.selfAssessment?.notes?.[c.id] !== undefined ? Number(period.selfAssessment.notes[c.id]) : null;
                                 const profGradeRaw = period.professorDiary?.grades?.[c.id];
-                                const profNote = profGradeRaw !== undefined && profGradeRaw !== "" ? Number(profGradeRaw) : null;
+                                const isUnworked = isCriterionUnworked(profGradeRaw, period.professorDiary?.unworkedCriteria, c.id);
+                                const profNote = (!isUnworked && profGradeRaw !== undefined && profGradeRaw !== "") ? Number(profGradeRaw) : null;
+                                
+                                if (isUnworked) {
+                                  return (
+                                    <div key={c.id} className="bg-amber-50/40 p-5 rounded-2xl border border-amber-200/70 shadow-sm flex flex-col gap-3.5 hover:border-amber-300 transition-colors" onClick={(e) => e.stopPropagation()}>
+                                      <div>
+                                        <div className="flex items-center justify-between gap-2">
+                                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight line-clamp-1">{c.label}</h4>
+                                          <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-black uppercase rounded-full shrink-0">Sem nota</span>
+                                        </div>
+                                        <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Competência de Montagem</p>
+                                      </div>
+
+                                      <div className="bg-white/80 p-3 rounded-xl border border-amber-200/50 space-y-1">
+                                        <p className="text-[9px] font-black text-amber-900 leading-tight">
+                                          {UNWORKED_CRITERION_LABEL}
+                                        </p>
+                                        <p className="text-[8px] text-slate-500 font-medium leading-relaxed">
+                                          Não compõe a média final.
+                                          {selfNote !== null && " (Autoavaliação desconsiderada para este critério)"}
+                                        </p>
+                                      </div>
+
+                                      <div className="grid grid-cols-2 items-center justify-between border-t border-amber-100 pt-2 gap-2 text-xs">
+                                        <div>
+                                          <p className="text-[7px] font-black text-slate-400 uppercase">Minha Nota</p>
+                                          <p className="text-[10px] font-bold text-slate-500">{selfNote !== null ? `${selfNote} / 10` : "—"}</p>
+                                          {selfNote !== null && <p className="text-[7px] font-bold text-amber-700 uppercase">Desconsiderada</p>}
+                                        </div>
+                                        <div className="text-right">
+                                          <p className="text-[7px] font-black text-slate-400 uppercase">Nota Professor</p>
+                                          <p className="text-[10px] font-black text-amber-600">N/T (Sem nota)</p>
+                                        </div>
+                                      </div>
+
+                                      {period.professorDiary?.criteriaObs?.[c.id] && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const teacher = users.find(u => u.id === period.professorDiary.teacherId);
+                                            setTeacherCommentModal({
+                                              text: period.professorDiary.criteriaObs[c.id],
+                                              teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
+                                              teacherPhoto: teacher?.photo
+                                            });
+                                          }}
+                                          className="mt-1 w-full p-2.5 bg-white hover:bg-amber-100/50 border border-amber-200/50 rounded-xl flex items-center justify-center gap-2 group/comment transition-all active:scale-[0.98]"
+                                        >
+                                          {users.find(u => u.id === period.professorDiary.teacherId)?.photo ? (
+                                            <img 
+                                              src={users.find(u => u.id === period.professorDiary.teacherId)?.photo} 
+                                              alt="Professor" 
+                                              className="w-4 h-4 rounded-full object-cover border border-slate-200"
+                                            />
+                                          ) : (
+                                            <div className="w-4 h-4 rounded-full bg-pro-teal/10 flex items-center justify-center text-pro-teal">
+                                              <UserIcon size={9} />
+                                            </div>
+                                          )}
+                                          <span className="text-[8px] font-black text-slate-600 group-hover/comment:text-pro-teal uppercase tracking-widest transition-colors">
+                                            Comentário do Professor
+                                          </span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                }
                                 
                                 const hasBoth = selfNote !== null && profNote !== null;
                                 const compAvg = hasBoth ? (selfNote * weightSelf + profNote * weightProf) / 4 : (profNote ?? selfNote ?? 0);
