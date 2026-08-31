@@ -252,6 +252,11 @@ export type ExperimentalTriageStatus =
   | "NAO_MATRICULOU" 
   | "NAO_COMPARECEU";
 
+export type ExperimentalAttendanceConfirmation = 
+  | "CONFIRMOU_VESPERA" 
+  | "CONFIRMOU_NO_DIA" 
+  | "REAGENDOU";
+
 export interface ExperimentalClassBooking {
   id: string;
   studentName: string;
@@ -273,6 +278,10 @@ export interface ExperimentalClassBooking {
   createdByUid?: string;
   createdByName?: string;
   createdByRole?: string;
+  // Identificador de confirmação de presença (Véspera, No Dia, Reagendou)
+  attendanceConfirmation?: ExperimentalAttendanceConfirmation | null;
+  attendanceConfirmationUpdatedAt?: any;
+  attendanceConfirmationUpdatedByName?: string | null;
   // Triage pós-conclusão de agendamento
   triageStatus?: ExperimentalTriageStatus | null;
   attended?: boolean | null;

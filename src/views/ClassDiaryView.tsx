@@ -122,7 +122,9 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
       currentUser?.uid,
       currentUser?.id,
       currentTeacherUser?.id,
-      currentTeacherUser?.uid
+      currentTeacherUser?.uid,
+      currentTeacherUser?.migratedFrom,
+      currentTeacherUser?.migratedTo
     ].filter(Boolean) as string[];
   }, [loggedUserId, currentUser, currentTeacherUser]);
 
@@ -298,8 +300,9 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
     setErrorMessage(null);
     setSaveSuccessMessage(null);
 
-    const teacherUser = users.find(u => u.id === loggedUserId);
+    const teacherUser = currentTeacherUser || users.find(u => u.id === loggedUserId || u.uid === currentUser?.uid);
     const teacherName = teacherUser?.name || teacherUser?.artisticName || currentUser?.displayName || "Professor";
+    const actualTeacherId = teacherUser?.id || loggedUserId || currentUser?.uid || "";
 
     try {
       await saveClassDailyDiary({
@@ -309,9 +312,9 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
         classCode: selectedClass.code || "",
         classType: selectedClass.type || "",
         date: selectedDate,
-        teacherId: loggedUserId,
+        teacherId: actualTeacherId,
         teacherName: teacherName,
-        authorRole: userRole || "Professor",
+        authorRole: userRole || currentUser?.role || "Professor",
         attendances,
         studentObservations,
         classComment,

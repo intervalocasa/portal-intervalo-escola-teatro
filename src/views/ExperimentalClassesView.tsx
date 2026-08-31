@@ -44,7 +44,9 @@ import {
   Coins,
   Award,
   FileSpreadsheet,
-  Info
+  Info,
+  CalendarCheck,
+  CalendarClock
 } from "lucide-react";
 import { 
   collection, 
@@ -58,7 +60,7 @@ import {
   orderBy 
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { ExperimentalClassBooking, ExperimentalTriageStatus, Course, Class } from "../types";
+import { ExperimentalClassBooking, ExperimentalTriageStatus, ExperimentalAttendanceConfirmation, Course, Class } from "../types";
 import { BackButton } from "../components/CommonComponents";
 
 interface ExperimentalClassesViewProps {
@@ -166,12 +168,20 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     "TODOS" | "AGENDADOS" | "MATRICULADO" | "AGUARDANDO_RESPOSTA" | "NAO_MATRICULOU" | "NAO_COMPARECEU"
   >("TODOS");
 
+  // Attendance Pre-Confirmation Filter
+  const [attendanceFilter, setAttendanceFilter] = useState<
+    "TODOS" | "CONFIRMOU_VESPERA" | "CONFIRMOU_NO_DIA" | "REAGENDOU" | "PENDENTE"
+  >("TODOS");
+
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<ExperimentalClassBooking | null>(null);
   const [deletingBooking, setDeletingBooking] = useState<ExperimentalClassBooking | null>(null);
   const [receiptViewingBooking, setReceiptViewingBooking] = useState<ExperimentalClassBooking | null>(null);
   const [uploadingBookingId, setUploadingBookingId] = useState<string | null>(null);
+
+  // Quick Modal for Attendance Confirmation
+  const [attendanceModalBooking, setAttendanceModalBooking] = useState<ExperimentalClassBooking | null>(null);
 
   // Quick Modal for Adjusting Creator ("Quem fez o agendamento")
   const [adjustCreatorBooking, setAdjustCreatorBooking] = useState<ExperimentalClassBooking | null>(null);
@@ -199,6 +209,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const [date, setDate] = useState("");
   const [dayOfWeek, setDayOfWeek] = useState("");
   const [status, setStatus] = useState<"PAGAMENTO_PENDENTE" | "AGENDAMENTO_CONFIRMADO">("PAGAMENTO_PENDENTE");
+  const [attendanceConfirmation, setAttendanceConfirmation] = useState<ExperimentalAttendanceConfirmation | null>(null);
   const [notes, setNotes] = useState("");
   const [manualConfirmationReason, setManualConfirmationReason] = useState("");
 
@@ -246,6 +257,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setDate(today);
     setDayOfWeek(getDayOfWeekInPortuguese(today));
     setStatus("PAGAMENTO_PENDENTE");
+    setAttendanceConfirmation(null);
     setNotes("");
     setManualConfirmationReason("");
     setRescheduleReason("");
@@ -287,6 +299,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     setDate(booking.date || "");
     setDayOfWeek(booking.dayOfWeek || getDayOfWeekInPortuguese(booking.date || ""));
     setStatus(booking.status || "PAGAMENTO_PENDENTE");
+    setAttendanceConfirmation(booking.attendanceConfirmation || null);
     setNotes(booking.notes || "");
     setManualConfirmationReason(booking.manualConfirmationReason || "");
     setRescheduleReason("");
@@ -365,6 +378,42 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     } catch (err) {
       console.error("Error updating booking creator:", err);
       showNotification?.("Erro ao atualizar responsável pelo agendamento.", "Erro", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Save Attendance Confirmation Status (Véspera, No Dia, Reagendou, Limpar)
+  const handleSaveAttendanceConfirmation = async (
+    bookingId: string,
+    confirmationStatus: ExperimentalAttendanceConfirmation | null
+  ) => {
+    setIsSubmitting(true);
+    try {
+      const updaterName = loggedUser?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "Usuário do Sistema";
+      
+      await updateDoc(doc(db, "experimental_classes", bookingId), {
+        attendanceConfirmation: confirmationStatus,
+        attendanceConfirmationUpdatedAt: serverTimestamp(),
+        attendanceConfirmationUpdatedByName: updaterName,
+        updatedAt: serverTimestamp()
+      });
+
+      const labelMap: Record<string, string> = {
+        CONFIRMOU_VESPERA: "Confirmou na véspera que vai estar presente no dia seguinte",
+        CONFIRMOU_NO_DIA: "Confirmou presença no dia da aula",
+        REAGENDOU: "Reagendamento registrado"
+      };
+
+      if (confirmationStatus) {
+        showNotification?.(labelMap[confirmationStatus] || "Confirmação salva com sucesso!", "Confirmação Registrada", "success");
+      } else {
+        showNotification?.("Confirmação de presença redefinida com sucesso.", "Sucesso", "success");
+      }
+      setAttendanceModalBooking(null);
+    } catch (err) {
+      console.error("Error updating attendance confirmation:", err);
+      showNotification?.("Erro ao atualizar confirmação de presença.", "Erro", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -520,6 +569,10 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         createdByUid: bookingCreatedByUid || currentUser?.uid || loggedUser?.id || null,
         createdByName: creatorName,
         createdByRole: creatorRole,
+        // Confirmação Prévia de Presença
+        attendanceConfirmation: attendanceConfirmation || null,
+        attendanceConfirmationUpdatedAt: attendanceConfirmation ? serverTimestamp() : null,
+        attendanceConfirmationUpdatedByName: attendanceConfirmation ? creatorName : null,
         // Initial triage is null (scheduled)
         triageStatus: null,
         attended: null,
@@ -604,6 +657,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         createdByUid: bookingCreatedByUid || null,
         createdByName: bookingCreatedByName.trim() || null,
         createdByRole: bookingCreatedByRole.trim() || null,
+        attendanceConfirmation: attendanceConfirmation || null,
+        attendanceConfirmationUpdatedAt: attendanceConfirmation !== editingBooking.attendanceConfirmation ? serverTimestamp() : (editingBooking.attendanceConfirmationUpdatedAt || null),
+        attendanceConfirmationUpdatedByName: attendanceConfirmation !== editingBooking.attendanceConfirmation ? (loggedUser?.name || currentUser?.displayName || "Usuário") : (editingBooking.attendanceConfirmationUpdatedByName || null),
         updatedAt: serverTimestamp()
       };
 
@@ -895,9 +951,20 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                        (b.createdByName && b.createdByName.trim().toLowerCase() === creatorFilter.trim().toLowerCase());
       }
 
-      return matchSearch && matchStatus && matchClass && matchTab && matchCreator;
+      let matchAttendance = true;
+      if (attendanceFilter === "CONFIRMOU_VESPERA") {
+        matchAttendance = b.attendanceConfirmation === "CONFIRMOU_VESPERA";
+      } else if (attendanceFilter === "CONFIRMOU_NO_DIA") {
+        matchAttendance = b.attendanceConfirmation === "CONFIRMOU_NO_DIA";
+      } else if (attendanceFilter === "REAGENDOU") {
+        matchAttendance = b.attendanceConfirmation === "REAGENDOU";
+      } else if (attendanceFilter === "PENDENTE") {
+        matchAttendance = !b.attendanceConfirmation;
+      }
+
+      return matchSearch && matchStatus && matchClass && matchTab && matchCreator && matchAttendance;
     });
-  }, [bookings, searchTerm, statusFilter, classFilter, tabFilter, creatorFilter, currentUser, loggedUser]);
+  }, [bookings, searchTerm, statusFilter, classFilter, tabFilter, creatorFilter, attendanceFilter, currentUser, loggedUser]);
 
   return (
     <motion.div
@@ -1345,7 +1412,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           </div>
 
           {/* Turma (Class) Filter Dropdown */}
-          <div className="flex items-center gap-2 min-w-[200px]">
+          <div className="flex items-center gap-2 min-w-[180px]">
             <div className="relative w-full">
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-pro-teal pointer-events-none flex items-center gap-1">
                 <Users size={14} />
@@ -1382,6 +1449,43 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
             )}
           </div>
 
+          {/* Attendance Confirmation Filter Dropdown */}
+          <div className="flex items-center gap-2 min-w-[190px]">
+            <div className="relative w-full">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-600 pointer-events-none flex items-center gap-1">
+                <CalendarCheck size={14} />
+              </div>
+              <select
+                value={attendanceFilter}
+                onChange={(e) => setAttendanceFilter(e.target.value as any)}
+                className={`w-full pl-9 pr-8 py-2.5 rounded-xl text-xs font-bold appearance-none transition-all cursor-pointer border focus:outline-none focus:border-indigo-500 ${
+                  attendanceFilter !== "TODOS"
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-900 font-black shadow-xs"
+                    : "bg-slate-50 border-slate-200 text-slate-700"
+                }`}
+              >
+                <option value="TODOS">Confirmação Prévia (Todas)</option>
+                <option value="CONFIRMOU_VESPERA">🕒 Confirmou na Véspera</option>
+                <option value="CONFIRMOU_NO_DIA">✅ Confirmou no Dia</option>
+                <option value="REAGENDOU">🔄 Reagendou</option>
+                <option value="PENDENTE">⏳ Sem Confirmação / Pendente</option>
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                <Filter size={12} />
+              </div>
+            </div>
+            {attendanceFilter !== "TODOS" && (
+              <button
+                type="button"
+                onClick={() => setAttendanceFilter("TODOS")}
+                className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-all"
+                title="Limpar filtro de confirmação"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
           {/* Payment Status Filter Buttons */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
             <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider whitespace-nowrap mr-1">
@@ -1404,7 +1508,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         </div>
 
         {/* Active Filters Summary Chips */}
-        {(searchTerm || classFilter !== "TODOS" || statusFilter !== "TODOS" || tabFilter !== "TODOS" || creatorFilter !== "TODOS") && (
+        {(searchTerm || classFilter !== "TODOS" || attendanceFilter !== "TODOS" || statusFilter !== "TODOS" || tabFilter !== "TODOS" || creatorFilter !== "TODOS") && (
           <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 text-xs flex-wrap gap-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
@@ -1422,6 +1526,18 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-100 text-teal-800 rounded-lg text-[11px] font-bold border border-teal-200">
                   <Users size={12} /> Turma: {classFilter}
                   <button type="button" onClick={() => setClassFilter("TODOS")} className="hover:text-teal-950 ml-0.5">
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+              {attendanceFilter !== "TODOS" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-100 text-indigo-900 rounded-lg text-[11px] font-bold border border-indigo-200">
+                  <CalendarCheck size={12} className="text-indigo-700" /> Confirmação: {
+                    attendanceFilter === "CONFIRMOU_VESPERA" ? "Confirmou na Véspera" :
+                    attendanceFilter === "CONFIRMOU_NO_DIA" ? "Confirmou no Dia" :
+                    attendanceFilter === "REAGENDOU" ? "Reagendou" : "Pendente"
+                  }
+                  <button type="button" onClick={() => setAttendanceFilter("TODOS")} className="hover:text-indigo-950 ml-0.5">
                     <X size={12} />
                   </button>
                 </span>
@@ -1462,6 +1578,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               onClick={() => {
                 setSearchTerm("");
                 setClassFilter("TODOS");
+                setAttendanceFilter("TODOS");
                 setStatusFilter("TODOS");
                 setTabFilter("TODOS");
                 setCreatorFilter("TODOS");
@@ -1515,6 +1632,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   <th className="py-4 px-6">Curso</th>
                   <th className="py-4 px-6">Turma & Horário</th>
                   <th className="py-4 px-6">Data & Dia</th>
+                  <th className="py-4 px-6">Confirmação Prévia</th>
                   <th className="py-4 px-6">Pagamento</th>
                   <th className="py-4 px-6">Triagem Pós-Aula</th>
                   <th className="py-4 px-6 text-center">Receita (R$ 25)</th>
@@ -1601,6 +1719,72 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     <td className="py-4 px-6">
                       <div className="font-black text-slate-800">{formatDateBR(b.date)}</div>
                       <div className="text-[11px] font-semibold text-teal-600">{b.dayOfWeek}</div>
+                    </td>
+
+                    {/* Confirmação Prévia */}
+                    <td className="py-4 px-6">
+                      {b.attendanceConfirmation === "CONFIRMOU_VESPERA" ? (
+                        <div className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => setAttendanceModalBooking(b)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100 transition-colors shadow-2xs cursor-pointer text-left"
+                            title="Clique para alterar confirmação"
+                          >
+                            <CalendarCheck size={12} className="text-indigo-600 shrink-0" />
+                            <span>Confirmou na véspera</span>
+                          </button>
+                          {b.attendanceConfirmationUpdatedByName && (
+                            <span className="block text-[9px] text-slate-400 font-medium truncate max-w-[150px]">
+                              por {b.attendanceConfirmationUpdatedByName}
+                            </span>
+                          )}
+                        </div>
+                      ) : b.attendanceConfirmation === "CONFIRMOU_NO_DIA" ? (
+                        <div className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => setAttendanceModalBooking(b)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors shadow-2xs cursor-pointer text-left"
+                            title="Clique para alterar confirmação"
+                          >
+                            <CheckCircle size={12} className="text-emerald-600 shrink-0" />
+                            <span>Confirmou no dia</span>
+                          </button>
+                          {b.attendanceConfirmationUpdatedByName && (
+                            <span className="block text-[9px] text-slate-400 font-medium truncate max-w-[150px]">
+                              por {b.attendanceConfirmationUpdatedByName}
+                            </span>
+                          )}
+                        </div>
+                      ) : b.attendanceConfirmation === "REAGENDOU" ? (
+                        <div className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => setAttendanceModalBooking(b)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors shadow-2xs cursor-pointer text-left"
+                            title="Clique para alterar confirmação"
+                          >
+                            <History size={12} className="text-amber-600 shrink-0" />
+                            <span>Reagendou</span>
+                          </button>
+                          {b.attendanceConfirmationUpdatedByName && (
+                            <span className="block text-[9px] text-slate-400 font-medium truncate max-w-[150px]">
+                              por {b.attendanceConfirmationUpdatedByName}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAttendanceModalBooking(b)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-slate-500 hover:text-indigo-700 bg-slate-50 hover:bg-indigo-50/70 rounded-lg border border-dashed border-slate-300 hover:border-indigo-300 transition-colors cursor-pointer"
+                          title="Inserir identificador de confirmação prévia"
+                        >
+                          <CalendarCheck size={11} className="text-slate-400" />
+                          <span>+ Confirmar</span>
+                        </button>
+                      )}
                     </td>
 
                     {/* Status de Pagamento */}
@@ -1884,6 +2068,47 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   </div>
                 </div>
 
+                {/* CONFIRMAÇÃO PRÉVIA NO MOBILE */}
+                <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-indigo-700 flex items-center gap-1">
+                      <CalendarCheck size={12} className="text-indigo-600" /> Confirmação Prévia
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAttendanceModalBooking(b)}
+                      className="text-[10px] font-black text-indigo-700 hover:text-indigo-900 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Pencil size={11} /> {b.attendanceConfirmation ? "Alterar" : "Definir"}
+                    </button>
+                  </div>
+
+                  <div>
+                    {b.attendanceConfirmation === "CONFIRMOU_VESPERA" ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-900 border border-indigo-200">
+                        <CalendarCheck size={12} className="text-indigo-700" /> Confirmou na Véspera
+                      </span>
+                    ) : b.attendanceConfirmation === "CONFIRMOU_NO_DIA" ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-200">
+                        <CheckCircle size={12} className="text-emerald-700" /> Confirmou no Dia
+                      </span>
+                    ) : b.attendanceConfirmation === "REAGENDOU" ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-900 border border-amber-200">
+                        <History size={12} className="text-amber-700" /> Reagendou
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400 font-medium italic">
+                        Pendente de confirmação prévia
+                      </span>
+                    )}
+                    {b.attendanceConfirmationUpdatedByName && (
+                      <p className="text-[10px] text-indigo-600/80 font-medium mt-1">
+                        Atualizado por {b.attendanceConfirmationUpdatedByName}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
                 {/* RECEITA STATUS NO MOBILE */}
                 <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100 text-xs">
                   <span className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1">
@@ -2051,6 +2276,176 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           </div>
         </div>
       )}
+
+      {/* ATTENDANCE PRE-CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {attendanceModalBooking && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-100 relative space-y-5"
+            >
+              <button
+                onClick={() => setAttendanceModalBooking(null)}
+                className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-indigo-50 text-indigo-700 rounded-2xl">
+                  <CalendarCheck size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">Confirmação Prévia de Presença</h3>
+                  <p className="text-xs font-bold text-slate-500">
+                    Aluno(a): <strong className="text-slate-800">{attendanceModalBooking.studentName}</strong> • {attendanceModalBooking.course}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                    Data da Aula: {formatDateBR(attendanceModalBooking.date)} ({attendanceModalBooking.dayOfWeek}) às {attendanceModalBooking.classTime}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Selecione abaixo o status de confirmação prévia deste aluno para a aula experimental agendada:
+              </p>
+
+              <div className="space-y-2.5">
+                {/* Opção 1: Confirmou na Véspera */}
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => handleSaveAttendanceConfirmation(attendanceModalBooking.id, "CONFIRMOU_VESPERA")}
+                  className={`w-full p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 cursor-pointer ${
+                    attendanceModalBooking.attendanceConfirmation === "CONFIRMOU_VESPERA"
+                      ? "bg-indigo-50/90 border-indigo-400 ring-2 ring-indigo-400/20 text-indigo-950"
+                      : "bg-slate-50/70 hover:bg-indigo-50/40 border-slate-200 text-slate-700 hover:border-indigo-300"
+                  }`}
+                >
+                  <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                    attendanceModalBooking.attendanceConfirmation === "CONFIRMOU_VESPERA"
+                      ? "bg-indigo-600 text-white"
+                      : "bg-indigo-100 text-indigo-700"
+                  }`}>
+                    <CalendarCheck size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-indigo-900">
+                        Confirmou na Véspera
+                      </h4>
+                      {attendanceModalBooking.attendanceConfirmation === "CONFIRMOU_VESPERA" && (
+                        <span className="text-[10px] font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
+                          Atual
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium mt-1 leading-normal">
+                      O aluno confirmou no dia anterior que estará presente na aula no dia seguinte.
+                    </p>
+                  </div>
+                </button>
+
+                {/* Opção 2: Confirmou Presença no Dia */}
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => handleSaveAttendanceConfirmation(attendanceModalBooking.id, "CONFIRMOU_NO_DIA")}
+                  className={`w-full p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 cursor-pointer ${
+                    attendanceModalBooking.attendanceConfirmation === "CONFIRMOU_NO_DIA"
+                      ? "bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/20 text-emerald-950"
+                      : "bg-slate-50/70 hover:bg-emerald-50/40 border-slate-200 text-slate-700 hover:border-emerald-300"
+                  }`}
+                >
+                  <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                    attendanceModalBooking.attendanceConfirmation === "CONFIRMOU_NO_DIA"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-emerald-100 text-emerald-800"
+                  }`}>
+                    <CheckCircle size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-emerald-900">
+                        Confirmou Presença no Dia
+                      </h4>
+                      {attendanceModalBooking.attendanceConfirmation === "CONFIRMOU_NO_DIA" && (
+                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                          Atual
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium mt-1 leading-normal">
+                      O aluno confirmou que comparecerá no próprio dia da aula experimental.
+                    </p>
+                  </div>
+                </button>
+
+                {/* Opção 3: Reagendou */}
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => handleSaveAttendanceConfirmation(attendanceModalBooking.id, "REAGENDOU")}
+                  className={`w-full p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 cursor-pointer ${
+                    attendanceModalBooking.attendanceConfirmation === "REAGENDOU"
+                      ? "bg-amber-50/90 border-amber-400 ring-2 ring-amber-400/20 text-amber-950"
+                      : "bg-slate-50/70 hover:bg-amber-50/40 border-slate-200 text-slate-700 hover:border-amber-300"
+                  }`}
+                >
+                  <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                    attendanceModalBooking.attendanceConfirmation === "REAGENDOU"
+                      ? "bg-amber-600 text-white"
+                      : "bg-amber-100 text-amber-800"
+                  }`}>
+                    <History size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-amber-900">
+                        Reagendou
+                      </h4>
+                      {attendanceModalBooking.attendanceConfirmation === "REAGENDOU" && (
+                        <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                          Atual
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium mt-1 leading-normal">
+                      O aluno solicitou remarcação / reagendamento para outra data ou horário.
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                {attendanceModalBooking.attendanceConfirmation ? (
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => handleSaveAttendanceConfirmation(attendanceModalBooking.id, null)}
+                    className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                  >
+                    Limpar Confirmação (Deixar Pendente)
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-400 italic">Nenhum status definido</span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setAttendanceModalBooking(null)}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* MANUAL CONFIRMATION MODAL */}
       <AnimatePresence>
@@ -2451,6 +2846,59 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     }
                     return null;
                   })()}
+                </div>
+
+                {/* Confirmação Prévia de Presença */}
+                <div className="p-4 bg-indigo-50/50 border border-indigo-200/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-indigo-900 flex items-center gap-1.5">
+                      <CalendarCheck size={13} className="text-indigo-700" /> Confirmação Prévia de Presença
+                    </label>
+                    <span className="text-[10px] font-bold text-indigo-600">Opcional</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600">
+                    Indique se o aluno já realizou alguma confirmação de comparecimento antes da aula:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAttendanceConfirmation(attendanceConfirmation === "CONFIRMOU_VESPERA" ? null : "CONFIRMOU_VESPERA")}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                        attendanceConfirmation === "CONFIRMOU_VESPERA"
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30"
+                      }`}
+                    >
+                      <CalendarCheck size={14} className={attendanceConfirmation === "CONFIRMOU_VESPERA" ? "text-white" : "text-indigo-600"} />
+                      <span>Confirmou na véspera</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAttendanceConfirmation(attendanceConfirmation === "CONFIRMOU_NO_DIA" ? null : "CONFIRMOU_NO_DIA")}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                        attendanceConfirmation === "CONFIRMOU_NO_DIA"
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30"
+                      }`}
+                    >
+                      <CheckCircle size={14} className={attendanceConfirmation === "CONFIRMOU_NO_DIA" ? "text-white" : "text-emerald-600"} />
+                      <span>Confirmou no dia</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAttendanceConfirmation(attendanceConfirmation === "REAGENDOU" ? null : "REAGENDOU")}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                        attendanceConfirmation === "REAGENDOU"
+                          ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:border-amber-300 hover:bg-amber-50/30"
+                      }`}
+                    >
+                      <History size={14} className={attendanceConfirmation === "REAGENDOU" ? "text-white" : "text-amber-600"} />
+                      <span>Reagendou</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Observações */}
