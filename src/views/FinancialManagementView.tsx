@@ -192,6 +192,7 @@ export interface PaymentRecord {
   id: string; // studentId_year_month
   studentId: string;
   studentName: string;
+  studentSocialName?: string;
   studentCpf: string;
   className: string;
   month: number;
@@ -388,6 +389,7 @@ export const FinancialManagementView = ({
           id: docId,
           studentId: student.id,
           studentName: student.name,
+          studentSocialName: student.socialName,
           studentCpf: student.cpf || "Não informado",
           className: classNameStr,
           month: selectedMonth,
@@ -407,6 +409,7 @@ export const FinancialManagementView = ({
           id: docId,
           studentId: student.id,
           studentName: student.name,
+          studentSocialName: student.socialName,
           studentCpf: student.cpf || "Não informado",
           className: classNameStr,
           month: selectedMonth,
@@ -432,9 +435,10 @@ export const FinancialManagementView = ({
       if (paymentSearch.trim()) {
         const term = paymentSearch.toLowerCase();
         const matchName = p.studentName.toLowerCase().includes(term);
+        const matchSocial = p.studentSocialName ? p.studentSocialName.toLowerCase().includes(term) : false;
         const matchCpf = p.studentCpf.toLowerCase().includes(term);
         const matchClass = p.className.toLowerCase().includes(term);
-        if (!matchName && !matchCpf && !matchClass) return false;
+        if (!matchName && !matchSocial && !matchCpf && !matchClass) return false;
       }
 
       return true;
@@ -560,7 +564,10 @@ export const FinancialManagementView = ({
 
   // Restore standard course fee calculation for a student
   const handleRestoreCourseStandardFee = async (record: PaymentRecord) => {
-    if (!window.confirm(`Deseja remover o valor fixado de ${record.studentName} e restaurar o cálculo padrão do curso?`)) {
+    const studentDisplayName = record.studentSocialName && record.studentSocialName.trim().length > 0
+      ? `${record.studentName} (Nome Social: ${record.studentSocialName})`
+      : record.studentName;
+    if (!window.confirm(`Deseja remover o valor fixado de ${studentDisplayName} e restaurar o cálculo padrão do curso?`)) {
       return;
     }
     try {
@@ -665,9 +672,13 @@ export const FinancialManagementView = ({
 
         const classLabel = `${item.classType} (${item.classCode})${item.classWeekday ? ' - ' + item.classWeekday : ''}`;
 
+        const studentDisplayName = item.studentSocialName && item.studentSocialName.trim().length > 0
+          ? `${item.studentName} (Nome Social: ${item.studentSocialName})`
+          : item.studentName;
+
         return [
           String(index + 1),
-          item.studentName,
+          studentDisplayName,
           item.studentCpf,
           classLabel,
           dateFormatted,
@@ -786,15 +797,21 @@ export const FinancialManagementView = ({
       docPDF.text(`Pendente: R$ ${totalPendente.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, 135, 52);
       docPDF.text(`Adimplência: ${adimplencia}%`, 175, 52, { align: "right" });
 
-      const tableRows = filteredPayments.map((item, index) => [
-        String(index + 1),
-        item.studentName,
-        item.studentCpf,
-        item.className,
-        `R$ ${item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-        item.dueDate ? item.dueDate.split("-").reverse().join("/") : "-",
-        item.status.toUpperCase()
-      ]);
+      const tableRows = filteredPayments.map((item, index) => {
+        const studentDisplayName = item.studentSocialName && item.studentSocialName.trim().length > 0
+          ? `${item.studentName} (Nome Social: ${item.studentSocialName})`
+          : item.studentName;
+
+        return [
+          String(index + 1),
+          studentDisplayName,
+          item.studentCpf,
+          item.className,
+          `R$ ${item.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+          item.dueDate ? item.dueDate.split("-").reverse().join("/") : "-",
+          item.status.toUpperCase()
+        ];
+      });
 
       autoTable(docPDF, {
         startY: 65,
@@ -1089,13 +1106,14 @@ export const FinancialManagementView = ({
                           </div>
 
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-extrabold text-slate-800 text-sm md:text-base truncate">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="font-extrabold text-slate-800 text-sm md:text-base">
                                 {record.studentName}
                               </h4>
-                              {record.studentSocialName && (
-                                <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">
-                                  ({record.studentSocialName})
+                              {record.studentSocialName && record.studentSocialName.trim().length > 0 && (
+                                <span className="inline-flex items-center gap-1 text-[11px] bg-teal-50 text-[#016a86] border border-teal-200/80 px-2 py-0.5 rounded-md font-bold">
+                                  <span className="text-slate-400 text-[9px] font-black uppercase tracking-wider">Nome Social:</span>
+                                  <span>{record.studentSocialName}</span>
                                 </span>
                               )}
                             </div>
@@ -1352,7 +1370,15 @@ export const FinancialManagementView = ({
                         className="p-4 md:p-5 hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
                       >
                         <div className="min-w-0">
-                          <h4 className="font-extrabold text-slate-800 text-sm md:text-base">{item.studentName}</h4>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="font-extrabold text-slate-800 text-sm md:text-base">{item.studentName}</h4>
+                            {item.studentSocialName && item.studentSocialName.trim().length > 0 && (
+                              <span className="inline-flex items-center gap-1 text-[11px] bg-teal-50 text-[#016a86] border border-teal-200/80 px-2 py-0.5 rounded-md font-bold">
+                                <span className="text-slate-400 text-[9px] font-black uppercase tracking-wider">Nome Social:</span>
+                                <span>{item.studentSocialName}</span>
+                              </span>
+                            )}
+                          </div>
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 font-medium mt-1">
                             <span>CPF: <strong className="text-slate-700">{item.studentCpf}</strong></span>
                             <span>Turma: <span className="text-[#016a86] font-bold">{item.className}</span></span>
