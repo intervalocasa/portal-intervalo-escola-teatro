@@ -47,6 +47,7 @@ import {
   getClassDiaryDeadlineInfo,
   ClassDiaryDeadlineInfo
 } from "../lib/deadlineUtils";
+import { isDirectorOrGestor } from "../lib/userUtils";
 
 interface ClassDiaryViewProps {
   currentUser: any;
@@ -99,15 +100,44 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
   const [historySearchQuery, setHistorySearchQuery] = useState<string>("");
   const [viewingDetailDiary, setViewingDetailDiary] = useState<ClassDailyDiary | null>(null);
 
-  // Identify logged user
+  // Identify logged user & role
   const loggedUserId = currentUser?.uid || currentUser?.id || "";
-  const isGestorOrDirector =
-    userRole === "Gestor" ||
-    userRole === "Diretor Pedagógico" ||
-    userRole === "Diretor Pedagógico e Professor";
+  const effectiveRole = userRole || currentUser?.role || "";
+  const isGestorOrDirector = isDirectorOrGestor(effectiveRole);
   const isProfessorOnly = !isGestorOrDirector;
 
-  // List of teachers for filtering
+  // Resolve current teacher profile and aliases for accurate matching
+  const currentTeacherUser = useMemo(() => {
+    return users.find(u =>
+      u.id === currentUser?.uid ||
+      u.id === currentUser?.id ||
+      u.uid === currentUser?.uid ||
+      (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase())
+    ) || currentUser;
+  }, [users, currentUser]);
+
+  const teacherIdsList = useMemo(() => {
+    return [
+      loggedUserId,
+      currentUser?.uid,
+      currentUser?.id,
+      currentTeacherUser?.id,
+      currentTeacherUser?.uid
+    ].filter(Boolean) as string[];
+  }, [loggedUserId, currentUser, currentTeacherUser]);
+
+  const teacherNamesList = useMemo(() => {
+    const names = [
+      currentTeacherUser?.name?.trim().toLowerCase(),
+      currentTeacherUser?.artisticName?.trim().toLowerCase(),
+      currentUser?.displayName?.trim().toLowerCase(),
+      currentUser?.name?.trim().toLowerCase(),
+      currentUser?.artisticName?.trim().toLowerCase()
+    ].filter(Boolean) as string[];
+    return Array.from(new Set(names));
+  }, [currentTeacherUser, currentUser]);
+
+  // List of teachers for filtering (Gestores / Diretores)
   const teacherUsers = useMemo(() => {
     const directTeachers = users.filter(u =>
       u.role === "Professor" ||
@@ -132,9 +162,9 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
     return classes.filter(c => {
       if (c.isActive === false) return false;
       const tIds = c.teacherIds || [];
-      return tIds.includes(loggedUserId);
+      return tIds.some(tid => teacherIdsList.includes(tid));
     });
-  }, [classes, isGestorOrDirector, loggedUserId]);
+  }, [classes, isGestorOrDirector, teacherIdsList]);
 
   // Selected Class Object
   const selectedClass = useMemo(() => {
@@ -327,13 +357,28 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
   // Filtered History
   const filteredHistory = useMemo(() => {
     return historyDiaries.filter(d => {
+      // 0. Permission check: If user is only a professor, they MUST ONLY see their own launched diaries
+      if (!isGestorOrDirector) {
+        const dTeacherId = d.teacherId || "";
+        const dTeacherName = (d.teacherName || "").trim().toLowerCase();
+        const dAuthorId = (d as any).authorId || (d as any).createdBy || "";
+        
+        const matchesId = Boolean(dTeacherId && teacherIdsList.includes(dTeacherId));
+        const matchesAuthorId = Boolean(dAuthorId && teacherIdsList.includes(dAuthorId));
+        const matchesName = Boolean(dTeacherName && teacherNamesList.some(name => name && (dTeacherName === name || dTeacherName.includes(name) || name.includes(dTeacherName))));
+
+        if (!matchesId && !matchesAuthorId && !matchesName) {
+          return false;
+        }
+      }
+
       // 1. Filter by Class
       if (historyFilterClassId !== "all" && d.classId !== historyFilterClassId) {
         return false;
       }
 
-      // 2. Filter by Teacher
-      if (historyFilterTeacherId !== "all") {
+      // 2. Filter by Teacher (only active for Gestores / Diretores)
+      if (isGestorOrDirector && historyFilterTeacherId !== "all") {
         const teacherObj = users.find(u => u.id === historyFilterTeacherId);
         const matchId = d.teacherId === historyFilterTeacherId;
         const matchName = teacherObj && (
@@ -378,6 +423,9 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
     });
   }, [
     historyDiaries,
+    isGestorOrDirector,
+    teacherIdsList,
+    teacherNamesList,
     historyFilterClassId,
     historyFilterTeacherId,
     historyFilterDate,
@@ -915,7 +963,9 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                         )}
                       </h3>
                       <p className="text-xs text-slate-400 font-bold">
-                        Filtre os lançamentos de presença e relatos de aula por professor, turma, data ou termo de busca
+                        {isGestorOrDirector
+                          ? "Filtre os lançamentos de presença e relatos de aula por professor, turma, data ou termo de busca"
+                          : `Exibindo apenas os diários e relatos pedagógicos lançados por você (${currentTeacherUser?.artisticName || currentTeacherUser?.name || currentUser?.displayName || "Professor"}).`}
                       </p>
                     </div>
                   </div>
@@ -932,25 +982,27 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                 </div>
 
                 {/* Grade de Filtros */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* 1. Filtro por Professor */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-                      <GraduationCap size={14} className="text-pro-teal" /> Professor(a)
-                    </label>
-                    <select
-                      value={historyFilterTeacherId}
-                      onChange={e => setHistoryFilterTeacherId(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-pro-teal outline-none transition-all"
-                    >
-                      <option value="all">Todos os Professores</option>
-                      {teacherUsers.map(teacher => (
-                        <option key={teacher.id} value={teacher.id}>
-                          {teacher.name || teacher.artisticName}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className={`grid grid-cols-1 sm:grid-cols-2 ${isGestorOrDirector ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-4`}>
+                  {/* 1. Filtro por Professor (Visível apenas para Gestão / Direção Pedagógica) */}
+                  {isGestorOrDirector && (
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                        <GraduationCap size={14} className="text-pro-teal" /> Professor(a)
+                      </label>
+                      <select
+                        value={historyFilterTeacherId}
+                        onChange={e => setHistoryFilterTeacherId(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-pro-teal outline-none transition-all"
+                      >
+                        <option value="all">Todos os Professores</option>
+                        {teacherUsers.map(teacher => (
+                          <option key={teacher.id} value={teacher.id}>
+                            {teacher.name || teacher.artisticName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* 2. Filtro por Turma */}
                   <div className="space-y-1.5">
@@ -962,7 +1014,7 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                       onChange={e => setHistoryFilterClassId(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-pro-teal outline-none transition-all"
                     >
-                      <option value="all">Todas as Turmas</option>
+                      <option value="all">{isGestorOrDirector ? "Todas as Turmas" : "Todas as Minhas Turmas"}</option>
                       {availableClasses.map(cls => (
                         <option key={cls.id} value={cls.id}>
                           {cls.code} - {cls.type} ({cls.weekday})
