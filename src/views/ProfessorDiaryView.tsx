@@ -5,11 +5,11 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "motion/react";
-import { UserCircle, Presentation, ArrowLeft, Drama, Download, Clock, Lock, AlertTriangle } from "lucide-react";
+import { UserCircle, Presentation, ArrowLeft, Drama, Download, Clock, Lock, AlertTriangle, ShieldCheck, BookOpen, ChevronRight } from "lucide-react";
 import { User, Class, Diary, Evaluation } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { generateDiaryPDF } from "../lib/pdfExporter";
-import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
+import { getUserDisplayName, getUserSecondaryName, isDirectorOrGestor } from "../lib/userUtils";
 import { getMonthlyDeadline } from "../lib/deadlineUtils";
 import { DeadlineExpiredModal } from "../components/DeadlineExpiredModal";
 
@@ -49,7 +49,15 @@ export const ProfessorDiaryView = ({
   const [showExpiredModal, setShowExpiredModal] = useState(false);
   const [expiredModalStudent, setExpiredModalStudent] = useState<string | undefined>(undefined);
 
-  const teacherClasses = classes.filter(c => c.teacherIds?.includes(currentUser?.id || ""));
+  const isGestorOrDirector = isDirectorOrGestor(currentUser?.role);
+
+  const availableClasses = useMemo(() => {
+    if (isGestorOrDirector) {
+      return [...classes].sort((a, b) => (a.code || "").localeCompare(b.code || "", 'pt-BR'));
+    }
+    return classes.filter(c => c.teacherIds?.includes(currentUser?.id || ""));
+  }, [classes, isGestorOrDirector, currentUser?.id]);
+
   const targetClass = classes.find(c => c.id === selectedClassId);
 
   const deadlineInfo = useMemo(() => {
@@ -81,12 +89,24 @@ export const ProfessorDiaryView = ({
         <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
            <Logo className="h-10 md:h-16 w-auto mb-1 brightness-0 invert" />
            <h1 className="text-white text-xl md:text-3xl font-black uppercase tracking-tight">Diário de Notas</h1>
-           <p className="text-teal-50/80 text-xs font-bold uppercase tracking-widest">Avaliações e Critérios Pedagógicos</p>
-           <div className="flex items-center gap-3 mt-2">
+           <p className="text-teal-50/80 text-xs font-bold uppercase tracking-widest">
+             {isGestorOrDirector ? "Lançamento Pedagógico & Gestão de Avaliações" : "Avaliações e Critérios Pedagógicos"}
+           </p>
+           <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
              <div className="px-4 py-1.5 bg-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white/90 border border-white/10 backdrop-blur-md flex items-center gap-2">
                 <UserCircle size={12} className="text-pro-yellow" />
-                {getUserDisplayName(currentUser)}
+                {getUserDisplayName(currentUser)} {currentUser?.role ? `• ${currentUser.role}` : ""}
              </div>
+             {isGestorOrDirector && (
+               <button
+                 type="button"
+                 onClick={() => setView("manage_diaries")}
+                 className="px-4 py-1.5 bg-pro-yellow text-slate-900 rounded-full text-[10px] font-black uppercase tracking-widest border border-pro-yellow shadow-sm hover:brightness-105 transition-all flex items-center gap-1.5"
+               >
+                 <BookOpen size={12} />
+                 Painel Geral de Diários
+               </button>
+             )}
            </div>
         </div>
 
@@ -100,7 +120,7 @@ export const ProfessorDiaryView = ({
                 </div>
                 <div>
                   <p className="text-xs font-black text-slate-800 uppercase tracking-tight">Lançar Chamada e Presença de Aula</p>
-                  <p className="text-[10px] font-bold text-slate-500">O registro de frequência e relato de aula agora possui uma página própria.</p>
+                  <p className="text-[10px] font-bold text-slate-500">O registro de frequência e relato de aula possui sua página dedicada.</p>
                 </div>
               </div>
               <button
@@ -116,16 +136,31 @@ export const ProfessorDiaryView = ({
             <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Turma</label>
+                  <div className="flex items-center justify-between ml-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Turma</label>
+                    {isGestorOrDirector && (
+                      <span className="text-[9px] font-black text-pro-teal uppercase tracking-wider">
+                        {availableClasses.length} turmas no total
+                      </span>
+                    )}
+                  </div>
                   <select
                     value={selectedClassId || ""}
                     onChange={(e) => setSelectedClassId(e.target.value)}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold text-slate-800 transition-all focus:outline-none focus:border-pro-teal"
                   >
                     <option value="">Selecione uma turma</option>
-                    {teacherClasses.map(c => (
-                      <option key={c.id} value={c.id}>{c.code} - {c.type}</option>
-                    ))}
+                    {availableClasses.map(c => {
+                      const teacherNames = users
+                        .filter(u => c.teacherIds?.includes(u.id))
+                        .map(u => getUserDisplayName(u))
+                        .join(", ");
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {c.code} - {c.type} {teacherNames ? `(Prof: ${teacherNames})` : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -159,15 +194,21 @@ export const ProfessorDiaryView = ({
               {/* Banner de status do prazo */}
               <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2">
-                  <Clock size={16} className={deadlineInfo.isExpired ? "text-rose-600" : "text-pro-teal"} />
+                  <Clock size={16} className={deadlineInfo.isExpired ? (isGestorOrDirector ? "text-amber-600" : "text-rose-600") : "text-pro-teal"} />
                   <span className="font-bold text-slate-600">
                     Prazo institucional para diários de <strong>{deadlineInfo.formattedReference}</strong>:
                   </span>
                 </div>
                 {deadlineInfo.isExpired ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 font-black uppercase tracking-wider text-[10px] rounded-xl border border-rose-200">
-                    <Lock size={12} /> Prazo encerrou em {deadlineInfo.formattedDeadline} às 23:59
-                  </div>
+                  isGestorOrDirector ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 font-black uppercase tracking-wider text-[10px] rounded-xl border border-amber-200">
+                      <ShieldCheck size={12} className="text-amber-600" /> Prazo regular de professores encerrado ({deadlineInfo.formattedDeadline}) • Lançamento administrativo liberado
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 font-black uppercase tracking-wider text-[10px] rounded-xl border border-rose-200">
+                      <Lock size={12} /> Prazo encerrou em {deadlineInfo.formattedDeadline} às 23:59
+                    </div>
+                  )
                 ) : (
                   <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 font-black uppercase tracking-wider text-[10px] rounded-xl border border-emerald-200">
                     Até {deadlineInfo.formattedDeadline} às 23:59 ({deadlineInfo.daysRemaining} dias restantes)
@@ -180,7 +221,12 @@ export const ProfessorDiaryView = ({
             {selectedClassId ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
-                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Lista de Alunos matriculados</h3>
+                   <div className="space-y-0.5">
+                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Lista de Alunos matriculados</h3>
+                     <p className="text-xs font-bold text-slate-600">
+                       Clique no aluno para lançar ou revisar notas e frequência
+                     </p>
+                   </div>
                    <span className="text-[10px] font-black text-pro-teal uppercase tracking-widest bg-pro-teal/5 px-3 py-1 rounded-full">
                      {targetClass?.studentIds?.length || 0} ALUNOS
                    </span>
@@ -200,7 +246,7 @@ export const ProfessorDiaryView = ({
                       <div 
                         key={sid}
                         onClick={() => {
-                          if (deadlineInfo.isExpired) {
+                          if (deadlineInfo.isExpired && !isGestorOrDirector) {
                             setExpiredModalStudent(getUserDisplayName(student));
                             setShowExpiredModal(true);
                             return;
@@ -233,7 +279,7 @@ export const ProfessorDiaryView = ({
                           setView("student_diary_form");
                         }}
                         className={`bg-white p-5 rounded-[28px] border shadow-sm transition-all group flex flex-col md:flex-row md:items-center gap-6 cursor-pointer ${
-                          deadlineInfo.isExpired 
+                          deadlineInfo.isExpired && !isGestorOrDirector
                             ? "border-slate-100 hover:border-rose-300 hover:bg-rose-50/10" 
                             : "border-slate-100 hover:shadow-md hover:border-pro-teal/30"
                         }`}
@@ -284,12 +330,14 @@ export const ProfessorDiaryView = ({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const stEval = evaluations.find(ev => ev.studentId === student.id && ev.classId === selectedClassId && ev.month === diaryFilterMonth && ev.year === diaryFilterYear);
+                                    const classTeacher = users.find(u => targetClass?.teacherIds?.includes(u.id));
+                                    const pdfTeacherName = diary?.teacherName || (classTeacher ? getUserDisplayName(classTeacher) : (getUserDisplayName(currentUser) || "Professor"));
                                     generateDiaryPDF({
                                       studentName: getUserDisplayName(student),
                                       artisticName: student?.artisticName,
                                       className: targetClass?.code || "Turma",
                                       classType: targetClass?.type,
-                                      teacherName: getUserDisplayName(currentUser) || "Professor",
+                                      teacherName: pdfTeacherName,
                                       month: diaryFilterMonth,
                                       year: diaryFilterYear,
                                       presences: diary.presences || 0,

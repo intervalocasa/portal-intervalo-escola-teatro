@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Download, Search, LayoutGrid, Calendar, ChevronRight, BookOpen, CheckCircle2, Pencil, Trash2, Eye, ArrowLeft, MessageSquare, Clock, CheckCircle } from "lucide-react";
+import { Download, Search, LayoutGrid, Calendar, ChevronRight, BookOpen, CheckCircle2, Pencil, Trash2, Eye, ArrowLeft, MessageSquare, Clock, CheckCircle, PlusCircle, Filter } from "lucide-react";
 import { User, Class, Diary, Evaluation, PedagogicalMeetingRequest } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { db } from "../lib/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { generateDiaryPDF } from "../lib/pdfExporter";
+import { getUserDisplayName } from "../lib/userUtils";
 
 interface ManageDiariesViewProps {
   diaries: Diary[];
@@ -40,6 +42,29 @@ export const ManageDiariesView = ({
   setView,
   handleDeleteDiary
 }: ManageDiariesViewProps) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterClassId, setFilterClassId] = useState<string>("all");
+  const [filterMonth, setFilterMonth] = useState<string>("all");
+  const [filterYear, setFilterYear] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+
+  const filteredDiaries = useMemo(() => {
+    return diaries.filter(d => {
+      const student四周 = users.find(u => u.id === d.studentId);
+      const studentName = (d.studentName || (student四周 ? getUserDisplayName(student四周) : "") || "").toLowerCase();
+      const className = (d.className || "").toLowerCase();
+      const teacherName四周 = (d.teacherName || "").toLowerCase();
+      const term = searchTerm.toLowerCase();
+
+      const matchesSearch = !term || studentName.includes(term) || className.includes(term) || teacherName四周.includes(term);
+      const matchesClass = filterClassId === "all" || d.classId === filterClassId;
+      const matchesMonth = filterMonth === "all" || d.month === Number(filterMonth);
+      const matchesYear = filterYear === "all" || d.year === Number(filterYear);
+      const matchesStatus = filterStatus === "all" || d.status === filterStatus;
+
+      return matchesSearch && matchesClass && matchesMonth && matchesYear && matchesStatus;
+    });
+  }, [diaries, users, searchTerm, filterClassId, filterMonth, filterYear, filterStatus]);
 
   const handleUpdateRequestStatus = async (requestId: string, status: 'pendente' | 'em_atendimento' | 'concluido') => {
     try {
@@ -69,7 +94,25 @@ export const ManageDiariesView = ({
       <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-16">
          <Logo className="h-10 md:h-16 w-auto mb-1 brightness-0 invert" />
          <h1 className="text-white text-xl md:text-3xl font-black uppercase tracking-tight">Gestão de Diários</h1>
-         <p className="text-teal-50/70 text-xs md:text-sm mt-1 uppercase tracking-widest leading-none font-bold">Acompanhamento e Auditoria Pedagógica</p>
+         <p className="text-teal-50/70 text-xs md:text-sm mt-1 uppercase tracking-widest leading-none font-bold">Acompanhamento e Lançamento de Notas</p>
+         <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+           <button
+             type="button"
+             onClick={() => setView("professor_diary")}
+             className="px-6 py-2.5 bg-pro-yellow text-slate-900 rounded-full text-xs font-black uppercase tracking-wider shadow-lg hover:brightness-105 transition-all flex items-center gap-2"
+           >
+             <PlusCircle size={16} />
+             Lançar Notas no Diário
+           </button>
+           <button
+             type="button"
+             onClick={() => setView("class_diary")}
+             className="px-6 py-2.5 bg-white/10 text-white rounded-full text-xs font-black uppercase tracking-wider border border-white/20 hover:bg-white/20 transition-all flex items-center gap-2"
+           >
+             <Clock size={16} />
+             Diários de Aula
+           </button>
+         </div>
       </div>
 
       <div className="flex-1 p-6 md:p-12 overflow-y-auto bg-slate-50">
@@ -213,6 +256,85 @@ export const ManageDiariesView = ({
               </div>
             </div>
 
+            {/* Filter and Search Bar */}
+            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-pro-teal/10 rounded-xl flex items-center justify-center text-pro-teal">
+                    <BookOpen size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Diários Cadastrados</h2>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Exibindo {filteredDiaries.length} de {diaries.length} diários
+                    </p>
+                  </div>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => setView("professor_diary")}
+                  className="w-full md:w-auto px-5 py-2.5 bg-pro-teal text-white rounded-2xl text-xs font-black uppercase tracking-wider hover:bg-pro-teal/90 transition-all shadow-sm flex items-center justify-center gap-2"
+                >
+                  <PlusCircle size={16} />
+                  Lançar Notas por Turma
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-2">
+                <div className="md:col-span-2 relative">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar aluno, turma ou professor..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-pro-teal"
+                  />
+                </div>
+
+                <div>
+                  <select
+                    value={filterClassId}
+                    onChange={(e) => setFilterClassId(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-pro-teal"
+                  >
+                    <option value="all">Todas as Turmas</option>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.code} - {c.type}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <select
+                    value={filterMonth}
+                    onChange={(e) => setFilterMonth(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-pro-teal"
+                  >
+                    <option value="all">Todos os Meses</option>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <option key={i + 1} value={i + 1}>
+                        {new Date(0, i).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-pro-teal"
+                  >
+                    <option value="all">Todos os Status</option>
+                    <option value="concluido">Concluídos</option>
+                    <option value="rascunho">Rascunhos</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="bg-slate-50/50 border-b border-slate-100">
@@ -228,8 +350,8 @@ export const ManageDiariesView = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {diaries.length > 0 ? (
-                    diaries
+                  {filteredDiaries.length > 0 ? (
+                    filteredDiaries
                     .sort((a, b) => (a.studentName || "").localeCompare(b.studentName || "", 'pt-BR'))
                     .map(d => (
                       <tr key={d.id} className="hover:bg-slate-50/50 transition-colors group">
@@ -267,9 +389,9 @@ export const ManageDiariesView = ({
                          </td>
                          <td className="px-6 py-5 text-center">
                             {d.status === "concluido" ? (
-                              <span className="px-3 py-1 bg-green-50 text-green-600 text-[9px] font-black uppercase tracking-widest rounded-full border border-green-100">C</span>
+                              <span className="px-3 py-1 bg-green-50 text-green-600 text-[9px] font-black uppercase tracking-widest rounded-full border border-green-100">Concluído</span>
                             ) : (
-                              <span className="px-3 py-1 bg-pro-yellow/10 text-pro-orange text-[9px] font-black uppercase tracking-widest rounded-full border border-pro-yellow/20">R</span>
+                              <span className="px-3 py-1 bg-pro-yellow/10 text-pro-orange text-[9px] font-black uppercase tracking-widest rounded-full border border-pro-yellow/20">Rascunho</span>
                             )}
                          </td>
                          <td className="px-6 py-5 text-right px-8">
@@ -313,6 +435,7 @@ export const ManageDiariesView = ({
                                     presences: d.presences || 0,
                                     absences: d.absences || 0,
                                     frequencyObs: d.frequencyObs || "",
+                                    weeklyAttendance: d.weeklyAttendance || {},
                                     grades: d.grades || {},
                                     unworkedCriteria: d.unworkedCriteria || {},
                                     criteriaObs: d.criteriaObs || {},
@@ -320,10 +443,11 @@ export const ManageDiariesView = ({
                                   });
                                   setView("student_diary_form");
                                 }}
-                                className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-pro-teal hover:text-white transition-all shadow-sm"
-                                title="Visualizar/Editar"
+                                className="p-2.5 bg-pro-teal/10 text-pro-teal rounded-xl hover:bg-pro-teal hover:text-white transition-all shadow-sm flex items-center gap-1.5 px-3"
+                                title="Lançar / Editar Notas"
                               >
-                                <Eye size={16} />
+                                <Pencil size={15} />
+                                <span className="text-[10px] font-black uppercase">Editar / Lançar</span>
                               </button>
                               <button
                                 onClick={() => handleDeleteDiary(d.id)}
@@ -338,7 +462,9 @@ export const ManageDiariesView = ({
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={8} className="py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs italic">Nenhum diário registrado ainda</td>
+                      <td colSpan={8} className="py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs italic">
+                        {diaries.length === 0 ? "Nenhum diário registrado ainda" : "Nenhum diário encontrado para os filtros selecionados"}
+                      </td>
                     </tr>
                   )}
                 </tbody>

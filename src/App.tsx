@@ -1536,7 +1536,8 @@ export default function App() {
 
     // Check monthly deadline
     const deadlineInfo = getMonthlyDeadline(diaryFilterMonth, diaryFilterYear);
-    if (deadlineInfo.isExpired) {
+    const currentUserRole = currentUser?.role || role;
+    if (deadlineInfo.isExpired && !isDirectorOrGestor(currentUserRole)) {
       showNotification(`O prazo para lançamento do diário de ${deadlineInfo.formattedReference} encerrou em ${deadlineInfo.formattedDeadline}. Entre em contato com a direção.`, "Prazo Expirado", "error");
       return;
     }
@@ -1585,6 +1586,17 @@ export default function App() {
         d.year === diaryFilterYear
       );
 
+      const isGestorOrDir = isDirectorOrGestor(currentUserRole);
+      const classTeacher = selectedClass.teacherIds?.length 
+        ? users.find(u => selectedClass.teacherIds.includes(u.id))
+        : null;
+      const resolvedTeacherId = (isGestorOrDir && classTeacher)
+        ? (existingDiary?.teacherId || classTeacher.id)
+        : currentUser.uid;
+      const resolvedTeacherName = (isGestorOrDir && classTeacher)
+        ? (existingDiary?.teacherName || classTeacher.artisticName || classTeacher.name || teacherData?.artisticName || teacherData?.name || "Professor Responsável")
+        : (teacherData?.artisticName || teacherData?.name || "Professor");
+
       const validGrades = Object.entries(diaryFormData.grades || {})
         .filter(([cid, val]) => !isCriterionUnworked(val, diaryFormData.unworkedCriteria, cid))
         .map(([_, val]) => Number(val))
@@ -1601,8 +1613,8 @@ export default function App() {
         classId: selectedClassId,
         className: selectedClass.code,
         classType: selectedClass.type,
-        teacherId: currentUser.uid,
-        teacherName: teacherData?.artisticName || teacherData?.name || "Professor",
+        teacherId: resolvedTeacherId,
+        teacherName: resolvedTeacherName,
         month: diaryFilterMonth,
         year: diaryFilterYear,
         presences: Number(diaryFormData.presences || 0),

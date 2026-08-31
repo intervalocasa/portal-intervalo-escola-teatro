@@ -24,7 +24,7 @@ import { BADGES } from "../constants/badges";
 import { Award, Star } from "lucide-react";
 import { UserRole } from "../types";
 import { generateDiaryPDF } from "../lib/pdfExporter";
-import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
+import { getUserDisplayName, getUserSecondaryName, isDirectorOrGestor } from "../lib/userUtils";
 import { getMonthlyDeadline } from "../lib/deadlineUtils";
 import { DeadlineExpiredModal } from "../components/DeadlineExpiredModal";
 
@@ -70,12 +70,14 @@ export const StudentDiaryFormView = ({
       ? PROFESSIONAL_COURSE_CRITERIA 
       : ADULT_COURSE_CRITERIA;
 
+  const isGestorOrDirector = isDirectorOrGestor(userRole);
+
   const deadlineInfo = useMemo(() => {
     return getMonthlyDeadline(diaryFilterMonth, diaryFilterYear);
   }, [diaryFilterMonth, diaryFilterYear]);
 
   const handleValidatedSubmit = (status: "rascunho" | "concluido") => {
-    if (deadlineInfo.isExpired) {
+    if (deadlineInfo.isExpired && !isGestorOrDirector) {
       setShowExpiredModal(true);
       return;
     }
