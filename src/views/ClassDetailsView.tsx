@@ -3,14 +3,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, UserCircle, Edit, Users, Calendar, Info, UserPlus, X, Search, Plus, LayoutGrid, MessageSquare, Pencil, DollarSign, Award, Lock, UserCheck, UserX } from "lucide-react";
-import { Class, User, UserRole } from "../types";
+import { 
+  ArrowLeft, 
+  UserCircle, 
+  Edit, 
+  Users, 
+  Calendar, 
+  Info, 
+  UserPlus, 
+  X, 
+  Search, 
+  Plus, 
+  LayoutGrid, 
+  MessageSquare, 
+  Pencil, 
+  DollarSign, 
+  Award, 
+  Lock, 
+  UserCheck, 
+  UserX,
+  CalendarCheck,
+  Sparkles,
+  Clock,
+  Phone,
+  Mail,
+  History,
+  CheckCircle
+} from "lucide-react";
+import { Class, User, UserRole, ExperimentalClassBooking } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { MuralTurma } from "../components/MuralTurma";
 import { db } from "../lib/firebase";
-import { doc, updateDoc, arrayUnion, arrayRemove, deleteField, getDoc } from "firebase/firestore";
+import { doc, updateDoc, arrayUnion, arrayRemove, deleteField, getDoc, collection, query, onSnapshot, orderBy } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
 import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
 
@@ -52,9 +78,66 @@ export const ClassDetailsView = ({
   const [isExcluding, setIsExcluding] = useState(false);
   const [showConfirmExclude, setShowConfirmExclude] = useState(false);
 
+  // Experimental classes state
+  const [experimentalBookings, setExperimentalBookings] = useState<ExperimentalClassBooking[]>([]);
+
+  useEffect(() => {
+    const q = query(collection(db, "experimental_classes"), orderBy("date", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: ExperimentalClassBooking[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as ExperimentalClassBooking);
+      });
+      setExperimentalBookings(list);
+    }, (err) => {
+      console.error("Error fetching experimental_classes in ClassDetailsView:", err);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const targetClass = classes.find(c => c.id === selectedClassId);
   const isGestorRole = role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo";
   const isGestorOnly = role === "Gestor" || currentUser?.role === "Gestor";
+  const isStudent = role === "Aluno" || currentUser?.role === "Aluno";
+
+  const formatDateBR = (dateStr?: string) => {
+    if (!dateStr) return "";
+    try {
+      const parts = dateStr.split("-");
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+      return new Date(dateStr).toLocaleDateString("pt-BR");
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const classExperimentalBookings = useMemo(() => {
+    if (!targetClass) return [];
+    const targetCode = targetClass.code?.trim().toLowerCase();
+    const targetId = targetClass.id?.trim().toLowerCase();
+    const targetType = targetClass.type?.trim().toLowerCase();
+
+    return experimentalBookings.filter(b => {
+      if (!b.classGroup && !b.course) return false;
+      const bookingGroup = (b.classGroup || "").trim().toLowerCase();
+
+      // Direct matches
+      if (targetCode && bookingGroup === targetCode) return true;
+      if (targetId && bookingGroup === targetId) return true;
+      if (targetType && bookingGroup === targetType) return true;
+
+      // Partial inclusion matches
+      if (targetCode && bookingGroup && (bookingGroup.includes(targetCode) || targetCode.includes(bookingGroup))) {
+        return true;
+      }
+
+      return false;
+    }).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  }, [experimentalBookings, targetClass]);
+
   const classTeachers = useMemo(() => {
     return users.filter(u => targetClass?.teacherIds?.includes(u.id));
   }, [users, targetClass?.teacherIds]);
@@ -280,6 +363,129 @@ export const ClassDetailsView = ({
                       </div>
                     )}
                   </div>
+
+                  {/* SEÇÃO DE AULAS EXPERIMENTAIS AGENDADAS (Visível para todos exceto Aluno) */}
+                  {!isStudent && classExperimentalBookings.length > 0 && (
+                    <div className="p-6 md:p-7 bg-gradient-to-br from-indigo-50/90 via-sky-50/40 to-white rounded-3xl border-2 border-indigo-100 shadow-xs space-y-4">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-xs">
+                            <Sparkles size={20} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">
+                                Aulas Experimentais Agendadas
+                              </h3>
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-600 text-white">
+                                {classExperimentalBookings.length} {classExperimentalBookings.length === 1 ? "Agendamento" : "Agendamentos"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 font-medium">
+                              Alunos(as) com aula experimental agendada para esta turma
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+                        {classExperimentalBookings.map((exp) => (
+                          <div
+                            key={exp.id}
+                            className="p-4 bg-white rounded-2xl border border-indigo-100 shadow-2xs hover:border-indigo-300 transition-all flex flex-col justify-between gap-3 relative overflow-hidden"
+                          >
+                            {/* Cabeçalho do Card: Nome e Status de Confirmação */}
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-xl bg-indigo-100/80 text-indigo-700 font-black text-sm flex items-center justify-center shrink-0">
+                                  {exp.studentName?.charAt(0)?.toUpperCase() || "A"}
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight truncate">
+                                    {exp.studentName}
+                                  </h4>
+                                  <p className="text-[11px] font-semibold text-slate-400 truncate">
+                                    {exp.course || targetClass.type} {exp.classTime ? `• ${exp.classTime}` : ""}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Status de Confirmação Prévia de Presença */}
+                              <div className="shrink-0">
+                                {exp.attendanceConfirmation === "CONFIRMOU_VESPERA" ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-900 border border-indigo-200 shadow-2xs">
+                                    <CalendarCheck size={12} className="text-indigo-700" />
+                                    <span>Confirmou na véspera</span>
+                                  </span>
+                                ) : exp.attendanceConfirmation === "CONFIRMOU_NO_DIA" ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-200 shadow-2xs">
+                                    <CheckCircle size={12} className="text-emerald-700" />
+                                    <span>Confirmou no dia</span>
+                                  </span>
+                                ) : exp.attendanceConfirmation === "REAGENDOU" ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200 shadow-2xs">
+                                    <History size={12} className="text-amber-700" />
+                                    <span>Reagendou</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200">
+                                    <Clock size={11} className="text-slate-400" />
+                                    <span>Confirmação pendente</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Data da Aula & Reagendamento */}
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs flex-wrap gap-2">
+                              <div className="flex items-center gap-1.5 text-slate-700">
+                                <Calendar size={13} className="text-indigo-600 shrink-0" />
+                                <span className="font-bold">
+                                  Data da Aula: <strong className="text-indigo-950 font-black">{formatDateBR(exp.date)}</strong>
+                                </span>
+                                {exp.dayOfWeek && (
+                                  <span className="text-[11px] text-indigo-700 font-semibold">
+                                    ({exp.dayOfWeek})
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Alerta / Tag se reagendado */}
+                              {((exp.rescheduleCount && exp.rescheduleCount > 0) || exp.attendanceConfirmation === "REAGENDOU") && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                  <History size={11} />
+                                  Data atualizada após reagendamento
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Detalhes de contato ou observação se houver */}
+                            {(exp.studentPhone || exp.studentEmail || exp.notes) && (
+                              <div className="text-[11px] text-slate-500 bg-slate-50/80 p-2.5 rounded-xl border border-slate-100 space-y-1">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  {exp.studentPhone && (
+                                    <span className="flex items-center gap-1">
+                                      <Phone size={11} className="text-slate-400" /> {exp.studentPhone}
+                                    </span>
+                                  )}
+                                  {exp.studentEmail && (
+                                    <span className="flex items-center gap-1">
+                                      <Mail size={11} className="text-slate-400" /> {exp.studentEmail}
+                                    </span>
+                                  )}
+                                </div>
+                                {exp.notes && (
+                                  <p className="text-[10px] text-slate-500 italic truncate">
+                                    Obs: {exp.notes}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {classStudents.length > 0 ? (
