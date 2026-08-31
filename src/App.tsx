@@ -1077,7 +1077,13 @@ export default function App() {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
 
     // Filter logic for notification trigger
-    const currentProfile = currentUsers.find(u => u.id === currentUserId || (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()));
+    const currentProfile = currentUsers.find(u => 
+      u.id === currentUserId || 
+      u.id === currentUser?.uid || 
+      u.id === currentUser?.id || 
+      u.uid === currentUser?.uid || 
+      (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase())
+    );
     const userRole = currentProfile?.role || role || currentUser?.role || "";
     let shouldNotify = false;
 
@@ -1091,17 +1097,30 @@ export default function App() {
     ) {
       shouldNotify = true;
     } else if (aviso.targetSpecificUsers) {
-      const currentId = currentUserId || currentProfile?.id || currentUser?.uid;
-      shouldNotify = Boolean(currentId && aviso.targetUserIds?.includes(currentId));
+      const currentIds = [
+        currentUserId,
+        currentUser?.uid,
+        currentUser?.id,
+        currentProfile?.id,
+        currentProfile?.uid,
+        currentUser?.email?.trim().toLowerCase(),
+        currentProfile?.email?.trim().toLowerCase()
+      ].filter(Boolean) as string[];
+      shouldNotify = Boolean(Array.isArray(aviso.targetUserIds) && currentIds.some(id => aviso.targetUserIds.includes(id)));
     } else {
-      if (aviso.target === "Todos") shouldNotify = true;
-      if (aviso.target === "Alunos" && userRole === "Aluno") shouldNotify = true;
-      if (aviso.target === "Professores" && (isProfessorOrTeacher(userRole) || isDirectorOrGestor(userRole))) shouldNotify = true;
+      const targetNorm = (aviso.target || "Todos").toString().trim().toLowerCase();
+      if (targetNorm === "todos" || targetNorm === "geral" || targetNorm === "all" || targetNorm === "") {
+        shouldNotify = true;
+      } else if (targetNorm.includes("alun") || targetNorm.includes("student")) {
+        shouldNotify = userRole === "Aluno" || userRole.toLowerCase().includes("alun");
+      } else if (targetNorm.includes("professor") || targetNorm.includes("professora") || targetNorm.includes("docente") || targetNorm.includes("teacher")) {
+        shouldNotify = isProfessorOrTeacher(userRole) || isDirectorOrGestor(userRole) || userRole === "Professor" || userRole === "Diretor Pedagógico e Professor" || userRole === "Diretor Pedagógico";
+      }
     }
 
     if (shouldNotify) {
-      new Notification("Novo Aviso: " + aviso.title, {
-        body: aviso.content,
+      new Notification("Novo Aviso: " + (aviso.title || "Mural de Avisos"), {
+        body: aviso.content || "",
         icon: "/logo.png"
       });
     }
@@ -1179,8 +1198,20 @@ export default function App() {
       handleFirestoreError(err, OperationType.LIST, "evolucao");
     });
 
-    const unsubscribeAnnouncements = onSnapshot(query(collection(db, "avisos"), orderBy("createdAt", "desc")), (snapshot) => {
+    const unsubscribeAnnouncements = onSnapshot(collection(db, "avisos"), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort client-side safely so announcements without createdAt are never omitted by Firestore
+      data.sort((a: any, b: any) => {
+        const getTime = (item: any) => {
+          const t = item.createdAt || item.updatedAt || item.timestamp || item.scheduledFor;
+          if (!t) return 0;
+          if (t.toDate && typeof t.toDate === 'function') return t.toDate().getTime();
+          if (t.seconds) return t.seconds * 1000;
+          const d = new Date(t).getTime();
+          return isNaN(d) ? 0 : d;
+        };
+        return getTime(b) - getTime(a);
+      });
       setAnnouncements(data);
 
       // Check for new announcement to notify
@@ -1364,40 +1395,73 @@ export default function App() {
     openAnswers: {}
   });
 
-  const filteredAnnouncements = announcements.filter(aviso => {
-    // 1. Check schedule
-    if (aviso.scheduledFor) {
-      const scheduleDate = aviso.scheduledFor.toDate ? aviso.scheduledFor.toDate() : new Date(aviso.scheduledFor);
-      if (scheduleDate > new Date()) return false;
-    }
+  const filteredAnnouncements = useMemo(() => {
+    return announcements.filter(aviso => {
+      // 1. Check schedule
+      if (aviso.scheduledFor) {
+        const scheduleDate = aviso.scheduledFor.toDate 
+          ? aviso.scheduledFor.toDate() 
+          : (aviso.scheduledFor.seconds ? new Date(aviso.scheduledFor.seconds * 1000) : new Date(aviso.scheduledFor));
+        if (scheduleDate > new Date()) return false;
+      }
 
-    // 2. Check target for current user role
-    const currentProfile = users.find(u => u.id === currentUser?.uid || (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()));
-    const userRole = currentProfile?.role || role || currentUser?.role || "";
+      // 2. Check target for current user role
+      const currentProfile = users.find(u => 
+        u.id === currentUser?.uid || 
+        u.id === currentUser?.id || 
+        u.uid === currentUser?.uid || 
+        (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase())
+      );
+      const userRole = currentProfile?.role || role || currentUser?.role || "";
 
-    if (
-      isDirectorOrGestor(userRole) ||
-      isStaffOrAdmin(userRole) ||
-      userRole === "Gestor" || 
-      userRole === "Diretor Pedagógico" || 
-      userRole === "Diretor Pedagógico e Professor" || 
-      userRole === "Auxiliar Administrativo"
-    ) {
-      return true; // Gestor/Diretor/Auxiliar sees everything
-    }
-    
-    // 3. Check if it's targeted for specific users
-    if (aviso.targetSpecificUsers) {
-      const currentId = currentUser?.uid || currentProfile?.id;
-      return Boolean(currentId && aviso.targetUserIds?.includes(currentId));
-    }
-    
-    if (aviso.target === "Todos") return true;
-    if (aviso.target === "Alunos" && userRole === "Aluno") return true;
-    if (aviso.target === "Professores" && (isProfessorOrTeacher(userRole) || isDirectorOrGestor(userRole) || userRole === "Professor" || userRole === "Diretor Pedagógico e Professor" || userRole === "Diretor Pedagógico")) return true;
+      if (
+        isDirectorOrGestor(userRole) ||
+        isStaffOrAdmin(userRole) ||
+        userRole === "Gestor" || 
+        userRole === "Diretor Pedagógico" || 
+        userRole === "Diretor Pedagógico e Professor" || 
+        userRole === "Auxiliar Administrativo"
+      ) {
+        return true; // Gestor/Diretor/Auxiliar sees everything
+      }
+      
+      const currentIds = [
+        currentUser?.uid,
+        currentUser?.id,
+        currentProfile?.id,
+        currentProfile?.uid,
+        currentUser?.email?.trim().toLowerCase(),
+        currentProfile?.email?.trim().toLowerCase()
+      ].filter(Boolean) as string[];
 
-    return false;
-  });
+      // 3. Check if it's targeted for specific users
+      if (aviso.targetSpecificUsers) {
+        return Boolean(
+          Array.isArray(aviso.targetUserIds) && 
+          currentIds.some(id => aviso.targetUserIds.includes(id))
+        );
+      }
+      
+      const targetNorm = (aviso.target || "Todos").toString().trim().toLowerCase();
+
+      // Directed to "Todos" (everyone) -> professors and all users see it
+      if (targetNorm === "todos" || targetNorm === "geral" || targetNorm === "all" || targetNorm === "") {
+        return true;
+      }
+
+      // Directed to "Professores" -> visible to teachers / professors
+      if (targetNorm.includes("professor") || targetNorm.includes("professora") || targetNorm.includes("docente") || targetNorm.includes("teacher")) {
+        return isProfessorOrTeacher(userRole) || userRole === "Professor" || userRole === "Diretor Pedagógico e Professor" || userRole === "Diretor Pedagógico";
+      }
+
+      // Directed to "Alunos" -> visible ONLY to students
+      if (targetNorm.includes("alun") || targetNorm.includes("student")) {
+        return userRole === "Aluno" || userRole.toLowerCase().includes("alun");
+      }
+
+      return false;
+    });
+  }, [announcements, users, currentUser, role]);
 
   const [helpLevelModal, setHelpLevelModal] = useState<{title: string, detail: string, motivation: string} | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);

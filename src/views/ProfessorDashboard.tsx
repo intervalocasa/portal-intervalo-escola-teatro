@@ -45,7 +45,12 @@ export const ProfessorDashboard = ({
   filteredAnnouncements,
   onAwardBadge
 }: ProfessorDashboardProps) => {
-  const user = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+  const user = users.find(u => 
+    u.id === currentUser?.uid || 
+    u.id === currentUser?.id || 
+    u.uid === currentUser?.uid || 
+    (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase())
+  ) || currentUser;
   
   return (
     <motion.div
