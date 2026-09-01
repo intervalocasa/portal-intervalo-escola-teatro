@@ -120,8 +120,18 @@ export const ClassDetailsView = ({
     const targetId = targetClass.id?.trim().toLowerCase();
     const targetType = targetClass.type?.trim().toLowerCase();
 
+    // Get current local date in YYYY-MM-DD format
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
     return experimentalBookings.filter(b => {
       if (!b.classGroup && !b.course) return false;
+
+      // Filter out bookings with dates that have already passed
+      if (b.date && b.date < todayStr) {
+        return false;
+      }
+
       const bookingGroup = (b.classGroup || "").trim().toLowerCase();
 
       // Direct matches
@@ -135,7 +145,7 @@ export const ClassDetailsView = ({
       }
 
       return false;
-    }).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    }).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   }, [experimentalBookings, targetClass]);
 
   const classTeachers = useMemo(() => {
