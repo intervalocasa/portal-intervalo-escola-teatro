@@ -388,48 +388,48 @@ export const ClassDetailsView = ({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 pt-1">
                         {classExperimentalBookings.map((exp) => (
                           <div
                             key={exp.id}
                             className="p-4 bg-white rounded-2xl border border-indigo-100 shadow-2xs hover:border-indigo-300 transition-all flex flex-col justify-between gap-3 relative overflow-hidden"
                           >
-                            {/* Cabeçalho do Card: Nome e Status de Confirmação */}
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-10 h-10 rounded-xl bg-indigo-100/80 text-indigo-700 font-black text-sm flex items-center justify-center shrink-0">
+                            {/* Cabeçalho do Card: Nome Completo e Status de Confirmação */}
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5">
+                              <div className="flex items-start gap-3 min-w-0 flex-1">
+                                <div className="w-10 h-10 rounded-xl bg-indigo-100/80 text-indigo-700 font-black text-sm flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
                                   {exp.studentName?.charAt(0)?.toUpperCase() || "A"}
                                 </div>
-                                <div className="min-w-0">
-                                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight truncate">
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight break-words leading-snug">
                                     {exp.studentName}
                                   </h4>
-                                  <p className="text-[11px] font-semibold text-slate-400 truncate">
+                                  <p className="text-[11px] font-semibold text-slate-400 mt-0.5">
                                     {exp.course || targetClass.type} {exp.classTime ? `• ${exp.classTime}` : ""}
                                   </p>
                                 </div>
                               </div>
 
                               {/* Status de Confirmação Prévia de Presença */}
-                              <div className="shrink-0">
+                              <div className="shrink-0 self-start">
                                 {exp.attendanceConfirmation === "CONFIRMOU_VESPERA" ? (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-900 border border-indigo-200 shadow-2xs">
-                                    <CalendarCheck size={12} className="text-indigo-700" />
+                                    <CalendarCheck size={12} className="text-indigo-700 shrink-0" />
                                     <span>Confirmou na véspera</span>
                                   </span>
                                 ) : exp.attendanceConfirmation === "CONFIRMOU_NO_DIA" ? (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-200 shadow-2xs">
-                                    <CheckCircle size={12} className="text-emerald-700" />
+                                    <CheckCircle size={12} className="text-emerald-700 shrink-0" />
                                     <span>Confirmou no dia</span>
                                   </span>
                                 ) : exp.attendanceConfirmation === "REAGENDOU" ? (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200 shadow-2xs">
-                                    <History size={12} className="text-amber-700" />
+                                    <History size={12} className="text-amber-700 shrink-0" />
                                     <span>Reagendou</span>
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200">
-                                    <Clock size={11} className="text-slate-400" />
+                                    <Clock size={11} className="text-slate-400 shrink-0" />
                                     <span>Confirmação pendente</span>
                                   </span>
                                 )}
