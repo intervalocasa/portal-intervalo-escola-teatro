@@ -24,7 +24,7 @@ import { BADGES } from "../constants/badges";
 import { Award, Star } from "lucide-react";
 import { UserRole } from "../types";
 import { generateDiaryPDF } from "../lib/pdfExporter";
-import { getUserDisplayName, getUserSecondaryName, isDirectorOrGestor } from "../lib/userUtils";
+import { getUserDisplayName, getUserSecondaryName, isDirectorOrGestor, isStudentInactiveInClass } from "../lib/userUtils";
 import { getMonthlyDeadline } from "../lib/deadlineUtils";
 import { DeadlineExpiredModal } from "../components/DeadlineExpiredModal";
 
@@ -76,7 +76,16 @@ export const StudentDiaryFormView = ({
     return getMonthlyDeadline(diaryFilterMonth, diaryFilterYear);
   }, [diaryFilterMonth, diaryFilterYear]);
 
+  const isInactiveStudent = useMemo(() => {
+    if (!student || !targetClass) return false;
+    return isStudentInactiveInClass(student, targetClass);
+  }, [student, targetClass]);
+
   const handleValidatedSubmit = (status: "rascunho" | "concluido") => {
+    if (isInactiveStudent) {
+      alert("Alunos inativos ou trancados não devem ter lançamentos no diário.");
+      return;
+    }
     if (deadlineInfo.isExpired && !isGestorOrDirector) {
       setShowExpiredModal(true);
       return;

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { User } from "../types";
+import { User, Class } from "../types";
 
 /**
  * Returns the primary display name for a user.
@@ -119,3 +119,104 @@ export function isProfessorOrTeacher(role?: string | null): boolean {
     norm.includes("docente")
   );
 }
+
+/**
+ * Checks if a user is inactive at the user account level.
+ * Handles boolean flags, status strings, and migrated marker documents.
+ */
+export function isStudentInactive(user: Partial<User> | null | undefined): boolean {
+  if (!user) return true;
+  const anyUser = user as any;
+  if (
+    anyUser.inactive === true ||
+    anyUser.isInactive === true ||
+    anyUser.active === false ||
+    anyUser.desmatriculado === true
+  ) {
+    return true;
+  }
+  const status = String(anyUser.status || "").trim().toLowerCase();
+  if (
+    status === "inativo" ||
+    status === "desmatriculado" ||
+    status === "trancado" ||
+    status === "cancelado" ||
+    status === "removido"
+  ) {
+    return true;
+  }
+  const enrollmentStatus = String(anyUser.enrollmentStatus || "").trim().toLowerCase();
+  if (
+    enrollmentStatus === "inativo" ||
+    enrollmentStatus === "desmatriculado" ||
+    enrollmentStatus === "trancado" ||
+    enrollmentStatus === "cancelado" ||
+    enrollmentStatus === "removido"
+  ) {
+    return true;
+  }
+  if (anyUser.migratedTo) {
+    return true; // legacy migrated marker document
+  }
+  return false;
+}
+
+/**
+ * Checks if a student is inactive in the context of a specific class.
+ * Returns true if the student account is inactive OR if their enrollment in the class is inactive/trancado/removido.
+ */
+export function isStudentInactiveInClass(
+  user: Partial<User> | null | undefined,
+  classObj?: Partial<Class> | null | undefined
+): boolean {
+  if (isStudentInactive(user)) return true;
+  if (!classObj) return false;
+
+  const statuses = classObj.studentEnrollmentStatuses;
+  if (statuses && user) {
+    const rawStatus =
+      (user.id && statuses[user.id]) ||
+      (user.migratedFrom && statuses[user.migratedFrom]) ||
+      (user.migratedTo && statuses[user.migratedTo]);
+
+    if (rawStatus) {
+      const sLower = String(rawStatus).trim().toLowerCase();
+      if (
+        sLower === "inativo" ||
+        sLower === "trancado" ||
+        sLower === "desmatriculado" ||
+        sLower === "cancelado" ||
+        sLower === "removido" ||
+        sLower.includes("inativ") ||
+        sLower.includes("trancad")
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Returns true if a user is an active student in a class.
+ * Checks role, account activity, class enrollment status, and enrollment in studentIds.
+ */
+export function isStudentActiveInClass(
+  user: Partial<User> | null | undefined,
+  classObj?: Partial<Class> | null | undefined
+): boolean {
+  if (!user || !classObj) return false;
+  if (user.role && user.role !== "Aluno") return false;
+  if (isStudentInactiveInClass(user, classObj)) return false;
+
+  const studentIds = classObj.studentIds || [];
+  const matchesId = Boolean(user.id && studentIds.includes(user.id));
+  const matchesMigrated = Boolean(
+    (user.migratedFrom && studentIds.includes(user.migratedFrom)) ||
+    (user.migratedTo && studentIds.includes(user.migratedTo))
+  );
+
+  return Boolean(matchesId || matchesMigrated);
+}
+

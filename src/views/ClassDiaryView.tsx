@@ -47,7 +47,7 @@ import {
   getClassDiaryDeadlineInfo,
   ClassDiaryDeadlineInfo
 } from "../lib/deadlineUtils";
-import { isDirectorOrGestor } from "../lib/userUtils";
+import { isDirectorOrGestor, isStudentActiveInClass, isStudentInactiveInClass } from "../lib/userUtils";
 
 interface ClassDiaryViewProps {
   currentUser: any;
@@ -173,16 +173,12 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
     return classes.find(c => c.id === selectedClassId) || null;
   }, [classes, selectedClassId]);
 
-  // Students in selected class
+  // Students in selected class (excluding inactive students)
   const classStudents = useMemo(() => {
     if (!selectedClass) return [];
-    const studentIds = selectedClass.studentIds || [];
-    return users.filter(u => {
-      // Direct ID or migrated ID
-      const matchesId = studentIds.includes(u.id);
-      const matchesMigrated = (u.migratedFrom && studentIds.includes(u.migratedFrom)) || (u.migratedTo && studentIds.includes(u.migratedTo));
-      return (matchesId || matchesMigrated) && u.role === "Aluno" && !u.inactive;
-    }).sort((a, b) => (a.name || a.artisticName || "").localeCompare(b.name || b.artisticName || "", "pt-BR"));
+    return users
+      .filter(u => isStudentActiveInClass(u, selectedClass))
+      .sort((a, b) => (a.name || a.artisticName || "").localeCompare(b.name || b.artisticName || "", "pt-BR"));
   }, [selectedClass, users]);
 
   // Real-time Deadline Info for current selection
@@ -228,13 +224,11 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
         setClassComment(existing.classComment || "");
         setCurrentDiaryId(existing.id || `${classIdToUse}_${dateToUse}`);
       } else {
-        // Initialize all students as 'presente' by default or empty
+        // Initialize all active students as 'presente' by default or empty
         const initialAttendances: Record<string, ClassAttendanceStatus> = {};
-        const targetStudents = (classObj?.studentIds || []).map(sId => 
-          users.find(u => u.id === sId || u.migratedFrom === sId || u.migratedTo === sId)
-        ).filter(Boolean);
+        const activeStudents = users.filter(u => isStudentActiveInClass(u, classObj));
 
-        targetStudents.forEach(st => {
+        activeStudents.forEach(st => {
           if (st) initialAttendances[st.id] = "presente";
         });
         setAttendances(initialAttendances);
@@ -305,6 +299,17 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
     const actualTeacherId = teacherUser?.id || loggedUserId || currentUser?.uid || "";
 
     try {
+      // Sanitize attendances to strictly include only currently active students in the class
+      const sanitizedAttendances: Record<string, ClassAttendanceStatus> = {};
+      const sanitizedStudentObs: Record<string, string> = {};
+
+      classStudents.forEach(st => {
+        sanitizedAttendances[st.id] = attendances[st.id] || "presente";
+        if (studentObservations[st.id]?.trim()) {
+          sanitizedStudentObs[st.id] = studentObservations[st.id].trim();
+        }
+      });
+
       await saveClassDailyDiary({
         id: currentDiaryId || `${selectedClass.id}_${selectedDate}`,
         classId: selectedClass.id,
@@ -315,8 +320,8 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
         teacherId: actualTeacherId,
         teacherName: teacherName,
         authorRole: userRole || currentUser?.role || "Professor",
-        attendances,
-        studentObservations,
+        attendances: sanitizedAttendances,
+        studentObservations: sanitizedStudentObs,
         classComment,
         totalStudents: classStudents.length,
         presentCount: 0,
@@ -1372,56 +1377,69 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                   </p>
                 </div>
 
-                {/* Lista de Chamada dos Alunos */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                    <UserCheck size={16} className="text-pro-teal" /> Chamada dos Alunos ({Object.keys(viewingDetailDiary.attendances || {}).length} registrados)
-                  </h4>
-
-                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
-                    {Object.entries(viewingDetailDiary.attendances || {}).map(([studentId, status], idx) => {
+                  {/* Lista de Chamada dos Alunos */}
+                  {(() => {
+                    const diaryClass = classes.find(c => c.id === viewingDetailDiary.classId);
+                    const activeEntries = Object.entries(viewingDetailDiary.attendances || {}).filter(([studentId]) => {
                       const student = users.find(u => u.id === studentId || u.migratedFrom === studentId || u.migratedTo === studentId);
-                      const studentObs = viewingDetailDiary.studentObservations?.[studentId] || "";
+                      if (student && isStudentInactiveInClass(student, diaryClass)) {
+                        return false;
+                      }
+                      return true;
+                    });
 
-                      return (
-                        <div key={studentId} className="p-3.5 bg-white flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold text-slate-400 w-5">{idx + 1}.</span>
-                            <div className="w-8 h-8 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 shrink-0">
-                              <Avatar src={student?.photo} fallbackSize={18} className="w-full h-full object-cover" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-black text-slate-800">
-                                {student?.name || student?.artisticName || "Aluno"}
-                              </p>
-                              {studentObs && (
-                                <p className="text-[11px] text-slate-500 italic mt-0.5">
-                                  Obs: {studentObs}
-                                </p>
-                              )}
-                            </div>
-                          </div>
+                    return (
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                          <UserCheck size={16} className="text-pro-teal" /> Chamada dos Alunos ({activeEntries.length} registrados)
+                        </h4>
 
-                          <div className="shrink-0">
-                            {status === "presente" ? (
-                              <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider rounded-lg">
-                                Presente
-                              </span>
-                            ) : status === "falta" ? (
-                              <span className="px-3 py-1 bg-rose-100 text-rose-800 text-[10px] font-black uppercase tracking-wider rounded-lg">
-                                Falta
-                              </span>
-                            ) : (
-                              <span className="px-3 py-1 bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider rounded-lg">
-                                Justificada
-                              </span>
-                            )}
-                          </div>
+                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
+                          {activeEntries.map(([studentId, status], idx) => {
+                            const student = users.find(u => u.id === studentId || u.migratedFrom === studentId || u.migratedTo === studentId);
+                            const studentObs = viewingDetailDiary.studentObservations?.[studentId] || "";
+
+                            return (
+                              <div key={studentId} className="p-3.5 bg-white flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs font-bold text-slate-400 w-5">{idx + 1}.</span>
+                                  <div className="w-8 h-8 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 shrink-0">
+                                    <Avatar src={student?.photo} fallbackSize={18} className="w-full h-full object-cover" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-black text-slate-800">
+                                      {student?.name || student?.artisticName || "Aluno"}
+                                    </p>
+                                    {studentObs && (
+                                      <p className="text-[11px] text-slate-500 italic mt-0.5">
+                                        Obs: {studentObs}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="shrink-0">
+                                  {status === "presente" ? (
+                                    <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider rounded-lg">
+                                      Presente
+                                    </span>
+                                  ) : status === "falta" ? (
+                                    <span className="px-3 py-1 bg-rose-100 text-rose-800 text-[10px] font-black uppercase tracking-wider rounded-lg">
+                                      Falta
+                                    </span>
+                                  ) : (
+                                    <span className="px-3 py-1 bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider rounded-lg">
+                                      Justificada
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                      </div>
+                    );
+                  })()}
               </div>
 
               {/* Rodapé do Modal */}

@@ -38,7 +38,7 @@ import { MuralTurma } from "../components/MuralTurma";
 import { db } from "../lib/firebase";
 import { doc, updateDoc, arrayUnion, arrayRemove, deleteField, getDoc, collection, query, onSnapshot, orderBy } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
-import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
+import { getUserDisplayName, getUserSecondaryName, isStudentActiveInClass } from "../lib/userUtils";
 
 interface ClassDetailsViewProps {
   selectedClassId: string | null;
@@ -124,11 +124,26 @@ export const ClassDetailsView = ({
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
+    // Normalize date to YYYY-MM-DD
+    const normalizeToYYYYMMDD = (dateVal?: string): string => {
+      if (!dateVal) return "";
+      const trimmed = dateVal.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return trimmed;
+      }
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+        const [d, m, y] = trimmed.split("/");
+        return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+      }
+      return trimmed;
+    };
+
     return experimentalBookings.filter(b => {
       if (!b.classGroup && !b.course) return false;
 
-      // Filter out bookings with dates that have already passed
-      if (b.date && b.date < todayStr) {
+      // Filter out bookings with dates that have already passed (earlier than today)
+      const bookingDateNormalized = normalizeToYYYYMMDD(b.date);
+      if (bookingDateNormalized && bookingDateNormalized < todayStr) {
         return false;
       }
 
@@ -145,7 +160,7 @@ export const ClassDetailsView = ({
       }
 
       return false;
-    }).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    }).sort((a, b) => (normalizeToYYYYMMDD(a.date) || "").localeCompare(normalizeToYYYYMMDD(b.date) || ""));
   }, [experimentalBookings, targetClass]);
 
   const classTeachers = useMemo(() => {
@@ -153,31 +168,11 @@ export const ClassDetailsView = ({
   }, [users, targetClass?.teacherIds]);
   const enrichedUser = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || null;
   const classStudents = useMemo(() => {
+    if (!targetClass) return [];
     return users
-      .filter(u => {
-        if (!targetClass?.studentIds) return false;
-
-        const isInClass = targetClass.studentIds.includes(u.id) ||
-          (u.migratedFrom && targetClass.studentIds.includes(u.migratedFrom)) ||
-          targetClass.studentIds.some(sid => {
-            const matchingDoc = users.find(uDoc => uDoc.id === sid);
-            return matchingDoc && matchingDoc.email?.toLowerCase() === u.email?.toLowerCase();
-          });
-
-        if (!isInClass) return false;
-
-        // Check if student's enrollment status in this class is inactive or if user account is inactive
-        const status = targetClass.studentEnrollmentStatuses?.[u.id] ||
-                       (u.migratedFrom && targetClass.studentEnrollmentStatuses?.[u.migratedFrom]);
-
-        if (status === "Inativo" || u.inactive) {
-          return false;
-        }
-
-        return true;
-      })
+      .filter(u => isStudentActiveInClass(u, targetClass))
       .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
-  }, [users, targetClass?.studentIds, targetClass?.studentEnrollmentStatuses]);
+  }, [users, targetClass]);
 
   const availableStudents = useMemo(() => {
     if (!targetClass) return [];

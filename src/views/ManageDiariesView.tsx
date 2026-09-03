@@ -11,7 +11,7 @@ import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { db } from "../lib/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { generateDiaryPDF } from "../lib/pdfExporter";
-import { getUserDisplayName } from "../lib/userUtils";
+import { getUserDisplayName, isStudentInactiveInClass } from "../lib/userUtils";
 
 interface ManageDiariesViewProps {
   diaries: Diary[];
@@ -48,9 +48,21 @@ export const ManageDiariesView = ({
   const [filterYear, setFilterYear] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
-  const filteredDiaries = useMemo(() => {
+  // Exclude inactive students from grade diaries
+  const activeDiaries = useMemo(() => {
     return diaries.filter(d => {
-      const student四周 = users.find(u => u.id === d.studentId);
+      const student = users.find(u => u.id === d.studentId || u.migratedFrom === d.studentId || u.migratedTo === d.studentId);
+      const classOfDiary = classes.find(c => c.id === d.classId);
+      if (student && isStudentInactiveInClass(student, classOfDiary)) {
+        return false;
+      }
+      return true;
+    });
+  }, [diaries, users, classes]);
+
+  const filteredDiaries = useMemo(() => {
+    return activeDiaries.filter(d => {
+      const student四周 = users.find(u => u.id === d.studentId || u.migratedFrom === d.studentId || u.migratedTo === d.studentId);
       const studentName = (d.studentName || (student四周 ? getUserDisplayName(student四周) : "") || "").toLowerCase();
       const className = (d.className || "").toLowerCase();
       const teacherName四周 = (d.teacherName || "").toLowerCase();
@@ -64,7 +76,7 @@ export const ManageDiariesView = ({
 
       return matchesSearch && matchesClass && matchesMonth && matchesYear && matchesStatus;
     });
-  }, [diaries, users, searchTerm, filterClassId, filterMonth, filterYear, filterStatus]);
+  }, [activeDiaries, users, searchTerm, filterClassId, filterMonth, filterYear, filterStatus]);
 
   const handleUpdateRequestStatus = async (requestId: string, status: 'pendente' | 'em_atendimento' | 'concluido') => {
     try {
@@ -123,21 +135,21 @@ export const ManageDiariesView = ({
                   <div className="w-12 h-12 bg-pro-teal/5 rounded-2xl flex items-center justify-center text-pro-teal"><BookOpen size={24} /></div>
                   <div>
                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Diários</p>
-                     <p className="text-2xl font-black text-slate-800">{diaries.length}</p>
+                     <p className="text-2xl font-black text-slate-800">{activeDiaries.length}</p>
                   </div>
                </div>
                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
                   <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-green-500"><CheckCircle2 size={24} /></div>
                   <div>
                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Concluídos</p>
-                     <p className="text-2xl font-black text-green-600">{diaries.filter(d => d.status === "concluido").length}</p>
+                     <p className="text-2xl font-black text-green-600">{activeDiaries.filter(d => d.status === "concluido").length}</p>
                   </div>
                </div>
                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
                   <div className="w-12 h-12 bg-pro-yellow/5 rounded-2xl flex items-center justify-center text-pro-orange"><Pencil size={24} /></div>
                   <div>
                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rascunhos</p>
-                     <p className="text-2xl font-black text-pro-orange">{diaries.filter(d => d.status === "rascunho").length}</p>
+                     <p className="text-2xl font-black text-pro-orange">{activeDiaries.filter(d => d.status === "rascunho").length}</p>
                   </div>
                </div>
                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
@@ -145,7 +157,7 @@ export const ManageDiariesView = ({
                   <div>
                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Média Geral</p>
                      <p className="text-2xl font-black text-slate-800">
-                       {(diaries.filter(d => d.averageGrade).reduce((a, b) => a + (b.averageGrade || 0), 0) / (diaries.filter(d => d.averageGrade).length || 1)).toFixed(2)}
+                       {(activeDiaries.filter(d => d.averageGrade).reduce((a, b) => a + (b.averageGrade || 0), 0) / (activeDiaries.filter(d => d.averageGrade).length || 1)).toFixed(2)}
                      </p>
                   </div>
                </div>
@@ -266,7 +278,7 @@ export const ManageDiariesView = ({
                   <div>
                     <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Diários Cadastrados</h2>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      Exibindo {filteredDiaries.length} de {diaries.length} diários
+                      Exibindo {filteredDiaries.length} de {activeDiaries.length} diários
                     </p>
                   </div>
                 </div>

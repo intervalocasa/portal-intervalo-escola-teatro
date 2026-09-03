@@ -9,7 +9,7 @@ import { UserCircle, Presentation, ArrowLeft, Drama, Download, Clock, Lock, Aler
 import { User, Class, Diary, Evaluation } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { generateDiaryPDF } from "../lib/pdfExporter";
-import { getUserDisplayName, getUserSecondaryName, isDirectorOrGestor } from "../lib/userUtils";
+import { getUserDisplayName, getUserSecondaryName, isDirectorOrGestor, isStudentActiveInClass } from "../lib/userUtils";
 import { getMonthlyDeadline } from "../lib/deadlineUtils";
 import { DeadlineExpiredModal } from "../components/DeadlineExpiredModal";
 
@@ -65,11 +65,11 @@ export const ProfessorDiaryView = ({
   }, [diaryFilterMonth, diaryFilterYear]);
 
   const classStudents = useMemo(() => {
-    if (!targetClass?.studentIds) return [];
+    if (!targetClass) return [];
     return users
-      .filter(u => targetClass.studentIds.includes(u.id))
+      .filter(u => isStudentActiveInClass(u, targetClass))
       .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
-  }, [targetClass?.studentIds, users]);
+  }, [targetClass, users]);
 
   return (
     <>
@@ -228,7 +228,7 @@ export const ProfessorDiaryView = ({
                      </p>
                    </div>
                    <span className="text-[10px] font-black text-pro-teal uppercase tracking-widest bg-pro-teal/5 px-3 py-1 rounded-full">
-                     {targetClass?.studentIds?.length || 0} ALUNOS
+                     {classStudents.length} ALUNOS
                    </span>
                 </div>
                 
