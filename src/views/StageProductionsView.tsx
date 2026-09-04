@@ -107,12 +107,23 @@ const createEmptyItem = (): ProductionNeedItem => ({
 // Helper to determine if a teacher is linked to a class
 const isTeacherLinkedToClass = (u: any, cls: any): boolean => {
   if (!cls || !u) return false;
-  const userIds = [u.id, u.uid, u.migratedFrom, u.migratedTo].filter(Boolean);
-  const teacherIds: string[] = Array.isArray(cls.teacherIds)
-    ? cls.teacherIds
-    : (cls.teacherId ? [cls.teacherId] : []);
+  // Students can NEVER be considered a teacher of a class
+  if (u.role === "Aluno") return false;
+
+  const userIds = [u.id, u.uid, u.migratedFrom, u.migratedTo]
+    .filter((id): id is string => Boolean(id && typeof id === "string" && id.trim().length > 0))
+    .map(id => id.trim().toLowerCase());
+
+  const teacherIds: string[] = (
+    Array.isArray(cls.teacherIds)
+      ? cls.teacherIds
+      : (typeof cls.teacherId === "string" && cls.teacherId ? [cls.teacherId] : [])
+  )
+    .filter((id): id is string => Boolean(id && typeof id === "string" && id.trim().length > 0))
+    .map(id => id.trim().toLowerCase());
+
   if (teacherIds.some(tid => userIds.includes(tid))) return true;
-  if (u.email && cls.teacherEmail && u.email.toLowerCase() === cls.teacherEmail.toLowerCase()) return true;
+  if (u.email && cls.teacherEmail && u.email.trim().toLowerCase() === cls.teacherEmail.trim().toLowerCase()) return true;
   return false;
 };
 

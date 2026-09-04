@@ -4,6 +4,7 @@ import {
   createGestorStageProductionForm, 
   updateGestorStageProductionForm 
 } from "../services/stageProductionService";
+import { getUserDisplayName } from "../lib/userUtils";
 import { 
   X, 
   Sparkles, 
@@ -130,11 +131,47 @@ export const GestorStageFormModal: React.FC<GestorStageFormModalProps> = ({
   const selectedClass = classes.find(c => c.id === classId);
   const linkedTeacherNames = React.useMemo(() => {
     if (!selectedClass) return [];
-    const teacherIds = selectedClass.teacherIds || (selectedClass as any).teacherId ? [(selectedClass as any).teacherId] : [];
-    return teacherIds.map((tId: string) => {
-      const u = users.find(user => user.id === tId || user.uid === tId);
-      return u?.name || u?.artisticName || "Professor";
+
+    // Collect valid non-empty IDs from teacherIds or teacherId
+    const rawIds: string[] = Array.isArray(selectedClass.teacherIds)
+      ? selectedClass.teacherIds
+      : (typeof (selectedClass as any).teacherId === "string" ? [(selectedClass as any).teacherId] : []);
+
+    const validClassTeacherIds = new Set(
+      rawIds
+        .filter((id): id is string => Boolean(id && typeof id === "string" && id.trim().length > 0))
+        .map(id => id.trim().toLowerCase())
+    );
+
+    const classTeacherEmail = ((selectedClass as any).teacherEmail || "").trim().toLowerCase();
+
+    // Match users who are professors or directors linked to this class
+    const matchedTeachers = users.filter(user => {
+      if (!user) return false;
+      // CRITICAL: Students can NEVER be considered teachers of a class
+      if (user.role === "Aluno") return false;
+
+      const userEmail = (user.email || "").trim().toLowerCase();
+      const userIdentifiers = [
+        user.id,
+        user.uid,
+        user.migratedFrom,
+        user.migratedTo
+      ]
+        .filter((id): id is string => Boolean(id && typeof id === "string" && id.trim().length > 0))
+        .map(id => id.trim().toLowerCase());
+
+      const matchesId = userIdentifiers.some(uid => validClassTeacherIds.has(uid));
+      const matchesEmail = Boolean(classTeacherEmail && userEmail && userEmail === classTeacherEmail);
+
+      return matchesId || matchesEmail;
     });
+
+    if (matchedTeachers.length > 0) {
+      return matchedTeachers.map(t => getUserDisplayName(t) || t.name || "Professor");
+    }
+
+    return [];
   }, [selectedClass, users]);
 
   const validate = () => {
@@ -293,18 +330,32 @@ export const GestorStageFormModal: React.FC<GestorStageFormModalProps> = ({
 
             {/* Linked Teacher Notice */}
             {selectedClass && (
-              <div className="mt-3 p-3 bg-purple-50 border border-purple-100 rounded-xl flex items-center gap-2 text-xs text-purple-900">
-                <Users size={15} className="text-purple-600 shrink-0" />
-                <div>
-                  <strong>Professor(es) Vinculado(s) à Turma:</strong>{" "}
-                  {linkedTeacherNames.length > 0 
-                    ? linkedTeacherNames.join(", ") 
-                    : "Nenhum professor diretamente atribuído a esta turma"}
-                  <span className="block text-[11px] text-purple-700 font-medium mt-0.5">
-                    Este formulário ficará visível na área de montagens destes professores para preenchimento.
-                  </span>
+              linkedTeacherNames.length > 0 ? (
+                <div className="mt-3 p-3.5 bg-purple-50 border border-purple-200/80 rounded-xl flex items-start gap-2.5 text-xs text-purple-900">
+                  <Users size={16} className="text-purple-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold">
+                      Professor(es) Vinculado(s) à Turma:{" "}
+                      <span className="font-black text-purple-950">{linkedTeacherNames.join(", ")}</span>
+                    </div>
+                    <span className="block text-[11px] text-purple-700 font-medium mt-0.5">
+                      Este formulário ficará visível na área de montagens destes professores para preenchimento.
+                    </span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
+                  <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold text-amber-950">
+                      Nenhum professor diretamente atribuído a esta turma no cadastro.
+                    </div>
+                    <span className="block text-[11px] text-amber-800 font-medium mt-0.5">
+                      Para que o professor possa visualizar e preencher este formulário, vincule-o à turma em Gestão de Turmas.
+                    </span>
+                  </div>
+                </div>
+              )
             )}
           </div>
 
