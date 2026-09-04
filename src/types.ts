@@ -369,6 +369,18 @@ export interface TechnicalDocumentAttachment {
 }
 
 export type StageProductionStatus = 
+  // Fluxo oficial de 10 etapas
+  | "formulario_em_preenchimento"      // 1) Formulário em preenchimento
+  | "formulario_em_analise"            // 2) Formulário em análise
+  | "resultado_analise_disponivel"     // 3) Resultado de análise disponível
+  | "em_retificacao"                   // 4) Em retificação
+  | "em_planejamento"                  // 5) Em planejamento (Direção de Arte)
+  | "em_processo_de_compras"           // 6) Em processo de compras (Planilha de compras)
+  | "em_processo_de_entrega_parcial"   // 7) Em processo de entrega parcial
+  | "em_processo_de_entrega_final"     // 8) Em processo de entrega final
+  | "em_apresentacao"                  // 9) Em apresentação
+  | "apresentacao_concluida"           // 10) Apresentação concluída
+  // Compatibilidade legada
   | "aguardando_preenchimento"
   | "em_analise_pedagogica"
   | "analise_pedagogica_concluida"
@@ -463,6 +475,38 @@ export interface StageProductionProposal {
   // Seção: Termo de Aceite
   termsAccepted?: boolean;
   termsAcceptedAt?: any;
+
+  // ETAPA 5: Projetos Técnicos e Proposta da Direção de Arte
+  artDirectionProposalText?: string;
+  artDirectionProjectsPdfs?: TechnicalDocumentAttachment[];
+  artDirectionSubmittedAt?: string;
+  artDirectionSubmittedByUid?: string;
+  artDirectionSubmittedByName?: string;
+
+  // ETAPA 6: Processo de Compras (Planilha de Compras & Finalização pelo Gestor)
+  purchasesSpreadsheetAttachment?: TechnicalDocumentAttachment | null;
+  purchasesSpreadsheetNotes?: string;
+  purchasesCompletedAt?: string;
+  purchasesCompletedByUid?: string;
+  purchasesCompletedByName?: string;
+
+  // ETAPA 7: Processo de Entrega Parcial (Conclusão pelo Gestor)
+  partialDeliveryCompletedAt?: string;
+  partialDeliveryCompletedByUid?: string;
+  partialDeliveryCompletedByName?: string;
+  partialDeliveryNotes?: string;
+
+  // ETAPA 8: Processo de Entrega Final (Conclusão pelo Gestor)
+  finalDeliveryCompletedAt?: string;
+  finalDeliveryCompletedByUid?: string;
+  finalDeliveryCompletedByName?: string;
+  finalDeliveryNotes?: string;
+
+  // ETAPAS 9 e 10: Apresentações e Apresentação Concluída
+  presentationCompletedAt?: string;
+  presentationCompletedByUid?: string;
+  presentationCompletedByName?: string;
+  presentationCompletedNotes?: string;
 
   // Metadados e Etapas de Evolução
   status?: StageProductionStatus;

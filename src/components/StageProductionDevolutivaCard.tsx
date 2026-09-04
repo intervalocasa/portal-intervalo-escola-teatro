@@ -24,9 +24,9 @@ interface StageProductionDevolutivaCardProps {
   proposal: StageProductionProposal;
   currentUser: any;
   userRole?: string;
-  isGestor: boolean;
-  isDiretorPedagogico: boolean;
-  isProfessor: boolean;
+  isGestor?: boolean;
+  isDiretorPedagogico?: boolean;
+  isProfessor?: boolean;
   onRefresh?: () => void;
   showNotification?: (message: string, title?: string, type?: "success" | "error" | "warning") => void;
   onRequestEditForRectification?: () => void;
@@ -35,13 +35,17 @@ interface StageProductionDevolutivaCardProps {
 export const StageProductionDevolutivaCard: React.FC<StageProductionDevolutivaCardProps> = ({
   proposal,
   currentUser,
-  isGestor,
-  isDiretorPedagogico,
-  isProfessor,
+  userRole,
+  isGestor: propIsGestor,
+  isDiretorPedagogico: propIsDiretorPedagogico,
+  isProfessor: propIsProfessor,
   onRefresh,
   showNotification,
   onRequestEditForRectification
 }) => {
+  const isGestor = propIsGestor ?? (userRole === "Gestor" || userRole === "Admin" || userRole === "Administrador");
+  const isDiretorPedagogico = propIsDiretorPedagogico ?? (isGestor || userRole === "Direção Pedagógica" || userRole === "Coordenador");
+  const isProfessor = propIsProfessor ?? (userRole === "Professor" || userRole === "Professor/Diretor");
   // Pedagogical review local form state
   const [pedagogicalStatus, setPedagogicalStatus] = useState<EvaluationStatus>(
     proposal.pedagogicalFeedback?.status || "PENDENTE"

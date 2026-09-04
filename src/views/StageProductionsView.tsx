@@ -70,6 +70,7 @@ import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { BackButton, Logo } from "../components/CommonComponents";
 import { StageProductionGuidelinesCard } from "../components/StageProductionGuidelinesCard";
 import { StageProductionDevolutivaCard } from "../components/StageProductionDevolutivaCard";
+import { StageProductionWorkflowActions } from "../components/StageProductionWorkflowActions";
 import { GestorStageFormModal } from "../components/GestorStageFormModal";
 
 interface StageProductionsViewProps {
@@ -1395,22 +1396,33 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                         currentUser={currentUser}
                         userRole={userRole}
                         showNotification={showNotification}
+                        onRequestEditForRectification={() => handleOpenFillForm(proposal)}
                       />
 
-                      {/* ANDAMENTO DA SUBMISSÃO (STEPPER COMPACTO NO CARD) */}
+                      {/* Ações e Formulários das Etapas 3 a 10 (Direção de Arte, Compras, Entregas, Apresentação) */}
+                      <StageProductionWorkflowActions
+                        proposal={proposal}
+                        currentUser={currentUser}
+                        isGestor={isGestor}
+                        isProfessor={isProfessor}
+                        showNotification={showNotification}
+                        onRequestEditForRectification={() => handleOpenFillForm(proposal)}
+                      />
+
+                      {/* ANDAMENTO DA SUBMISSÃO (STEPPER COMPACTO NO CARD - 10 ETAPAS) */}
                       <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 md:p-5 space-y-4">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <Clock size={16} className="text-pro-teal" />
                             <span className="text-xs font-black uppercase tracking-wider text-slate-800">
-                              Andamento da Submissão:
+                              Andamento da Montagem:
                             </span>
                             <span className="text-xs font-bold text-pro-teal">
-                              Etapa {currentStepIdx + 1} de 6
+                              Etapa {currentStepIdx + 1} de 10
                             </span>
                           </div>
                           <span className="text-[11px] font-extrabold text-slate-500">
-                            {Math.round(((currentStepIdx + 1) / 6) * 100)}% concluído
+                            {Math.round(((currentStepIdx + 1) / 10) * 100)}% concluído
                           </span>
                         </div>
 
@@ -1418,21 +1430,20 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                         <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
                           <div 
                             className="bg-gradient-to-r from-[#016a86] to-[#00b4d8] h-2.5 rounded-full transition-all duration-500"
-                            style={{ width: `${((currentStepIdx + 1) / 6) * 100}%` }}
+                            style={{ width: `${((currentStepIdx + 1) / 10) * 100}%` }}
                           />
                         </div>
 
-                        {/* 6 Steps Grid in Card */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
+                        {/* 10 Steps Grid in Card */}
+                        <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-1.5 pt-1">
                           {STAGE_EVOLUTION_STEPS.map((step, idx) => {
                             const isPast = idx < currentStepIdx;
                             const isCurrent = idx === currentStepIdx;
-                            const isFuture = idx > currentStepIdx;
 
                             return (
                               <div 
                                 key={step.id}
-                                className={`p-2.5 rounded-xl border text-left transition-all ${
+                                className={`p-2 rounded-xl border text-left transition-all ${
                                   isCurrent 
                                     ? "bg-white border-pro-teal shadow-md ring-2 ring-pro-teal/20" 
                                     : isPast 
@@ -1447,7 +1458,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                                     {isPast ? "✓" : `${step.stepNumber}`}
                                   </span>
                                   {isCurrent && (
-                                    <span className="text-[9px] font-black uppercase text-pro-teal bg-teal-50 px-1 py-0.5 rounded">
+                                    <span className="text-[8px] font-black uppercase text-pro-teal bg-teal-50 px-1 py-0.5 rounded">
                                       Atual
                                     </span>
                                   )}
@@ -1455,7 +1466,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                                 <p className={`text-[10px] font-bold leading-tight line-clamp-2 ${
                                   isCurrent ? "text-slate-900 font-black" : isPast ? "text-emerald-950 font-bold" : "text-slate-400"
                                 }`}>
-                                  {step.label}
+                                  {step.shortLabel || step.label}
                                 </p>
                               </div>
                             );
@@ -1482,7 +1493,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                         </div>
 
                         {/* Quick Status Advance for Managers */}
-                        {isGestor && currentStepIdx < 5 && (
+                        {isGestor && currentStepIdx < STAGE_EVOLUTION_STEPS.length - 1 && (
                           <button
                             onClick={() => {
                               const nextStep = STAGE_EVOLUTION_STEPS[currentStepIdx + 1];
@@ -1531,12 +1542,12 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 <div className="flex items-center justify-between">
                   <p className="text-[11px] font-bold text-pro-teal uppercase tracking-wider">Protocolo de Submissão</p>
                   <span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded font-black text-[10px] uppercase">
-                    Etapa 1 de 6
+                    Etapa 2 de 10
                   </span>
                 </div>
                 <p className="text-xs font-mono font-bold text-slate-700 break-all">{lastCreatedProposal.id}</p>
                 <p className="text-[11px] text-slate-600">
-                  Status atual: <strong>1) Proposta em análise pedagógica</strong>
+                  Status atual: <strong>2) Formulário em análise</strong>
                 </p>
               </div>
 
@@ -1611,7 +1622,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 </div>
               </div>
 
-              {/* PAINEL DE ANDAMENTO DAS 6 ETAPAS */}
+              {/* PAINEL DE ANDAMENTO DAS 10 ETAPAS */}
               <StageEvolutionTracker proposal={selectedProposalForFicha} />
 
               {/* Diretrizes Oficiais Definidas pela Gestão (14 Parâmetros) */}
@@ -1623,6 +1634,25 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 currentUser={currentUser}
                 userRole={userRole}
                 showNotification={showNotification}
+                onRequestEditForRectification={() => {
+                  const toEdit = selectedProposalForFicha;
+                  setSelectedProposalForFicha(null);
+                  handleOpenFillForm(toEdit);
+                }}
+              />
+
+              {/* Ações e Formulários das Etapas 3 a 10 (Direção de Arte, Compras, Entregas, Apresentação) */}
+              <StageProductionWorkflowActions
+                proposal={selectedProposalForFicha}
+                currentUser={currentUser}
+                isGestor={isGestor}
+                isProfessor={isProfessor}
+                showNotification={showNotification}
+                onRequestEditForRectification={() => {
+                  const toEdit = selectedProposalForFicha;
+                  setSelectedProposalForFicha(null);
+                  handleOpenFillForm(toEdit);
+                }}
               />
 
               {/* Bloco 1: Proponente e Identificação */}
@@ -1837,7 +1867,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
   );
 };
 
-/* COMPONENTE: TRACKER DAS 6 ETAPAS DE EVOLUÇÃO (VISUAL COMPLETO) */
+/* COMPONENTE: TRACKER DAS 10 ETAPAS DE EVOLUÇÃO (VISUAL COMPLETO) */
 interface StageEvolutionTrackerProps {
   proposal: StageProductionProposal;
 }
@@ -1853,10 +1883,10 @@ const StageEvolutionTracker: React.FC<StageEvolutionTrackerProps> = ({ proposal 
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-1 bg-pro-yellow text-slate-900 text-[10px] font-black uppercase tracking-wider rounded-lg">
-              Andamento da Montagem
+              Fluxo das 10 Etapas da Montagem
             </span>
             <span className="text-xs text-teal-200/80 font-bold">
-              Etapa {currentStepIdx + 1} de 6
+              Etapa {currentStepIdx + 1} de 10
             </span>
           </div>
           <h3 className="text-lg md:text-xl font-black tracking-tight text-white print:text-slate-900">
@@ -1869,7 +1899,7 @@ const StageEvolutionTracker: React.FC<StageEvolutionTrackerProps> = ({ proposal 
             Progresso Geral
           </span>
           <span className="text-2xl font-black text-white print:text-slate-900">
-            {Math.round(((currentStepIdx + 1) / 6) * 100)}%
+            {Math.round(((currentStepIdx + 1) / 10) * 100)}%
           </span>
         </div>
       </div>
@@ -1881,15 +1911,14 @@ const StageEvolutionTracker: React.FC<StageEvolutionTrackerProps> = ({ proposal 
         {/* Active Line Fill */}
         <div 
           className="hidden lg:block absolute top-[28px] left-[5%] h-1 bg-gradient-to-r from-pro-yellow to-teal-300 rounded-full z-0 transition-all duration-500" 
-          style={{ width: `${(currentStepIdx / 5) * 90}%` }}
+          style={{ width: `${(currentStepIdx / 9) * 90}%` }}
         />
 
-        {/* 6 Steps */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 relative z-10">
+        {/* 10 Steps */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 relative z-10">
           {STAGE_EVOLUTION_STEPS.map((step, index) => {
             const isCompleted = index < currentStepIdx;
             const isCurrent = index === currentStepIdx;
-            const isPending = index > currentStepIdx;
 
             return (
               <div 
@@ -1930,7 +1959,7 @@ const StageEvolutionTracker: React.FC<StageEvolutionTrackerProps> = ({ proposal 
                   }`}>
                     {step.label}
                   </p>
-                  <p className={`text-[10px] leading-snug line-clamp-2 ${
+                  <p className={`text-[10px] leading-snug line-clamp-3 ${
                     isCurrent ? "text-slate-600" : isCompleted ? "text-teal-200/70" : "text-white/30"
                   }`}>
                     {step.description}
