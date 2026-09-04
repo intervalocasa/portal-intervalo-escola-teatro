@@ -3100,6 +3100,7 @@ export default function App() {
           <StageProductionsView 
             currentUser={currentUser}
             users={users}
+            classes={classes}
             userRole={role}
             setView={setView}
             showNotification={showNotification}

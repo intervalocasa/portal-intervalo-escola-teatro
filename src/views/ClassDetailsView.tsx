@@ -122,28 +122,55 @@ export const ClassDetailsView = ({
 
     // Get current local date in YYYY-MM-DD format
     const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const todayYear = now.getFullYear();
+    const todayMonth = String(now.getMonth() + 1).padStart(2, "0");
+    const todayDay = String(now.getDate()).padStart(2, "0");
+    const todayStr = `${todayYear}-${todayMonth}-${todayDay}`;
 
-    // Normalize date to YYYY-MM-DD
-    const normalizeToYYYYMMDD = (dateVal?: string): string => {
+    // Robust normalization to YYYY-MM-DD
+    const normalizeToYYYYMMDD = (dateVal?: any): string => {
       if (!dateVal) return "";
-      const trimmed = dateVal.trim();
-      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-        return trimmed;
+      if (typeof dateVal === "object" && typeof dateVal.toDate === "function") {
+        const d = dateVal.toDate();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       }
-      if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
-        const [d, m, y] = trimmed.split("/");
-        return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+      if (typeof dateVal === "object" && dateVal.seconds) {
+        const d = new Date(dateVal.seconds * 1000);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       }
-      return trimmed;
+      const trimmed = String(dateVal).trim();
+      const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (isoMatch) {
+        return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+      }
+      const brMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (brMatch) {
+        return `${brMatch[3]}-${brMatch[2].padStart(2, "0")}-${brMatch[1].padStart(2, "0")}`;
+      }
+      try {
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) {
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        }
+      } catch {}
+      return "";
     };
 
     return experimentalBookings.filter(b => {
       if (!b.classGroup && !b.course) return false;
 
-      // Filter out bookings with dates that have already passed (earlier than today)
+      // Filter out bookings with invalid dates or dates that have already passed (earlier than today)
       const bookingDateNormalized = normalizeToYYYYMMDD(b.date);
-      if (bookingDateNormalized && bookingDateNormalized < todayStr) {
+      if (!bookingDateNormalized || bookingDateNormalized < todayStr) {
+        return false;
+      }
+
+      // If triage is completed, the experimental class has already occurred
+      if (
+        b.triageStatus === "COMPARECEU" ||
+        b.triageStatus === "NAO_COMPARECEU" ||
+        b.triageStatus === "MATRICULOU"
+      ) {
         return false;
       }
 
@@ -169,10 +196,21 @@ export const ClassDetailsView = ({
   const enrichedUser = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || null;
   const classStudents = useMemo(() => {
     if (!targetClass) return [];
+    if (isGestorRole) {
+      // Gestores see all students enrolled in the class to be able to manage them (active, locked, inactive)
+      const studentIds = (targetClass.studentIds || []).map(id => String(id).trim().toLowerCase());
+      return users
+        .filter(u => {
+          const candidateIds = [u.id, u.migratedFrom, u.migratedTo, u.email].filter(Boolean).map(id => String(id).trim().toLowerCase());
+          return candidateIds.some(cid => studentIds.includes(cid));
+        })
+        .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
+    }
+    // Teachers and other roles only see active students in class
     return users
       .filter(u => isStudentActiveInClass(u, targetClass))
       .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
-  }, [users, targetClass]);
+  }, [users, targetClass, isGestorRole]);
 
   const availableStudents = useMemo(() => {
     if (!targetClass) return [];

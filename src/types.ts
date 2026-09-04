@@ -369,6 +369,7 @@ export interface TechnicalDocumentAttachment {
 }
 
 export type StageProductionStatus = 
+  | "aguardando_preenchimento"
   | "em_analise_pedagogica"
   | "analise_pedagogica_concluida"
   | "em_analise_artistica"
@@ -376,10 +377,22 @@ export type StageProductionStatus =
   | "em_analise_executiva"
   | "projeto_em_execucao"
   | "ajustes_solicitados"
+  | "precisa_retificacoes"
   | "rejeitada"
   | "pendente"
   | "em_analise"
-  | "aprovada";
+  | "aprovada"
+  | "aprovado";
+
+export type EvaluationStatus = "APROVADO" | "PRECISA DE RETIFICAÇÕES" | "PENDENTE";
+
+export interface StageProductionDevolutiva {
+  status: EvaluationStatus;
+  comment?: string;
+  evaluatedByUid?: string;
+  evaluatedByName?: string;
+  evaluatedAt?: string;
+}
 
 export interface StageStatusHistoryEntry {
   status: StageProductionStatus;
@@ -392,30 +405,54 @@ export interface StageStatusHistoryEntry {
 
 export interface StageProductionProposal {
   id?: string;
-  // Seção 1: Dados do Proponente
-  proponentName: string;
-  proponentRole: StageProductionRole;
-  proponentEmail: string;
-  proponentPhone: string;
+
+  // Informações e Cronograma definidos pelo GESTOR na criação do formulário
+  classId?: string;
+  className?: string;
+  presentationDate?: string; // Data da apresentação
+  submissionDeadline?: string; // Data Prazo de submissão do formulário pelo professor
+  budgetPurchasesAcquisitions?: number; // Orçamento total da montagem para compras, confecções e aquisições
+  budgetLabor?: number; // Orçamento total da montagem para mão-de-obra
+  budgetTotal?: number; // Orçamento total da montagem ou apresentação
+  pedagogicalArtisticFeedbackDate?: string; // Data de devolutiva da avaliação pedagógica e artística
+  rectificationDeadline?: string; // Data de envio de retificação do formulário pelo professor caso haja pendências
+  finalApprovalDate?: string; // Data de aprovação final do formulário
+  planningMeetingDate?: string; // Data da reunião de planejamento da montagem
+  executionPeriod?: string; // Período de execução de compras, aquisições, confecções
+  partialDeliveryDate?: string; // Data de entrega dos objetos de cena e/ou cenografia parcial para ensaios e testes
+  finalDeliveryDate?: string; // Data de entrega final de todos os itens para montagem/apresentação
+  presentationDates?: string; // Datas de apresentação
+  createdByGestorId?: string;
+  createdByGestorName?: string;
+
+  // Devolutivas da Avaliação
+  pedagogicalFeedback?: StageProductionDevolutiva; // Diretor Pedagógico
+  artisticFeedback?: StageProductionDevolutiva; // Gestor
+
+  // Seção 1: Dados do Proponente (Professor Responsável)
+  proponentName?: string;
+  proponentRole?: StageProductionRole;
+  proponentEmail?: string;
+  proponentPhone?: string;
   proponentUserId?: string;
 
   // Seção 2: Identificação da Obra
-  title: string;
-  genre: StageProductionGenre;
-  synopsis: string;
+  title?: string;
+  genre?: StageProductionGenre;
+  synopsis?: string;
 
   // Seção 3: Proposta Pedagógica e Elenco
-  pedagogicalProposal: string;
-  castProfile: string;
+  pedagogicalProposal?: string;
+  castProfile?: string;
 
   // Seção 4: Necessidades de Produção (Itens com priorização individual)
-  scenographyItems: ProductionNeedItem[];
+  scenographyItems?: ProductionNeedItem[];
   scenographyNotes?: string;
 
-  techItems: ProductionNeedItem[];
+  techItems?: ProductionNeedItem[];
   techNotes?: string;
 
-  otherNeedsItems: ProductionNeedItem[];
+  otherNeedsItems?: ProductionNeedItem[];
   otherNeedsNotes?: string;
 
   // Seção: Projetos Técnicos Obrigatórios (PDFs)
@@ -424,7 +461,7 @@ export interface StageProductionProposal {
   lightingPdf?: TechnicalDocumentAttachment | null;
 
   // Seção: Termo de Aceite
-  termsAccepted: boolean;
+  termsAccepted?: boolean;
   termsAcceptedAt?: any;
 
   // Metadados e Etapas de Evolução

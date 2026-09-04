@@ -37,7 +37,10 @@ import {
   GraduationCap,
   Briefcase,
   ArrowRight,
-  History
+  History,
+  Calendar,
+  Building,
+  ArrowLeft
 } from "lucide-react";
 import { 
   StageProductionProposal, 
@@ -46,13 +49,15 @@ import {
   ProductionNeedItem,
   TechnicalDocumentAttachment,
   StageProductionStatus,
-  UserRole 
+  UserRole,
+  Class 
 } from "../types";
 import { 
   validateStageProductionProposal, 
   createStageProductionProposal, 
   updateStageProductionStatus, 
   deleteStageProductionProposal,
+  submitProfessorStageProduction,
   STAGE_PRODUCTIONS_COLLECTION,
   STAGE_EVOLUTION_STEPS,
   getStageStepIndex,
@@ -63,11 +68,15 @@ import {
 import { db } from "../lib/firebase";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { BackButton, Logo } from "../components/CommonComponents";
+import { StageProductionGuidelinesCard } from "../components/StageProductionGuidelinesCard";
+import { StageProductionDevolutivaCard } from "../components/StageProductionDevolutivaCard";
+import { GestorStageFormModal } from "../components/GestorStageFormModal";
 
 interface StageProductionsViewProps {
   currentUser: any;
   users: any[];
   userRole?: UserRole | string;
+  classes?: Class[];
   setView: (view: any) => void;
   showNotification?: (message: string, title?: string, type?: "success" | "error" | "warning") => void;
 }
@@ -95,29 +104,47 @@ const createEmptyItem = (): ProductionNeedItem => ({
   indispensableReason: ""
 });
 
+// Helper to determine if a teacher is linked to a class
+const isTeacherLinkedToClass = (u: any, cls: any): boolean => {
+  if (!cls || !u) return false;
+  const userIds = [u.id, u.uid, u.migratedFrom, u.migratedTo].filter(Boolean);
+  const teacherIds: string[] = Array.isArray(cls.teacherIds)
+    ? cls.teacherIds
+    : (cls.teacherId ? [cls.teacherId] : []);
+  if (teacherIds.some(tid => userIds.includes(tid))) return true;
+  if (u.email && cls.teacherEmail && u.email.toLowerCase() === cls.teacherEmail.toLowerCase()) return true;
+  return false;
+};
+
 export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
   currentUser,
   users,
   userRole,
+  classes = [],
   setView,
   showNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<"form" | "list">("form");
   const [proposals, setProposals] = useState<StageProductionProposal[]>([]);
   const [loadingProposals, setLoadingProposals] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedProposalForFicha, setSelectedProposalForFicha] = useState<StageProductionProposal | null>(null);
+  const [selectedProposalToFill, setSelectedProposalToFill] = useState<StageProductionProposal | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("todos");
+  const [classFilter, setClassFilter] = useState<string>("todas");
   const [searchQuery, setSearchQuery] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [feedbackInput, setFeedbackInput] = useState<Record<string, string>>({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastCreatedProposal, setLastCreatedProposal] = useState<StageProductionProposal | null>(null);
 
+  // Gestor modal state
+  const [isGestorModalOpen, setIsGestorModalOpen] = useState(false);
+  const [editingGestorProposal, setEditingGestorProposal] = useState<StageProductionProposal | null>(null);
+
   // Profile data
   const userProfile = users.find(u => u.id === currentUser?.uid || u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
 
-  // Form State
+  // Form State for Professor
   const [formData, setFormData] = useState<Omit<StageProductionProposal, "id" | "createdAt" | "updatedAt">>({
     proponentName: userProfile?.name || userProfile?.artisticName || "",
     proponentRole: (userProfile?.role === "Professor" ? "Professor" : "Professor/Diretor") as StageProductionRole,
@@ -139,21 +166,23 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     costumePdf: null,
     lightingPdf: null,
     termsAccepted: false,
-    status: "em_analise_pedagogica"
+    status: "em_analise"
   });
 
   // Check Permissions: Gestor, Diretor Pedagógico, or Professor
   const isGestor = 
     userRole === "Gestor" || 
-    userRole === "Diretor Pedagógico" || 
-    userRole === "Diretor Pedagógico e Professor" || 
     userRole === "Auxiliar Administrativo";
+
+  const isDiretorPedagogico = 
+    userRole === "Diretor Pedagógico" || 
+    userRole === "Diretor Pedagógico e Professor";
 
   const isProfessor = 
     userRole === "Professor" || 
     userRole === "Diretor Pedagógico e Professor";
 
-  const hasAccess = isGestor || isProfessor;
+  const hasAccess = isGestor || isDiretorPedagogico || isProfessor;
 
   // Real-time Firestore sync
   useEffect(() => {
@@ -342,9 +371,54 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     setErrors({});
   };
 
+  const handleOpenFillForm = (proposal: StageProductionProposal) => {
+    setSelectedProposalToFill(proposal);
+    setFormData({
+      proponentName: proposal.proponentName || userProfile?.name || userProfile?.artisticName || "",
+      proponentRole: (proposal.proponentRole || (userProfile?.role === "Professor" ? "Professor" : "Professor/Diretor")) as StageProductionRole,
+      proponentEmail: proposal.proponentEmail || userProfile?.email || currentUser?.email || "",
+      proponentPhone: proposal.proponentPhone || userProfile?.phone || "",
+      proponentUserId: proposal.proponentUserId || currentUser?.uid || "",
+      title: proposal.title || "",
+      genre: proposal.genre || "Drama",
+      synopsis: proposal.synopsis || "",
+      pedagogicalProposal: proposal.pedagogicalProposal || "",
+      castProfile: proposal.castProfile || "",
+      scenographyItems: proposal.scenographyItems && proposal.scenographyItems.length > 0 ? proposal.scenographyItems : [createEmptyItem()],
+      scenographyNotes: proposal.scenographyNotes || "",
+      techItems: proposal.techItems && proposal.techItems.length > 0 ? proposal.techItems : [createEmptyItem()],
+      techNotes: proposal.techNotes || "",
+      otherNeedsItems: proposal.otherNeedsItems && proposal.otherNeedsItems.length > 0 ? proposal.otherNeedsItems : [createEmptyItem()],
+      otherNeedsNotes: proposal.otherNeedsNotes || "",
+      scenographyPdf: proposal.scenographyPdf || null,
+      costumePdf: proposal.costumePdf || null,
+      lightingPdf: proposal.lightingPdf || null,
+      termsAccepted: proposal.termsAccepted ?? false,
+      status: proposal.status || "em_analise"
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleEditGestorParams = (proposal: StageProductionProposal) => {
+    setEditingGestorProposal(proposal);
+    setIsGestorModalOpen(true);
+  };
+
+  const handleCreateGestorForm = () => {
+    setEditingGestorProposal(null);
+    setIsGestorModalOpen(true);
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrors({});
+
+    if (!selectedProposalToFill?.id) {
+      if (showNotification) {
+        showNotification("Nenhum formulário de apresentação selecionado.", "Atenção", "warning");
+      }
+      return;
+    }
 
     const validation = validateStageProductionProposal(formData);
     if (!validation.isValid) {
@@ -359,29 +433,40 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
 
     setIsSubmitting(true);
     try {
-      const proposalPayload = {
-        ...formData,
-        proponentUserId: currentUser?.uid || userProfile?.id || "",
-        status: "em_analise_pedagogica" as const
-      };
-
-      const newId = await createStageProductionProposal(proposalPayload);
+      const isRectification = selectedProposalToFill.status === "precisa_retificacoes";
+      await submitProfessorStageProduction(
+        selectedProposalToFill.id,
+        {
+          ...formData,
+          proponentUserId: currentUser?.uid || userProfile?.id || ""
+        },
+        {
+          uid: currentUser?.uid || "",
+          name: userProfile?.name || "Professor"
+        }
+      );
       
-      const createdObj: StageProductionProposal = {
-        id: newId,
-        ...proposalPayload,
-        createdAt: new Date(),
+      const updatedObj: StageProductionProposal = {
+        ...selectedProposalToFill,
+        ...formData,
+        status: "em_analise",
         updatedAt: new Date()
       };
 
-      setLastCreatedProposal(createdObj);
+      setLastCreatedProposal(updatedObj);
       setShowSuccessModal(true);
 
       if (showNotification) {
-        showNotification("Proposta submetida com sucesso! Iniciada a etapa 1: Proposta em análise pedagógica.", "Sucesso!", "success");
+        showNotification(
+          isRectification
+            ? "Retificação enviada com sucesso! A apresentação retornou para avaliação pedagógica e artística."
+            : "Formulário de apresentação submetido com sucesso! Em análise pedagógica e artística.",
+          "Formulário Enviado",
+          "success"
+        );
       }
 
-      resetForm();
+      setSelectedProposalToFill(null);
     } catch (err: any) {
       console.error("Error submitting stage production:", err);
       if (showNotification) {
@@ -430,6 +515,9 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
       if (selectedProposalForFicha?.id === proposalId) {
         setSelectedProposalForFicha(null);
       }
+      if (selectedProposalToFill?.id === proposalId) {
+        setSelectedProposalToFill(null);
+      }
     } catch (err) {
       console.error("Error deleting proposal:", err);
       if (showNotification) {
@@ -454,42 +542,48 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     return count;
   };
 
-  if (!hasAccess) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6">
-          <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto">
-            <AlertCircle size={40} />
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight">Área Restrita</h1>
-            <p className="text-slate-500 text-sm leading-relaxed">
-              A área de <strong>Montagens e Apresentações</strong> é de acesso exclusivo para Gestores e Professores da Escola Intervalo.
-            </p>
-          </div>
-          <button 
-            onClick={() => setView("dashboard")}
-            className="w-full py-4 bg-pro-teal text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-[#014e63] transition-all flex items-center justify-center gap-2"
-          >
-            Voltar ao Painel
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Linked classes for professors
+  const professorClasses = React.useMemo(() => {
+    if (!classes || classes.length === 0) return [];
+    return classes.filter(c => isTeacherLinkedToClass(userProfile, c));
+  }, [classes, userProfile]);
+
+  const professorClassIds = React.useMemo(() => {
+    return new Set(professorClasses.map(c => c.id));
+  }, [professorClasses]);
+
+  // If user is strictly professor (not Gestor and not Diretor Pedagógico), filter to linked classes only
+  const isOnlyProfessor = isProfessor && !isGestor && userRole !== "Diretor Pedagógico";
 
   // Filtered proposals
-  const filteredProposals = proposals.filter(p => {
-    let matchesStatus = true;
-    if (statusFilter !== "todos") {
-      matchesStatus = p.status === statusFilter;
+  const filteredProposals = React.useMemo(() => {
+    let list = proposals;
+
+    // Visibility restriction for professors: only see forms linked to their classes!
+    if (isOnlyProfessor) {
+      list = list.filter(p => p.classId && professorClassIds.has(p.classId));
     }
-    const matchesSearch = 
-      (p.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.proponentName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.genre || "").toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+
+    if (classFilter !== "todas") {
+      list = list.filter(p => p.classId === classFilter);
+    }
+
+    if (statusFilter !== "todos") {
+      list = list.filter(p => p.status === statusFilter);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(p => 
+        (p.title || "").toLowerCase().includes(q) ||
+        (p.className || "").toLowerCase().includes(q) ||
+        (p.proponentName || "").toLowerCase().includes(q) ||
+        (p.genre || "").toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [proposals, isOnlyProfessor, professorClassIds, classFilter, statusFilter, searchQuery]);
 
   return (
     <div className="w-full min-h-screen bg-[#f8fafc] text-slate-800 pb-24">
@@ -513,55 +607,106 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
             </p>
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 bg-black/20 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 self-start md:self-auto">
-            <button
-              onClick={() => setActiveTab("form")}
-              className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
-                activeTab === "form" 
-                  ? "bg-white text-pro-teal shadow-md" 
-                  : "text-white/80 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Plus size={16} />
-              Nova Proposta
-            </button>
-            <button
-              onClick={() => setActiveTab("list")}
-              className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
-                activeTab === "list" 
-                  ? "bg-white text-pro-teal shadow-md" 
-                  : "text-white/80 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <FileText size={16} />
-              Propostas ({proposals.length})
-            </button>
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+            {selectedProposalToFill ? (
+              <button
+                onClick={() => setSelectedProposalToFill(null)}
+                className="px-5 py-2.5 rounded-xl bg-white text-slate-800 font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 hover:bg-slate-100 shadow-md"
+              >
+                <ArrowLeft size={16} />
+                Voltar às Apresentações
+              </button>
+            ) : isGestor ? (
+              <button
+                onClick={handleCreateGestorForm}
+                className="px-5 py-2.5 rounded-xl bg-pro-yellow text-slate-900 font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 hover:bg-yellow-400 shadow-md active:scale-95"
+              >
+                <Plus size={16} />
+                Criar Formulário de Apresentação
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8">
-        {activeTab === "form" ? (
-          /* FORMULÁRIO COMPLETO */
+        {selectedProposalToFill ? (
+          /* FORMULÁRIO DE PREENCHIMENTO PELO PROFESSOR */
           <motion.div 
             initial={{ opacity: 0, y: 15 }} 
             animate={{ opacity: 1, y: 0 }} 
             className="space-y-8"
           >
+            {/* Top Navigation & Class Banner */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => setSelectedProposalToFill(null)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all shadow-xs self-start"
+              >
+                <ArrowLeft size={14} />
+                Voltar para Lista de Apresentações
+              </button>
+              <div className="px-3.5 py-1.5 bg-purple-100 border border-purple-200 text-purple-900 rounded-xl text-xs font-black flex items-center gap-2 self-start sm:self-auto">
+                <Building size={14} className="text-purple-700" />
+                Turma: {selectedProposalToFill.className || "Turma Vinculada"}
+              </div>
+            </div>
+
+            {/* Diretrizes Oficiais Definidas pela Gestão (14 Parâmetros) */}
+            <StageProductionGuidelinesCard proposal={selectedProposalToFill} />
+
+            {/* Banner de Retificação caso haja pendências apontadas */}
+            {selectedProposalToFill.status === "precisa_retificacoes" && (
+              <div className="bg-rose-50 border-2 border-rose-200 rounded-3xl p-6 space-y-3">
+                <div className="flex items-center gap-2 text-rose-800 font-black text-sm">
+                  <AlertCircle size={18} className="text-rose-600" />
+                  Pendências de Retificação Apontadas na Avaliação
+                </div>
+                <p className="text-xs text-rose-700 font-medium">
+                  Por favor, atente-se às orientações da avaliação pedagógica e artística e envie as correções necessárias até o prazo estipulado ({selectedProposalToFill.rectificationDeadline || "conforme cronograma"}).
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                  {selectedProposalToFill.pedagogicalDevolutiva && (
+                    <div className="p-3 bg-white rounded-xl border border-rose-200 text-xs">
+                      <span className="font-black text-slate-800 block mb-1">
+                        Avaliação Pedagógica ({selectedProposalToFill.pedagogicalDevolutiva.status}):
+                      </span>
+                      <span className="font-semibold text-slate-600 italic">
+                        "{selectedProposalToFill.pedagogicalDevolutiva.comment || "Sem observações adicionais."}"
+                      </span>
+                    </div>
+                  )}
+                  {selectedProposalToFill.artisticDevolutiva && (
+                    <div className="p-3 bg-white rounded-xl border border-rose-200 text-xs">
+                      <span className="font-black text-slate-800 block mb-1">
+                        Avaliação Artística ({selectedProposalToFill.artisticDevolutiva.status}):
+                      </span>
+                      <span className="font-semibold text-slate-600 italic">
+                        "{selectedProposalToFill.artisticDevolutiva.comment || "Sem observações adicionais."}"
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white p-6 md:p-10 rounded-3xl shadow-sm border border-slate-200/80 space-y-8">
               <div className="border-b border-slate-100 pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                    <Sparkles className="text-pro-teal" size={24} />
-                    Ficha de Inscrição de Montagem e Espetáculo
+                    <Sparkles className="text-purple-600" size={24} />
+                    {selectedProposalToFill.status === "precisa_retificacoes" 
+                      ? "Retificação do Formulário de Apresentação" 
+                      : "Preenchimento do Formulário de Apresentação"}
                   </h2>
                   <p className="text-slate-500 text-xs font-medium mt-1">
-                    Cadastre a obra, insira os itens de produção com prioridade individual, anexe os 3 PDFs obrigatórios e acompanhe as 6 etapas de análise.
+                    Insira a sinopse, proposta pedagógica, necessidades de produção com prioridades e projetos técnicos em PDF.
                   </p>
                 </div>
-                <div className="bg-teal-50 border border-teal-200/60 px-4 py-2 rounded-2xl text-[11px] font-bold text-pro-teal">
-                  Autor: <strong>{formData.proponentName || "Professor/Diretor"}</strong>
+                <div className="bg-purple-50 border border-purple-200/60 px-4 py-2 rounded-2xl text-[11px] font-bold text-purple-900">
+                  Professor: <strong>{formData.proponentName || userProfile?.name || "Professor"}</strong>
                 </div>
               </div>
 
@@ -984,26 +1129,28 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-6 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={resetForm}
+                    onClick={() => setSelectedProposalToFill(null)}
                     className="w-full sm:w-auto px-6 py-4 rounded-2xl border border-slate-200 text-slate-600 font-black text-xs uppercase tracking-wider hover:bg-slate-100 transition-all"
                   >
-                    Limpar Formulário
+                    Cancelar
                   </button>
 
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-[#016a86] to-[#004e63] text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:brightness-110 active:scale-95 shadow-xl shadow-teal-900/10 transition-all flex items-center justify-center gap-2"
+                    className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-purple-700 to-indigo-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:brightness-110 active:scale-95 shadow-xl shadow-purple-900/10 transition-all flex items-center justify-center gap-2"
                   >
                     {isSubmitting ? (
                       <>
                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Enviando Proposta...
+                        Salvando Formulário...
                       </>
                     ) : (
                       <>
                         <CheckCircle2 size={18} className="text-pro-yellow" />
-                        Submeter Ficha de Montagem
+                        {selectedProposalToFill?.status === "precisa_retificacoes" 
+                          ? "Enviar Retificação do Formulário" 
+                          : "Submeter Formulário de Apresentação"}
                       </>
                     )}
                   </button>
@@ -1020,15 +1167,37 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
           >
             {/* Filter Bar */}
             <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="relative w-full md:w-80">
-                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar por título, proponente ou gênero..."
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-pro-teal focus:bg-white"
-                />
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto flex-1">
+                {/* Search */}
+                <div className="relative w-full sm:w-72">
+                  <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar por turma, obra ou proponente..."
+                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-purple-600 focus:bg-white"
+                  />
+                </div>
+
+                {/* Class dropdown */}
+                <div className="w-full sm:w-64">
+                  <select
+                    value={classFilter}
+                    onChange={(e) => setClassFilter(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-purple-600 focus:bg-white"
+                  >
+                    <option value="todas">Todas as turmas</option>
+                    {(isGestor || isDiretorPedagogico ? classes : professorClasses).map(cls => {
+                      const title = `${cls.code ? `${cls.code} - ` : ""}${cls.type || "Turma"}${cls.weekday ? ` (${cls.weekday})` : ""}`;
+                      return (
+                        <option key={cls.id} value={cls.id}>
+                          {title}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
               </div>
 
               {/* Status Filter by Stage */}
@@ -1037,11 +1206,11 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                   onClick={() => setStatusFilter("todos")}
                   className={`px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
                     statusFilter === "todos"
-                      ? "bg-pro-teal text-white shadow-sm"
+                      ? "bg-purple-700 text-white shadow-sm"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
                 >
-                  Todas ({proposals.length})
+                  Todas ({filteredProposals.length})
                 </button>
                 {STAGE_EVOLUTION_STEPS.map(step => (
                   <button
@@ -1049,7 +1218,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     onClick={() => setStatusFilter(step.id)}
                     className={`px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
                       statusFilter === step.id
-                        ? "bg-pro-teal text-white shadow-sm"
+                        ? "bg-purple-700 text-white shadow-sm"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
                   >
@@ -1062,24 +1231,29 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
             {/* List Content */}
             {loadingProposals ? (
               <div className="bg-white p-16 rounded-3xl text-center space-y-3">
-                <div className="w-8 h-8 border-4 border-pro-teal/20 border-t-pro-teal rounded-full animate-spin mx-auto" />
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Carregando propostas de montagem...</p>
+                <div className="w-8 h-8 border-4 border-purple-600/20 border-t-purple-600 rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Carregando formulários de apresentações...</p>
               </div>
             ) : filteredProposals.length === 0 ? (
               <div className="bg-white p-16 rounded-3xl text-center space-y-4 border border-dashed border-slate-200">
                 <Clapperboard size={48} className="text-slate-300 mx-auto" />
-                <h3 className="text-base font-black text-slate-700">Nenhuma proposta encontrada</h3>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  {searchQuery || statusFilter !== "todos" 
+                <h3 className="text-base font-black text-slate-700">Nenhum formulário de apresentação encontrado</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  {searchQuery || statusFilter !== "todos" || classFilter !== "todas"
                     ? "Tente ajustar seus filtros de busca para encontrar as propostas."
-                    : "Seja o primeiro a submeter uma proposta de espetáculo para a escola!"}
+                    : isOnlyProfessor
+                    ? "Nenhum formulário de apresentação criado pela gestão para as suas turmas até o momento. Assim que a gestão definir o cronograma e orçamento da sua turma, o formulário ficará disponível aqui para preenchimento."
+                    : "Nenhum formulário criado até o momento. Clique no botão abaixo para criar um formulário para uma turma."}
                 </p>
-                <button
-                  onClick={() => setActiveTab("form")}
-                  className="px-6 py-3 bg-pro-teal text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md hover:bg-[#014e63] transition-all"
-                >
-                  Criar Nova Proposta
-                </button>
+                {isGestor && (
+                  <button
+                    onClick={handleCreateGestorForm}
+                    className="px-6 py-3 bg-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md hover:bg-purple-800 transition-all inline-flex items-center gap-2"
+                  >
+                    <Plus size={16} />
+                    Criar Formulário de Apresentação
+                  </button>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-6">
@@ -1091,39 +1265,88 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                   return (
                     <div 
                       key={proposal.id}
-                      className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200/90 hover:border-pro-teal/40 transition-all space-y-6"
+                      className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200/90 hover:border-purple-300 transition-all space-y-6"
                     >
-                      {/* Top Row: Title, Proponent & Actions */}
+                      {/* Top Row: Class Name, Status & Actions */}
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-                        <div className="space-y-1.5 flex-1">
+                        <div className="space-y-2 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${stepInfo.badgeColor}`}>
                               {stepInfo.label}
                             </span>
-                            <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-wider rounded-lg">
-                              {proposal.genre}
-                            </span>
-                            <span className="text-slate-400 text-xs font-medium">
-                              Submetido em: {proposal.createdAt?.toDate ? proposal.createdAt.toDate().toLocaleDateString("pt-BR") : "Data recente"}
-                            </span>
+                            {proposal.className && (
+                              <span className="px-2.5 py-1 bg-purple-50 text-purple-900 border border-purple-100 text-[11px] font-black uppercase tracking-wider rounded-lg flex items-center gap-1.5">
+                                <Building size={12} className="text-purple-600" />
+                                {proposal.className}
+                              </span>
+                            )}
+                            {proposal.genre && (
+                              <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-wider rounded-lg">
+                                {proposal.genre}
+                              </span>
+                            )}
+                            {proposal.presentationDate && (
+                              <span className="text-slate-600 text-xs font-medium flex items-center gap-1">
+                                <Calendar size={13} className="text-purple-600" />
+                                Apresentação: <strong>{new Date(proposal.presentationDate + "T12:00:00").toLocaleDateString("pt-BR")}</strong>
+                              </span>
+                            )}
                           </div>
 
                           <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
-                            {proposal.title}
+                            {proposal.title || `Montagem da Turma ${proposal.className || ""}`}
                           </h3>
-                          <p className="text-xs font-bold text-slate-500">
-                            Proponente: <span className="text-slate-800">{proposal.proponentName}</span> ({proposal.proponentRole}) • {proposal.proponentEmail}
-                          </p>
+
+                          {proposal.title ? (
+                            <p className="text-xs font-medium text-slate-600">
+                              Proponente: <strong className="text-slate-800">{proposal.proponentName || "Professor"}</strong> ({proposal.proponentRole || "Professor"}) • {proposal.proponentEmail}
+                            </p>
+                          ) : (
+                            <p className="text-xs font-semibold text-amber-700 italic">
+                              Aguardando preenchimento do título da obra e projetos técnicos pelo professor responsável.
+                            </p>
+                          )}
                         </div>
 
                         {/* Action Buttons */}
                         <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          {isProfessor && (
+                            <button
+                              onClick={() => handleOpenFillForm(proposal)}
+                              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm ${
+                                proposal.status === "precisa_retificacoes"
+                                  ? "bg-rose-600 hover:bg-rose-700 text-white animate-pulse"
+                                  : proposal.status === "aguardando_preenchimento"
+                                  ? "bg-purple-700 hover:bg-purple-800 text-white"
+                                  : "bg-slate-800 hover:bg-slate-900 text-white"
+                              }`}
+                            >
+                              <FileText size={15} />
+                              {proposal.status === "precisa_retificacoes"
+                                ? "Corrigir e Retificar"
+                                : proposal.status === "aguardando_preenchimento"
+                                ? "Preencher Formulário"
+                                : "Editar Formulário"}
+                            </button>
+                          )}
+
+                          {isGestor && (
+                            <button
+                              onClick={() => handleEditGestorParams(proposal)}
+                              className="px-4 py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-900 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border border-purple-200"
+                              title="Editar Diretrizes e Orçamento da Gestão"
+                            >
+                              <Sparkles size={14} className="text-purple-600" />
+                              <span>Editar Parâmetros</span>
+                            </button>
+                          )}
+
                           <button
                             onClick={() => setSelectedProposalForFicha(proposal)}
-                            className="px-5 py-2.5 bg-pro-teal text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-[#014e63] transition-all flex items-center justify-center gap-2 shadow-sm"
+                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2"
                           >
                             <FileText size={15} />
-                            Ficha & Andamento
+                            Ficha Completa
                           </button>
 
                           <button
@@ -1131,10 +1354,10 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                               setSelectedProposalForFicha(proposal);
                               setTimeout(() => window.print(), 300);
                             }}
-                            className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+                            className="px-3.5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+                            title="Imprimir"
                           >
                             <Printer size={15} />
-                            Imprimir
                           </button>
 
                           {isGestor && (
@@ -1148,6 +1371,20 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                           )}
                         </div>
                       </div>
+
+                      {/* Diretrizes Oficiais Definidas pela Gestão (Orçamento e Cronograma - 14 Parâmetros) */}
+                      <StageProductionGuidelinesCard 
+                        proposal={proposal} 
+                        onEditParams={isGestor ? () => handleEditGestorParams(proposal) : undefined}
+                      />
+
+                      {/* Devolutivas Pedagógica e Artística (Card Interativo) */}
+                      <StageProductionDevolutivaCard
+                        proposal={proposal}
+                        currentUser={currentUser}
+                        userRole={userRole}
+                        showNotification={showNotification}
+                      />
 
                       {/* ANDAMENTO DA SUBMISSÃO (STEPPER COMPACTO NO CARD) */}
                       <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 md:p-5 space-y-4">
@@ -1306,7 +1543,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 <button
                   onClick={() => {
                     setShowSuccessModal(false);
-                    setActiveTab("list");
+                    setSelectedProposalToFill(null);
                   }}
                   className="w-full py-3 bg-slate-100 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
                 >
@@ -1365,6 +1602,17 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
 
               {/* PAINEL DE ANDAMENTO DAS 6 ETAPAS */}
               <StageEvolutionTracker proposal={selectedProposalForFicha} />
+
+              {/* Diretrizes Oficiais Definidas pela Gestão (14 Parâmetros) */}
+              <StageProductionGuidelinesCard proposal={selectedProposalForFicha} />
+
+              {/* Devolutivas Pedagógica e Artística */}
+              <StageProductionDevolutivaCard
+                proposal={selectedProposalForFicha}
+                currentUser={currentUser}
+                userRole={userRole}
+                showNotification={showNotification}
+              />
 
               {/* Bloco 1: Proponente e Identificação */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1556,6 +1804,24 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
           </div>
         )}
       </AnimatePresence>
+
+      {/* MODAL DO GESTOR: CRIAR OU EDITAR PARÂMETROS DO FORMULÁRIO */}
+      <GestorStageFormModal
+        isOpen={isGestorModalOpen}
+        onClose={() => {
+          setIsGestorModalOpen(false);
+          setEditingGestorProposal(null);
+        }}
+        classes={classes}
+        users={users}
+        currentUser={currentUser}
+        existingProposal={editingGestorProposal}
+        onSuccess={() => {
+          setIsGestorModalOpen(false);
+          setEditingGestorProposal(null);
+        }}
+        showNotification={showNotification}
+      />
     </div>
   );
 };

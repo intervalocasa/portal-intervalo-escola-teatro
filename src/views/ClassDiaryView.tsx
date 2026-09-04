@@ -1382,7 +1382,8 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                     const diaryClass = classes.find(c => c.id === viewingDetailDiary.classId);
                     const activeEntries = Object.entries(viewingDetailDiary.attendances || {}).filter(([studentId]) => {
                       const student = users.find(u => u.id === studentId || u.migratedFrom === studentId || u.migratedTo === studentId);
-                      if (student && isStudentInactiveInClass(student, diaryClass)) {
+                      if (!student) return false;
+                      if (isStudentInactiveInClass(student, diaryClass)) {
                         return false;
                       }
                       return true;

@@ -53,7 +53,8 @@ export const ManageDiariesView = ({
     return diaries.filter(d => {
       const student = users.find(u => u.id === d.studentId || u.migratedFrom === d.studentId || u.migratedTo === d.studentId);
       const classOfDiary = classes.find(c => c.id === d.classId);
-      if (student && isStudentInactiveInClass(student, classOfDiary)) {
+      if (!student) return false;
+      if (isStudentInactiveInClass(student, classOfDiary)) {
         return false;
       }
       return true;
@@ -62,13 +63,13 @@ export const ManageDiariesView = ({
 
   const filteredDiaries = useMemo(() => {
     return activeDiaries.filter(d => {
-      const student四周 = users.find(u => u.id === d.studentId || u.migratedFrom === d.studentId || u.migratedTo === d.studentId);
-      const studentName = (d.studentName || (student四周 ? getUserDisplayName(student四周) : "") || "").toLowerCase();
+      const student = users.find(u => u.id === d.studentId || u.migratedFrom === d.studentId || u.migratedTo === d.studentId);
+      const studentName = (d.studentName || (student ? getUserDisplayName(student) : "") || "").toLowerCase();
       const className = (d.className || "").toLowerCase();
-      const teacherName四周 = (d.teacherName || "").toLowerCase();
+      const teacherName = (d.teacherName || "").toLowerCase();
       const term = searchTerm.toLowerCase();
 
-      const matchesSearch = !term || studentName.includes(term) || className.includes(term) || teacherName四周.includes(term);
+      const matchesSearch = !term || studentName.includes(term) || className.includes(term) || teacherName.includes(term);
       const matchesClass = filterClassId === "all" || d.classId === filterClassId;
       const matchesMonth = filterMonth === "all" || d.month === Number(filterMonth);
       const matchesYear = filterYear === "all" || d.year === Number(filterYear);
