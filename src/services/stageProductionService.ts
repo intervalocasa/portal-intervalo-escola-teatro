@@ -19,7 +19,8 @@ import {
   StageStatusHistoryEntry,
   EvaluationStatus,
   StageProductionDevolutiva,
-  TechnicalDocumentAttachment
+  TechnicalDocumentAttachment,
+  ProductionNeedItem
 } from "../types";
 
 export const STAGE_PRODUCTIONS_COLLECTION = "montagens_apresentacoes";
@@ -79,9 +80,9 @@ export const STAGE_EVOLUTION_STEPS: StageEvolutionStep[] = [
   {
     id: "em_planejamento",
     stepNumber: 5,
-    label: "5) Em planejamento",
+    label: "5) Em planejamento do processo",
     shortLabel: "5. Planejamento",
-    description: "Gatilho: Parecer 'Aprovado'. Direção de arte anexa PDFs dos projetos técnicos (cenografia, figurino) e detalha a proposta.",
+    description: "Gatilho: Parecer 'Aprovado'. O professor preenche as necessidades de Iluminação, Som e Vídeo, e o diretor de arte anexa os Projetos Técnicos Obrigatórios (PDFs) e a concepção artística.",
     badgeColor: "bg-purple-100 text-purple-900 border-purple-300",
     ringColor: "ring-purple-400 text-purple-600 bg-purple-50",
     iconName: "Palette"
@@ -225,19 +226,9 @@ export const validateStageProductionProposal = (proposal: Partial<StageProductio
     });
   }
 
-  // Iluminação, Som e Vídeo
-  if (!proposal.techItems || proposal.techItems.length === 0) {
-    errors.techItems = "Adicione ao menos um item de necessidade para Iluminação, Som e Vídeo.";
-  } else {
-    proposal.techItems.forEach((item, idx) => {
-      if (!item.item || !item.item.trim()) {
-        errors[`techItem_${idx}`] = `Informe a descrição do item #${idx + 1} de Iluminação/Som/Vídeo.`;
-      }
-      if (item.priority === "Indispensável" && (!item.indispensableReason || !item.indispensableReason.trim())) {
-        errors[`techReason_${idx}`] = `Justifique a indispensabilidade do item "${item.item || `#${idx + 1}`}".`;
-      }
-    });
-  }
+  // Nota: O item "Iluminação, Som e Vídeo (Necessidades Técnicas)" e o item "Projetos Técnicos Obrigatórios (Arquivos PDF)"
+  // deverão ser preenchidos apenas na fase de execução de "5) Em planejamento do processo".
+  // O item de iluminação, som e vídeo pelo professor e o item projetos técnicos obrigatórios pelo diretor de arte.
 
   // Outras Necessidades (Figurino, Maquiagem, Logística)
   if (!proposal.otherNeedsItems || proposal.otherNeedsItems.length === 0) {
@@ -253,18 +244,7 @@ export const validateStageProductionProposal = (proposal: Partial<StageProductio
     });
   }
 
-  // Seção 5: Envio Obrigatório dos PDFs Técnicos
-  if (!proposal.scenographyPdf || !proposal.scenographyPdf.dataUrl) {
-    errors.scenographyPdf = "O envio do arquivo PDF do Projeto de Cenografia é obrigatório.";
-  }
-  if (!proposal.costumePdf || !proposal.costumePdf.dataUrl) {
-    errors.costumePdf = "O envio do arquivo PDF do Projeto de Figurino é obrigatório.";
-  }
-  if (!proposal.lightingPdf || !proposal.lightingPdf.dataUrl) {
-    errors.lightingPdf = "O envio do arquivo PDF do Projeto de Iluminação é obrigatório.";
-  }
-
-  // Seção 6: Termo de Aceite
+  // Termo de Aceite
   if (!proposal.termsAccepted) {
     errors.termsAccepted = "Você deve aceitar a confirmação de veracidade da Ficha de Inscrição.";
   }
@@ -507,38 +487,81 @@ export const advanceToRectificationOrPlanning = async (
   });
 };
 
-// Submissão da Direção de Arte (Status 5 -> Status 6)
+// Salvar Necessidades Técnicas de Iluminação, Som e Vídeo pelo Professor na Etapa 5 (Em planejamento do processo)
+export const saveStageProductionTechPlanning = async (
+  proposalId: string,
+  techItems: ProductionNeedItem[],
+  techNotes: string,
+  user: { uid: string; name: string }
+) => {
+  const docRef = doc(db, STAGE_PRODUCTIONS_COLLECTION, proposalId);
+  const historyEntry: StageStatusHistoryEntry = {
+    status: "em_planejamento",
+    statusLabel: "Necessidades Técnicas Salvas (Professor)",
+    updatedAt: new Date().toISOString(),
+    updatedByUid: user.uid,
+    updatedByName: user.name,
+    notes: `Professor preencheu/atualizou as necessidades de Iluminação, Som e Vídeo (${techItems.length} itens na Etapa 5: Em planejamento do processo).`
+  };
+
+  await updateDoc(docRef, {
+    techItems,
+    techNotes: techNotes || "",
+    techSubmittedAt: new Date().toISOString(),
+    techSubmittedByUid: user.uid,
+    techSubmittedByName: user.name,
+    statusHistory: arrayUnion(historyEntry),
+    updatedAt: serverTimestamp()
+  });
+};
+
+// Submissão/Salvamento de Projetos Técnicos pela Direção de Arte (Etapa 5)
 export const submitArtDirectionProjects = async (
   proposalId: string,
   data: {
     proposalText: string;
-    projectsPdfs: TechnicalDocumentAttachment[];
+    scenographyPdf?: TechnicalDocumentAttachment | null;
+    costumePdf?: TechnicalDocumentAttachment | null;
+    lightingPdf?: TechnicalDocumentAttachment | null;
+    projectsPdfs?: TechnicalDocumentAttachment[];
   },
-  user: { uid: string; name: string }
+  user: { uid: string; name: string },
+  advanceToCompras: boolean = true
 ) => {
   const docRef = doc(db, STAGE_PRODUCTIONS_COLLECTION, proposalId);
-  const nextStatus: StageProductionStatus = "em_processo_de_compras";
+  const nextStatus: StageProductionStatus = advanceToCompras ? "em_processo_de_compras" : "em_planejamento";
 
   const historyEntry: StageStatusHistoryEntry = {
     status: nextStatus,
-    statusLabel: "6) Em processo de compras",
+    statusLabel: advanceToCompras ? "6) Em processo de compras" : "Projetos Técnicos Salvos (Direção de Arte)",
     updatedAt: new Date().toISOString(),
     updatedByUid: user.uid,
     updatedByName: user.name,
-    notes: `Gatilho: Direção de arte submeteu a proposta conceitual e ${data.projectsPdfs.length} projeto(s) em PDF. Status avançou para 6) Em processo de compras.`
+    notes: advanceToCompras
+      ? `Gatilho: Direção de arte submeteu a proposta conceitual e projetos técnicos obrigatórios em PDF. Status avançou para 6) Em processo de compras.`
+      : `Direção de arte salvou os projetos técnicos em PDF e proposta conceitual na Etapa 5 (Em planejamento do processo).`
   };
 
-  await updateDoc(docRef, {
-    artDirectionProposalText: data.proposalText,
-    artDirectionProjectsPdfs: data.projectsPdfs,
+  const payload: any = {
+    artDirectionProposalText: data.proposalText || "",
+    artDirectionProjectsPdfs: data.projectsPdfs || [],
     artDirectionSubmittedAt: new Date().toISOString(),
     artDirectionSubmittedByUid: user.uid,
     artDirectionSubmittedByName: user.name,
-    status: nextStatus,
-    currentStepIndex: getStageStepIndex(nextStatus),
     statusHistory: arrayUnion(historyEntry),
     updatedAt: serverTimestamp()
-  });
+  };
+
+  if (data.scenographyPdf !== undefined) payload.scenographyPdf = data.scenographyPdf;
+  if (data.costumePdf !== undefined) payload.costumePdf = data.costumePdf;
+  if (data.lightingPdf !== undefined) payload.lightingPdf = data.lightingPdf;
+
+  if (advanceToCompras) {
+    payload.status = nextStatus;
+    payload.currentStepIndex = getStageStepIndex(nextStatus);
+  }
+
+  await updateDoc(docRef, payload);
 };
 
 // Salvar / Anexar Planilha de Compras (Status 6)

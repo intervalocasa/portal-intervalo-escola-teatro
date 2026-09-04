@@ -40,7 +40,8 @@ import {
   History,
   Calendar,
   Building,
-  ArrowLeft
+  ArrowLeft,
+  Edit3
 } from "lucide-react";
 import { 
   StageProductionProposal, 
@@ -181,20 +182,50 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     status: "em_analise"
   });
 
-  // Check Permissions: Gestor, Diretor Pedagógico, or Professor
-  const isGestor = 
+  // Base Permissions: Gestor, Diretor Pedagógico, or Professor
+  const isGestorUser = 
     userRole === "Gestor" || 
-    userRole === "Auxiliar Administrativo";
+    userRole === "Auxiliar Administrativo" ||
+    userProfile?.role === "Gestor" ||
+    userProfile?.role === "Auxiliar Administrativo";
 
-  const isDiretorPedagogico = 
+  const isDiretorPedagogicoUser = 
     userRole === "Diretor Pedagógico" || 
-    userRole === "Diretor Pedagógico e Professor";
+    userRole === "Diretor Pedagógico e Professor" ||
+    userProfile?.role === "Diretor Pedagógico" ||
+    userProfile?.role === "Diretor Pedagógico e Professor";
 
-  const isProfessor = 
+  const isProfessorUser = 
     userRole === "Professor" || 
-    userRole === "Diretor Pedagógico e Professor";
+    userRole === "Diretor Pedagógico e Professor" ||
+    userProfile?.role === "Professor" ||
+    userProfile?.role === "Diretor Pedagógico e Professor" ||
+    Boolean(classes && classes.some(c => isTeacherLinkedToClass(userProfile, c)));
 
-  const hasAccess = isGestor || isDiretorPedagogico || isProfessor;
+  const hasAccess = isGestorUser || isDiretorPedagogicoUser || isProfessorUser;
+
+  // Dual role detection: allow users who are teachers and directors/managers to toggle perspectives
+  const canSwitchPerspective = 
+    userRole === "Diretor Pedagógico e Professor" ||
+    userProfile?.role === "Diretor Pedagógico e Professor" ||
+    ((isGestorUser || isDiretorPedagogicoUser) && isProfessorUser) ||
+    isGestorUser || 
+    isDiretorPedagogicoUser;
+
+  // Active Perspective: "gestor" | "professor"
+  const [activePerspective, setActivePerspective] = useState<"gestor" | "professor">(() => {
+    // If user is solely professor (not gestor and not diretor pedagogico), default to "professor"
+    if (userRole === "Professor" && !isGestorUser && userRole !== "Diretor Pedagógico") {
+      return "professor";
+    }
+    return "gestor";
+  });
+
+  // Dynamic role evaluation based on selected perspective
+  const isGestor = activePerspective === "gestor" && (isGestorUser || isDiretorPedagogicoUser);
+  const isDiretorPedagogico = activePerspective === "gestor" && isDiretorPedagogicoUser;
+  const isProfessor = activePerspective === "professor" || isProfessorUser;
+  const isOnlyProfessor = activePerspective === "professor";
 
   // Real-time Firestore sync
   useEffect(() => {
@@ -564,16 +595,15 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     return new Set(professorClasses.map(c => c.id));
   }, [professorClasses]);
 
-  // If user is strictly professor (not Gestor and not Diretor Pedagógico), filter to linked classes only
-  const isOnlyProfessor = isProfessor && !isGestor && userRole !== "Diretor Pedagógico";
-
   // Filtered proposals
   const filteredProposals = React.useMemo(() => {
     let list = proposals;
 
     // Visibility restriction for professors: only see forms linked to their classes!
     if (isOnlyProfessor) {
-      list = list.filter(p => p.classId && professorClassIds.has(p.classId));
+      if (professorClasses.length > 0) {
+        list = list.filter(p => p.classId && professorClassIds.has(p.classId));
+      }
     }
 
     if (classFilter !== "todas") {
@@ -595,7 +625,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     }
 
     return list;
-  }, [proposals, isOnlyProfessor, professorClassIds, classFilter, statusFilter, searchQuery]);
+  }, [proposals, isOnlyProfessor, professorClasses.length, professorClassIds, classFilter, statusFilter, searchQuery]);
 
   return (
     <div className="w-full min-h-screen bg-[#f8fafc] text-slate-800 pb-24">
@@ -619,8 +649,39 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
             </p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {/* Action Buttons & Perspective Switcher */}
+          <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 self-start md:self-auto">
+            {canSwitchPerspective && (
+              <div className="flex items-center gap-1 bg-black/30 backdrop-blur-md p-1.5 rounded-2xl border border-white/20 shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setActivePerspective("gestor")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                    activePerspective === "gestor"
+                      ? "bg-white text-slate-900 shadow-md"
+                      : "text-white/80 hover:text-white hover:bg-white/10"
+                  }`}
+                  title="Visualizar tela na visão de Diretor / Gestor"
+                >
+                  <ShieldCheck size={14} className={activePerspective === "gestor" ? "text-purple-700" : "text-white/70"} />
+                  <span>Visão Gestor</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePerspective("professor")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                    activePerspective === "professor"
+                      ? "bg-pro-yellow text-slate-900 shadow-md"
+                      : "text-white/80 hover:text-white hover:bg-white/10"
+                  }`}
+                  title="Visualizar tela na visão de Professor"
+                >
+                  <GraduationCap size={14} className={activePerspective === "professor" ? "text-slate-900" : "text-white/70"} />
+                  <span>Visão Professor</span>
+                </button>
+              </div>
+            )}
+
             {selectedProposalToFill ? (
               <button
                 onClick={() => setSelectedProposalToFill(null)}
@@ -650,8 +711,8 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
             animate={{ opacity: 1, y: 0 }} 
             className="space-y-8"
           >
-            {/* Top Navigation & Class Banner */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {/* Top Navigation & Class Banner & Perspective Selector */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <button
                 type="button"
                 onClick={() => setSelectedProposalToFill(null)}
@@ -660,9 +721,55 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 <ArrowLeft size={14} />
                 Voltar para Lista de Apresentações
               </button>
-              <div className="px-3.5 py-1.5 bg-purple-100 border border-purple-200 text-purple-900 rounded-xl text-xs font-black flex items-center gap-2 self-start sm:self-auto">
-                <Building size={14} className="text-purple-700" />
-                Turma: {selectedProposalToFill.className || "Turma Vinculada"}
+
+              <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+                {/* Dual perspective switch on the form screen */}
+                {canSwitchPerspective && (
+                  <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-xl border border-slate-300/80 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setActivePerspective("gestor")}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1 ${
+                        activePerspective === "gestor"
+                          ? "bg-white text-purple-900 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                      title="Alternar para visão de Gestor / Diretor"
+                    >
+                      <ShieldCheck size={13} />
+                      Visão Gestor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActivePerspective("professor")}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1 ${
+                        activePerspective === "professor"
+                          ? "bg-purple-700 text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                      title="Alternar para visão de Professor"
+                    >
+                      <GraduationCap size={13} />
+                      Visão Professor
+                    </button>
+                  </div>
+                )}
+
+                {isGestor && (
+                  <button
+                    type="button"
+                    onClick={() => handleEditGestorParams(selectedProposalToFill)}
+                    className="px-3.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-2xs"
+                  >
+                    <Edit3 size={13} />
+                    Editar Parâmetros da Gestão
+                  </button>
+                )}
+
+                <div className="px-3.5 py-1.5 bg-purple-100 border border-purple-200 text-purple-900 rounded-xl text-xs font-black flex items-center gap-2">
+                  <Building size={14} className="text-purple-700" />
+                  Turma: {selectedProposalToFill.className || "Turma Vinculada"}
+                </div>
               </div>
             </div>
 
@@ -1015,23 +1122,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     onUpdateNotes={(val) => setFormData(p => ({ ...p, scenographyNotes: val }))}
                   />
 
-                  {/* Subseção B: Iluminação, Som e Vídeo */}
-                  <ItemizedSection
-                    title="Iluminação, Som e Vídeo (Necessidades Técnicas)"
-                    icon={<Lightbulb size={18} className="text-pro-teal" />}
-                    items={formData.techItems}
-                    notes={formData.techNotes || ""}
-                    fieldKey="techItems"
-                    notesKey="techNotes"
-                    itemPlaceholder="Ex: 2 microfones headset, projetor HDMI, foco de luz azul suave, efeito máquina de fumaça..."
-                    errors={errors}
-                    onAddItem={() => handleAddItem("techItems")}
-                    onRemoveItem={(idx) => handleRemoveItem("techItems", idx)}
-                    onUpdateItem={(idx, key, val) => handleUpdateItem("techItems", idx, key, val)}
-                    onUpdateNotes={(val) => setFormData(p => ({ ...p, techNotes: val }))}
-                  />
-
-                  {/* Subseção C: Outras Necessidades (Figurino, Maquiagem, Logística) */}
+                  {/* Subseção B: Outras Necessidades (Figurino, Maquiagem, Logística) */}
                   <ItemizedSection
                     title="Outras Necessidades (Figurino, Maquiagem e Logística)"
                     icon={<Shirt size={18} className="text-pro-teal" />}
@@ -1046,12 +1137,32 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     onUpdateItem={(idx, key, val) => handleUpdateItem("otherNeedsItems", idx, key, val)}
                     onUpdateNotes={(val) => setFormData(p => ({ ...p, otherNeedsNotes: val }))}
                   />
+
+                  {/* Informação sobre Iluminação, Som e Vídeo (Preenchimento na Etapa 5 pelo Professor) */}
+                  <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-5 flex items-start gap-4">
+                    <div className="p-2.5 bg-amber-500 text-white rounded-xl shrink-0 mt-0.5 shadow-xs">
+                      <Lightbulb size={20} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-xs md:text-sm font-black uppercase tracking-wider text-amber-950">
+                          Iluminação, Som e Vídeo (Necessidades Técnicas)
+                        </h4>
+                        <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2.5 py-0.5 rounded-md">
+                          Preenchimento na Etapa 5: Em planejamento do processo
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-900/90 leading-relaxed font-medium">
+                        Este item <strong>não</strong> deve ser preenchido nesta ficha inicial de inscrição. O detalhamento das necessidades técnicas específicas de iluminação, sonorização e vídeo será preenchido pelo <strong>Professor</strong> na fase <strong>&ldquo;5) Em planejamento do processo&rdquo;</strong>, após o parecer de aprovação pedagógica e artística.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* SEÇÃO 5: ENVIO OBRIGATÓRIO DOS PROJETOS TÉCNICOS (PDFs) */}
-                <div className="space-y-6 pt-4 border-t border-slate-100">
+                {/* SEÇÃO 5: PROJETOS TÉCNICOS OBRIGATÓRIOS (ARQUIVOS PDF) */}
+                <div className="space-y-4 pt-4 border-t border-slate-100">
                   <div className="flex items-center gap-3 pb-2 border-b border-slate-100">
-                    <div className="w-8 h-8 rounded-xl bg-pro-teal/10 text-pro-teal flex items-center justify-center font-black text-sm">
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm">
                       5
                     </div>
                     <div>
@@ -1059,47 +1170,28 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                         Projetos Técnicos Obrigatórios (Arquivos PDF)
                       </h3>
                       <p className="text-xs text-slate-500 font-medium">
-                        O envio dos 3 arquivos PDF abaixo é obrigatório para validação da Ficha de Inscrição da Montagem.
+                        Plantas baixas, croquis de cenografia, pranchas de figurino e mapas de iluminação.
                       </p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* PDF 1: Projeto de Cenografia */}
-                    <PdfUploadCard
-                      title="Projeto de Cenografia"
-                      description="Planta baixa, croqui dos elementos cenográficos e mapa de palco."
-                      docType="scenographyPdf"
-                      attachment={formData.scenographyPdf}
-                      error={errors.scenographyPdf}
-                      onUpload={(file) => handleFileUpload("scenographyPdf", file)}
-                      onRemove={() => handleRemovePdf("scenographyPdf")}
-                      formatFileSize={formatFileSize}
-                    />
-
-                    {/* PDF 2: Projeto de Figurino */}
-                    <PdfUploadCard
-                      title="Projeto de Figurino"
-                      description="Pranchas de figurino, cartela de cores, visagismo e maquiagem."
-                      docType="costumePdf"
-                      attachment={formData.costumePdf}
-                      error={errors.costumePdf}
-                      onUpload={(file) => handleFileUpload("costumePdf", file)}
-                      onRemove={() => handleRemovePdf("costumePdf")}
-                      formatFileSize={formatFileSize}
-                    />
-
-                    {/* PDF 3: Projeto de Iluminação */}
-                    <PdfUploadCard
-                      title="Projeto de Iluminação"
-                      description="Mapa de luz, afinação dos refletores, canais e roteiro de cenas de luz."
-                      docType="lightingPdf"
-                      attachment={formData.lightingPdf}
-                      error={errors.lightingPdf}
-                      onUpload={(file) => handleFileUpload("lightingPdf", file)}
-                      onRemove={() => handleRemovePdf("lightingPdf")}
-                      formatFileSize={formatFileSize}
-                    />
+                  <div className="bg-purple-50/80 border border-purple-200/90 rounded-2xl p-5 flex items-start gap-4">
+                    <div className="p-2.5 bg-purple-600 text-white rounded-xl shrink-0 mt-0.5 shadow-xs">
+                      <Palette size={20} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-xs md:text-sm font-black uppercase tracking-wider text-purple-950">
+                          Elaboração e Upload pelo Diretor de Arte
+                        </h4>
+                        <span className="text-[10px] font-bold bg-purple-200 text-purple-900 px-2.5 py-0.5 rounded-md">
+                          Preenchimento na Etapa 5: Em planejamento do processo
+                        </span>
+                      </div>
+                      <p className="text-xs text-purple-900/90 leading-relaxed font-medium">
+                        Os arquivos em PDF dos projetos técnicos obrigatórios (Cenografia, Figurino e Iluminação) e a justificativa conceitual serão confeccionados e anexados pelo <strong>Diretor de Arte</strong> na fase <strong>&ldquo;5) Em planejamento do processo&rdquo;</strong>. Não é necessário anexá-los nesta submissão inicial.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -1128,7 +1220,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                         className="mt-1 w-5 h-5 rounded-lg text-pro-teal focus:ring-pro-teal border-slate-300 transition-all cursor-pointer accent-[#016a86]"
                       />
                       <span className="text-xs md:text-sm font-bold text-slate-700 leading-relaxed group-hover:text-slate-900 transition-colors">
-                        Confirmo a veracidade das informações da Ficha de Inscrição da Montagem, o envio dos projetos técnicos em PDF e estou ciente de que a proposta passará pelas 6 etapas de análise pedagógica, artística e executiva da Intervalo Escola de Teatro. *
+                        Confirmo a veracidade das informações da Ficha de Inscrição da Montagem e estou ciente de que a proposta passará pelas 6 etapas de análise pedagógica, artística e executiva da Intervalo Escola de Teatro (com detalhamento técnico de iluminação/som pelo professor e envio dos projetos técnicos em PDF pela Direção de Arte na etapa 5 de Planejamento do Processo). *
                       </span>
                     </label>
                     {errors.termsAccepted && (
@@ -1486,10 +1578,23 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                             <span className="text-slate-400 text-[11px]">Todos os itens desejáveis</span>
                           )}
 
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200/60 font-bold text-[11px]">
-                            <FileCheck size={13} className="text-emerald-600" />
-                            3 PDFs Técnicos Anexados
-                          </span>
+                          {(() => {
+                            const pdfCount = [proposal.scenographyPdf, proposal.costumePdf, proposal.lightingPdf].filter(Boolean).length;
+                            if (pdfCount > 0) {
+                              return (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200/60 font-bold text-[11px]">
+                                  <FileCheck size={13} className="text-emerald-600" />
+                                  {pdfCount} PDF(s) Técnico(s)
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 text-purple-800 rounded-lg border border-purple-200/60 font-bold text-[11px]">
+                                <Palette size={13} className="text-purple-600" />
+                                PDFs Técnicos na Etapa 5
+                              </span>
+                            );
+                          })()}
                         </div>
 
                         {/* Quick Status Advance for Managers */}
@@ -1605,6 +1710,37 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 print:hidden">
+                  {canSwitchPerspective && (
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setActivePerspective("gestor")}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 ${
+                          activePerspective === "gestor"
+                            ? "bg-white text-purple-900 shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                        title="Alternar para visão de Gestor / Diretor"
+                      >
+                        <ShieldCheck size={12} />
+                        Gestor
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActivePerspective("professor")}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 ${
+                          activePerspective === "professor"
+                            ? "bg-purple-700 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                        title="Alternar para visão de Professor"
+                      >
+                        <GraduationCap size={12} />
+                        Professor
+                      </button>
+                    </div>
+                  )}
+
                   <button
                     onClick={() => window.print()}
                     className="p-3 bg-slate-100 hover:bg-pro-teal hover:text-white text-slate-700 rounded-xl font-bold text-xs transition-all flex items-center gap-2"
@@ -2318,7 +2454,17 @@ interface DisplayItemsTableProps {
 }
 
 const DisplayItemsTable: React.FC<DisplayItemsTableProps> = ({ title, items, notes }) => {
-  if (!items || items.length === 0) return null;
+  if (!items || items.length === 0) {
+    if (title.includes("Iluminação")) {
+      return (
+        <div className="border border-amber-200/80 rounded-2xl p-4 bg-amber-50/60 text-amber-900 text-xs flex items-center gap-3">
+          <Info size={16} className="text-amber-600 shrink-0" />
+          <span><strong>Iluminação, Som e Vídeo:</strong> Detalhamento técnico a ser preenchido pelo Professor durante a etapa <strong>5) Em planejamento do processo</strong>.</span>
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
@@ -2392,7 +2538,9 @@ const DisplayPdfCard: React.FC<DisplayPdfCardProps> = ({ title, attachment, form
           </div>
         </div>
       ) : (
-        <p className="text-xs text-rose-500 font-bold">Arquivo não anexado</p>
+        <p className="text-xs text-purple-700 font-semibold bg-purple-50 p-2 rounded-xl border border-purple-200/60">
+          Aguardando elaboração na Etapa 5 (Direção de Arte)
+        </p>
       )}
     </div>
   );

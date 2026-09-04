@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import {
   StageProductionProposal,
-  TechnicalDocumentAttachment
+  TechnicalDocumentAttachment,
+  ProductionNeedItem
 } from "../types";
 import {
   advanceToRectificationOrPlanning,
   submitArtDirectionProjects,
+  saveStageProductionTechPlanning,
   uploadPurchasesSpreadsheet,
   finalizePurchasesProcess,
   finalizePartialDeliveryProcess,
@@ -25,12 +27,16 @@ import {
   Theater,
   Award,
   CheckCircle,
+  CheckCircle2,
   Clock,
   AlertCircle,
   FileSpreadsheet,
   ArrowRight,
   ShieldCheck,
-  Calendar
+  Calendar,
+  Lightbulb,
+  Plus,
+  FileCheck
 } from "lucide-react";
 
 interface StageProductionWorkflowActionsProps {
@@ -55,10 +61,165 @@ export const StageProductionWorkflowActions: React.FC<StageProductionWorkflowAct
   const currentStatus = proposal.status || "formulario_em_preenchimento";
   const stepIdx = getStageStepIndex(currentStatus);
 
-  // States for Stage 5: Direção de Arte
+  // Helper para criar item vazio de necessidades técnicas
+  const createEmptyTechItem = (): ProductionNeedItem => ({
+    id: Math.random().toString(36).substring(2, 9),
+    item: "",
+    priority: "Desejável",
+    indispensableReason: ""
+  });
+
+  // States for Stage 5: Iluminação, Som e Vídeo (Professor)
+  const [techItems, setTechItems] = useState<ProductionNeedItem[]>(
+    proposal.techItems && proposal.techItems.length > 0 
+      ? proposal.techItems 
+      : [createEmptyTechItem()]
+  );
+  const [techNotes, setTechNotes] = useState(proposal.techNotes || "");
+  const [isSavingTech, setIsSavingTech] = useState(false);
+
+  // States for Stage 5: Direção de Arte e Projetos Técnicos Obrigatórios (PDFs)
+  const [scenographyPdf, setScenographyPdf] = useState<TechnicalDocumentAttachment | null>(proposal.scenographyPdf || null);
+  const [costumePdf, setCostumePdf] = useState<TechnicalDocumentAttachment | null>(proposal.costumePdf || null);
+  const [lightingPdf, setLightingPdf] = useState<TechnicalDocumentAttachment | null>(proposal.lightingPdf || null);
   const [artProposalText, setArtProposalText] = useState(proposal.artDirectionProposalText || "");
   const [artPdfs, setArtPdfs] = useState<TechnicalDocumentAttachment[]>(proposal.artDirectionProjectsPdfs || []);
   const [isSubmittingArt, setIsSubmittingArt] = useState(false);
+  const [isSavingArtOnly, setIsSavingArtOnly] = useState(false);
+
+  // Handlers para Necessidades Técnicas do Professor (Stage 5)
+  const handleAddTechItem = () => {
+    setTechItems(prev => [...prev, createEmptyTechItem()]);
+  };
+
+  const handleRemoveTechItem = (index: number) => {
+    setTechItems(prev => {
+      const next = [...prev];
+      next.splice(index, 1);
+      return next.length > 0 ? next : [createEmptyTechItem()];
+    });
+  };
+
+  const handleUpdateTechItem = (index: number, field: keyof ProductionNeedItem, value: any) => {
+    setTechItems(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const handleSaveTechPlanning = async () => {
+    if (!proposal.id) return;
+    for (let i = 0; i < techItems.length; i++) {
+      const it = techItems[i];
+      if (it.item.trim() && it.priority === "Indispensável" && !it.indispensableReason?.trim()) {
+        showNotification?.(`Informe a justificativa de indispensabilidade para o item "${it.item}".`, "Atenção", "warning");
+        return;
+      }
+    }
+
+    try {
+      setIsSavingTech(true);
+      await saveStageProductionTechPlanning(
+        proposal.id,
+        techItems.filter(it => it.item.trim().length > 0),
+        techNotes,
+        {
+          uid: currentUser?.uid || "",
+          name: currentUser?.displayName || currentUser?.name || "Professor"
+        }
+      );
+      showNotification?.("Necessidades de Iluminação, Som e Vídeo salvas com sucesso!", "Salvo com Sucesso", "success");
+      onRefresh?.();
+    } catch (err) {
+      console.error(err);
+      showNotification?.("Erro ao salvar necessidades técnicas.", "Erro", "error");
+    } finally {
+      setIsSavingTech(false);
+    }
+  };
+
+  // Handlers para Projetos da Direção de Arte (Stage 5)
+  const handleSinglePdfUpload = (docType: "scenographyPdf" | "costumePdf" | "lightingPdf", file: File) => {
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      showNotification?.("Apenas arquivos no formato PDF são permitidos.", "Formato Inválido", "error");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      showNotification?.("O arquivo deve ter no máximo 20 MB.", "Arquivo muito grande", "error");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      const attachment: TechnicalDocumentAttachment = {
+        name: file.name,
+        size: file.size,
+        dataUrl,
+        uploadedAt: new Date().toISOString()
+      };
+      if (docType === "scenographyPdf") setScenographyPdf(attachment);
+      else if (docType === "costumePdf") setCostumePdf(attachment);
+      else if (docType === "lightingPdf") setLightingPdf(attachment);
+      showNotification?.(`PDF "${file.name}" anexado com sucesso.`, "PDF Anexado", "info");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveSinglePdf = (docType: "scenographyPdf" | "costumePdf" | "lightingPdf") => {
+    if (docType === "scenographyPdf") setScenographyPdf(null);
+    else if (docType === "costumePdf") setCostumePdf(null);
+    else if (docType === "lightingPdf") setLightingPdf(null);
+  };
+
+  const handleSaveArtDirection = async (advanceToCompras: boolean) => {
+    if (!proposal.id) return;
+    if (advanceToCompras) {
+      if (!artProposalText.trim()) {
+        showNotification?.("Preencha a justificativa / proposta conceitual da Direção de Arte antes de avançar.", "Campo Obrigatório", "warning");
+        return;
+      }
+      if (!scenographyPdf && !costumePdf && !lightingPdf && artPdfs.length === 0) {
+        showNotification?.("Anexe ao menos um projeto técnico em PDF para avançar para compras.", "Anexo Obrigatório", "warning");
+        return;
+      }
+    }
+
+    try {
+      if (advanceToCompras) setIsSubmittingArt(true);
+      else setIsSavingArtOnly(true);
+
+      await submitArtDirectionProjects(
+        proposal.id,
+        {
+          proposalText: artProposalText,
+          scenographyPdf,
+          costumePdf,
+          lightingPdf,
+          projectsPdfs: artPdfs
+        },
+        {
+          uid: currentUser?.uid || "",
+          name: currentUser?.displayName || currentUser?.name || "Direção de Arte"
+        },
+        advanceToCompras
+      );
+
+      if (advanceToCompras) {
+        showNotification?.("Planejamento concluído! Status avançou para 6) Em processo de compras.", "Sucesso", "success");
+      } else {
+        showNotification?.("Projetos técnicos e proposta da Direção de Arte salvos com sucesso!", "Salvo", "success");
+      }
+      onRefresh?.();
+    } catch (err) {
+      console.error(err);
+      showNotification?.("Erro ao salvar projetos da direção de arte.", "Erro", "error");
+    } finally {
+      setIsSubmittingArt(false);
+      setIsSavingArtOnly(false);
+    }
+  };
 
   // States for Stage 6: Planilha de Compras
   const [purchasesSpreadsheet, setPurchasesSpreadsheet] = useState<TechnicalDocumentAttachment | null>(
@@ -463,169 +624,535 @@ export const StageProductionWorkflowActions: React.FC<StageProductionWorkflowAct
         </div>
       )}
 
-      {/* ------------------------------------------------------------- */}
-      {/* STATUS 5: Em planejamento (Área da Direção de Arte)           */}
-      {/* ------------------------------------------------------------- */}
+      {/* ------------------------------------------------------------------ */}
+      {/* STATUS 5: Em planejamento do processo (Professor + Direção de Arte)*/}
+      {/* ------------------------------------------------------------------ */}
       {(currentStatus === "em_planejamento" || stepIdx >= 4) && (
-        <div className={`rounded-2xl border ${currentStatus === "em_planejamento" ? "border-purple-300 bg-purple-50/50 shadow-sm" : "border-slate-200 bg-white"} p-6`}>
-          <div className="flex items-start justify-between gap-4 mb-4">
+        <div className={`rounded-2xl border ${currentStatus === "em_planejamento" ? "border-purple-300 bg-purple-50/40 shadow-sm" : "border-slate-200 bg-white"} p-6 space-y-6`}>
+          {/* Cabeçalho da Etapa 5 */}
+          <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-purple-600 text-white rounded-xl shadow-sm">
                 <Palette size={22} />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-black uppercase tracking-wider text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
-                    Etapa 5: Em Planejamento
+                  <span className="text-xs font-black uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-md">
+                    Etapa 5: Em Planejamento do Processo
                   </span>
                   {stepIdx > 4 && (
                     <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
-                      <CheckCircle size={12} /> Submetido pela Direção de Arte
+                      <CheckCircle size={12} /> Planejamento Concluído
                     </span>
                   )}
                 </div>
                 <h3 className="text-base font-black text-slate-900 mt-1">
-                  Proposta Conceitual e Projetos da Direção de Arte
+                  Planejamento Técnico e Concepção Artística
                 </h3>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Anexação dos projetos técnicos em PDF (cenografia, figurino, iluminação) e detalhamento da proposta pela direção de arte.
+                  Nesta fase, o item de <strong>Iluminação, Som e Vídeo</strong> é preenchido pelo <strong>Professor</strong>, e os <strong>Projetos Técnicos Obrigatórios (PDFs)</strong> são anexados pelo <strong>Diretor de Arte</strong>.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Form when in Status 5 */}
-          {currentStatus === "em_planejamento" ? (
-            <div className="space-y-4 mt-4 bg-white p-5 rounded-xl border border-purple-200">
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-700 tracking-wider mb-1.5">
-                  Explicação da Proposta pela Direção de Arte <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  value={artProposalText}
-                  onChange={(e) => setArtProposalText(e.target.value)}
-                  rows={4}
-                  placeholder="Explique detalhadamente a concepção cênica, soluções de cenografia, estética dos figurinos, iluminação, paleta de cores e planejamento artístico..."
-                  className="w-full text-sm p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                />
+          {/* ============================================================== */}
+          {/* SUBSEÇÃO 5.1: ILUMINAÇÃO, SOM E VÍDEO (PROFESSOR)             */}
+          {/* ============================================================== */}
+          <div className="bg-white rounded-xl border border-amber-200/80 p-5 space-y-4 shadow-2xs">
+            <div className="flex items-center justify-between border-b border-amber-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-500 text-white rounded-lg">
+                  <Lightbulb size={18} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-slate-900">
+                    Iluminação, Som e Vídeo (Necessidades Técnicas)
+                  </h4>
+                  <p className="text-[11px] text-amber-800 font-medium">
+                    Responsabilidade: <strong>Professor da Turma</strong>
+                  </p>
+                </div>
               </div>
-
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-black uppercase text-slate-700 tracking-wider">
-                    Anexar PDFs de Projetos (Cenografia, Figurino, etc.) <span className="text-rose-500">*</span>
-                  </label>
-                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold text-xs rounded-lg transition-all">
-                    <Upload size={14} />
-                    Selecionar PDF
-                    <input
-                      type="file"
-                      accept=".pdf,application/pdf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handlePdfUpload(file);
-                        e.target.value = "";
-                      }}
-                      className="hidden"
-                    />
-                  </label>
+                {proposal.techItems && proposal.techItems.length > 0 ? (
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded flex items-center gap-1">
+                    <CheckCircle2 size={12} /> {proposal.techItems.length} {proposal.techItems.length === 1 ? "item registrado" : "itens registrados"}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-amber-100 text-amber-800 rounded">
+                    Pendente de preenchimento
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Editable form if in status em_planejamento and user is professor or gestor */}
+            {currentStatus === "em_planejamento" ? (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-600">
+                  Cadastre as necessidades técnicas de luz, sonorização, projeção de vídeo ou microfonação para esta montagem.
+                </p>
+
+                {/* Lista de Itens */}
+                <div className="space-y-2.5">
+                  {techItems.map((item, idx) => (
+                    <div key={idx} className="p-3.5 bg-amber-50/40 rounded-xl border border-amber-200/60 space-y-2.5">
+                      <div className="flex items-start gap-2.5">
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            placeholder={`Item #${idx + 1} (ex: 2 Refletores PAR LED, Microfone de Lapela, Projetor HDMI...)`}
+                            value={item.item}
+                            onChange={(e) => handleUpdateTechItem(idx, "item", e.target.value)}
+                            className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          />
+                        </div>
+                        <div className="w-36 shrink-0">
+                          <select
+                            value={item.priority}
+                            onChange={(e) => handleUpdateTechItem(idx, "priority", e.target.value as any)}
+                            className="w-full text-xs font-bold p-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          >
+                            <option value="Desejável">Desejável</option>
+                            <option value="Indispensável">Indispensável</option>
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTechItem(idx)}
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
+                          title="Remover item"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+
+                      {item.priority === "Indispensável" && (
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-wider text-rose-700 flex items-center gap-1">
+                            <AlertCircle size={12} /> Justificativa de Indispensabilidade *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Por que este item é estritamente indispensável para a cena?"
+                            value={item.indispensableReason || ""}
+                            onChange={(e) => handleUpdateTechItem(idx, "indispensableReason", e.target.value)}
+                            className="w-full text-xs p-2 bg-white border border-rose-200 rounded-lg focus:ring-2 focus:ring-rose-400 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
 
-                {artPdfs.length === 0 ? (
-                  <div className="p-6 border-2 border-dashed border-purple-200 rounded-xl text-center bg-purple-50/30">
-                    <FileText size={28} className="mx-auto text-purple-400 mb-2" />
-                    <p className="text-xs font-bold text-slate-600">Nenhum PDF de projeto anexado ainda.</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Clique em &quot;Selecionar PDF&quot; para anexar projetos de cenografia, figurino ou maquiagem.
-                    </p>
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAddTechItem}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs rounded-lg transition-colors"
+                  >
+                    <Plus size={14} /> Adicionar Item de Iluminação / Som
+                  </button>
+                </div>
+
+                {/* Observações Técnicas Gerais */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                    Observações e Orientações Técnicas Gerais (Professor)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={techNotes}
+                    onChange={(e) => setTechNotes(e.target.value)}
+                    placeholder="Instruções adicionais de operação, momentos de blackout, trilha sonora ou efeitos específicos..."
+                    className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={handleSaveTechPlanning}
+                    disabled={isSavingTech}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={15} />
+                    {isSavingTech ? "Salvando..." : "Salvar Necessidades Técnicas (Professor)"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Read-only consultation for Tech Items */
+              <div className="space-y-3 text-xs">
+                {proposal.techItems && proposal.techItems.length > 0 ? (
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                        <tr>
+                          <th className="p-2.5">Item Necessário</th>
+                          <th className="p-2.5 text-center">Prioridade</th>
+                          <th className="p-2.5">Justificativa</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {proposal.techItems.map((it, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="p-2.5 font-bold text-slate-800">{it.item}</td>
+                            <td className="p-2.5 text-center">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                it.priority === "Indispensável" ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-700"
+                              }`}>
+                                {it.priority}
+                              </span>
+                            </td>
+                            <td className="p-2.5 text-slate-600 italic">
+                              {it.priority === "Indispensável" ? it.indispensableReason || "-" : "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {artPdfs.map((pdf, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl"
-                      >
-                        <div className="flex items-center gap-2.5 overflow-hidden">
-                          <FileText size={18} className="text-purple-600 shrink-0" />
-                          <div className="truncate">
-                            <p className="text-xs font-bold text-slate-800 truncate">{pdf.name}</p>
-                            <p className="text-[10px] text-slate-500">{formatFileSize(pdf.size)}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <a
-                            href={pdf.dataUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 text-slate-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                            title="Visualizar PDF"
-                          >
-                            <ExternalLink size={16} />
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveArtPdf(idx)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title="Remover anexo"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                  <p className="text-slate-500 italic">Nenhum item técnico preenchido pelo professor.</p>
+                )}
+                {proposal.techNotes && (
+                  <div className="p-2.5 bg-amber-50/50 rounded-lg border border-amber-200/50">
+                    <span className="font-bold text-slate-700 block mb-0.5">Observações do Professor:</span>
+                    <p className="text-slate-600">{proposal.techNotes}</p>
                   </div>
                 )}
               </div>
+            )}
+          </div>
 
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleSubmitArtDirection}
-                  disabled={isSubmittingArt}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs rounded-xl shadow-md transition-all disabled:opacity-50"
-                >
-                  <Palette size={16} />
-                  {isSubmittingArt ? "Submetendo..." : "Submeter Projetos da Direção de Arte (Avançar para Compras)"}
-                </button>
-              </div>
-            </div>
-          ) : (
-            // Read-only consultation view for Stage 5 when step > 5
-            <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 text-xs">
-              {proposal.artDirectionProposalText && (
+          {/* ============================================================== */}
+          {/* SUBSEÇÃO 5.2: PROJETOS TÉCNICOS OBRIGATÓRIOS (DIRETOR DE ARTE) */}
+          {/* ============================================================== */}
+          <div className="bg-white rounded-xl border border-purple-200 p-5 space-y-4 shadow-2xs">
+            <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-purple-600 text-white rounded-lg">
+                  <Palette size={18} />
+                </div>
                 <div>
-                  <span className="font-bold text-slate-700 block mb-1">Proposta Conceitual da Direção de Arte:</span>
-                  <p className="text-slate-600 whitespace-pre-line bg-white p-3 rounded-lg border border-slate-200">
-                    {proposal.artDirectionProposalText}
+                  <h4 className="text-sm font-black text-slate-900">
+                    Projetos Técnicos Obrigatórios (Arquivos PDF) e Concepção Artística
+                  </h4>
+                  <p className="text-[11px] text-purple-800 font-medium">
+                    Responsabilidade: <strong>Diretor de Arte</strong>
                   </p>
                 </div>
-              )}
+              </div>
+              <div>
+                {(scenographyPdf || costumePdf || lightingPdf || (artPdfs && artPdfs.length > 0)) ? (
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded flex items-center gap-1">
+                    <CheckCircle2 size={12} /> Projetos anexados
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-purple-100 text-purple-800 rounded">
+                    Aguardando anexos
+                  </span>
+                )}
+              </div>
+            </div>
 
-              {proposal.artDirectionProjectsPdfs && proposal.artDirectionProjectsPdfs.length > 0 && (
-                <div>
-                  <span className="font-bold text-slate-700 block mb-1.5">PDFs dos Projetos Técnicos:</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {proposal.artDirectionProjectsPdfs.map((pdf, idx) => (
-                      <a
-                        key={idx}
-                        href={pdf.dataUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-between p-2.5 bg-white border border-slate-200 hover:border-purple-300 rounded-lg transition-all group"
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <FileText size={16} className="text-purple-600 shrink-0" />
-                          <span className="truncate text-slate-700 font-medium">{pdf.name}</span>
+            {currentStatus === "em_planejamento" ? (
+              <div className="space-y-4">
+                {/* 3 Upload Cards para os Projetos Obrigatórios */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  {/* Cenografia */}
+                  <div className="p-3.5 bg-purple-50/40 border border-purple-200/80 rounded-xl space-y-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-purple-900 block">
+                      1. Projeto de Cenografia (PDF)
+                    </span>
+                    {scenographyPdf ? (
+                      <div className="flex items-center justify-between p-2 bg-white border border-purple-200 rounded-lg text-xs">
+                        <div className="truncate flex items-center gap-1.5">
+                          <FileText size={15} className="text-purple-600 shrink-0" />
+                          <span className="truncate font-semibold text-slate-800">{scenographyPdf.name}</span>
                         </div>
-                        <ExternalLink size={14} className="text-slate-400 group-hover:text-purple-600 shrink-0" />
-                      </a>
-                    ))}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSinglePdf("scenographyPdf")}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                          title="Remover"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-purple-200 hover:border-purple-400 bg-white rounded-lg transition-colors">
+                        <Upload size={18} className="text-purple-500 mb-1" />
+                        <span className="text-[11px] font-bold text-purple-700">Anexar Cenografia</span>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleSinglePdfUpload("scenographyPdf", f);
+                            e.target.value = "";
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Figurino */}
+                  <div className="p-3.5 bg-purple-50/40 border border-purple-200/80 rounded-xl space-y-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-purple-900 block">
+                      2. Projeto de Figurino (PDF)
+                    </span>
+                    {costumePdf ? (
+                      <div className="flex items-center justify-between p-2 bg-white border border-purple-200 rounded-lg text-xs">
+                        <div className="truncate flex items-center gap-1.5">
+                          <FileText size={15} className="text-purple-600 shrink-0" />
+                          <span className="truncate font-semibold text-slate-800">{costumePdf.name}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSinglePdf("costumePdf")}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                          title="Remover"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-purple-200 hover:border-purple-400 bg-white rounded-lg transition-colors">
+                        <Upload size={18} className="text-purple-500 mb-1" />
+                        <span className="text-[11px] font-bold text-purple-700">Anexar Figurino</span>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleSinglePdfUpload("costumePdf", f);
+                            e.target.value = "";
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Iluminação */}
+                  <div className="p-3.5 bg-purple-50/40 border border-purple-200/80 rounded-xl space-y-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-purple-900 block">
+                      3. Projeto de Iluminação (PDF)
+                    </span>
+                    {lightingPdf ? (
+                      <div className="flex items-center justify-between p-2 bg-white border border-purple-200 rounded-lg text-xs">
+                        <div className="truncate flex items-center gap-1.5">
+                          <FileText size={15} className="text-purple-600 shrink-0" />
+                          <span className="truncate font-semibold text-slate-800">{lightingPdf.name}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSinglePdf("lightingPdf")}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                          title="Remover"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-purple-200 hover:border-purple-400 bg-white rounded-lg transition-colors">
+                        <Upload size={18} className="text-purple-500 mb-1" />
+                        <span className="text-[11px] font-bold text-purple-700">Anexar Iluminação</span>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleSinglePdfUpload("lightingPdf", f);
+                            e.target.value = "";
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+
+                {/* PDFs Adicionais */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                      Anexos Adicionais da Direção de Arte (Plantas, Maquiagem, Pranchas)
+                    </label>
+                    <label className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold text-xs rounded-lg transition-all">
+                      <Upload size={13} />
+                      Adicionar PDF
+                      <input
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handlePdfUpload(file);
+                          e.target.value = "";
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {artPdfs.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      {artPdfs.map((pdf, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <FileText size={16} className="text-purple-600 shrink-0" />
+                            <span className="font-semibold text-slate-800 truncate">{pdf.name}</span>
+                            <span className="text-[10px] text-slate-400">({formatFileSize(pdf.size)})</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <a
+                              href={pdf.dataUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1 text-slate-500 hover:text-purple-600"
+                              title="Visualizar"
+                            >
+                              <ExternalLink size={14} />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveArtPdf(idx)}
+                              className="p-1 text-slate-400 hover:text-rose-600"
+                              title="Remover"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Explicação da Proposta pela Direção de Arte */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-black uppercase text-slate-700 tracking-wider">
+                    Explicação e Justificativa Conceitual da Proposta (Direção de Arte) <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    value={artProposalText}
+                    onChange={(e) => setArtProposalText(e.target.value)}
+                    rows={4}
+                    placeholder="Explique detalhadamente a concepção cênica, estética dos figurinos, iluminação, paleta de cores e diretrizes artísticas..."
+                    className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none leading-relaxed"
+                  />
+                </div>
+
+                {/* Botões de Ação para Direção de Arte */}
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-2.5 border-t border-purple-100">
+                  <button
+                    type="button"
+                    onClick={() => handleSaveArtDirection(false)}
+                    disabled={isSavingArtOnly}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-xs rounded-xl transition-all disabled:opacity-50"
+                  >
+                    <FileCheck size={16} />
+                    {isSavingArtOnly ? "Salvando..." : "Salvar Rascunho dos Projetos"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSaveArtDirection(true)}
+                    disabled={isSubmittingArt}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs rounded-xl shadow-md transition-all disabled:opacity-50"
+                  >
+                    <Palette size={16} />
+                    {isSubmittingArt ? "Concluindo..." : "Concluir Planejamento e Avançar para 6) Em processo de compras"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Read-only consultation view for Art Direction Projects */
+              <div className="space-y-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {proposal.scenographyPdf && (
+                    <a
+                      href={proposal.scenographyPdf.dataUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg hover:border-purple-300 flex items-center justify-between"
+                    >
+                      <div className="truncate flex items-center gap-1.5">
+                        <FileText size={15} className="text-purple-600 shrink-0" />
+                        <span className="truncate font-semibold text-slate-800">Cenografia.pdf</span>
+                      </div>
+                      <ExternalLink size={13} className="text-slate-400" />
+                    </a>
+                  )}
+                  {proposal.costumePdf && (
+                    <a
+                      href={proposal.costumePdf.dataUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg hover:border-purple-300 flex items-center justify-between"
+                    >
+                      <div className="truncate flex items-center gap-1.5">
+                        <FileText size={15} className="text-purple-600 shrink-0" />
+                        <span className="truncate font-semibold text-slate-800">Figurino.pdf</span>
+                      </div>
+                      <ExternalLink size={13} className="text-slate-400" />
+                    </a>
+                  )}
+                  {proposal.lightingPdf && (
+                    <a
+                      href={proposal.lightingPdf.dataUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg hover:border-purple-300 flex items-center justify-between"
+                    >
+                      <div className="truncate flex items-center gap-1.5">
+                        <FileText size={15} className="text-purple-600 shrink-0" />
+                        <span className="truncate font-semibold text-slate-800">Iluminação.pdf</span>
+                      </div>
+                      <ExternalLink size={13} className="text-slate-400" />
+                    </a>
+                  )}
+                </div>
+
+                {proposal.artDirectionProjectsPdfs && proposal.artDirectionProjectsPdfs.length > 0 && (
+                  <div className="pt-1">
+                    <span className="font-bold text-slate-700 block mb-1">Anexos Adicionais:</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {proposal.artDirectionProjectsPdfs.map((pdf, idx) => (
+                        <a
+                          key={idx}
+                          href={pdf.dataUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded-lg hover:border-purple-300 group"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <FileText size={15} className="text-purple-600 shrink-0" />
+                            <span className="truncate text-slate-700 font-medium">{pdf.name}</span>
+                          </div>
+                          <ExternalLink size={13} className="text-slate-400 group-hover:text-purple-600 shrink-0" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {proposal.artDirectionProposalText && (
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <span className="font-bold text-slate-700 block mb-1">Proposta Conceitual da Direção de Arte:</span>
+                    <p className="text-slate-600 whitespace-pre-line">{proposal.artDirectionProposalText}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
