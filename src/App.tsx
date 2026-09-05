@@ -111,7 +111,8 @@ import { ClassDiaryView } from "./views/ClassDiaryView";
 import { StageProductionsView } from "./views/StageProductionsView";
 import { FormativeDocumentsView } from "./views/FormativeDocumentsView";
 import { getMonthlyDeadline } from "./lib/deadlineUtils";
-import { isDirectorOrGestor, isStaffOrAdmin, isProfessorOrTeacher } from "./lib/userUtils";
+import { isDirectorOrGestor, isStaffOrAdmin, isProfessorOrTeacher, isStudentInactive, isStudentDesmatriculado } from "./lib/userUtils";
+import { propagateClassUpdate, syncAllClassNamesAcrossDatabase } from "./services/classSyncService";
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(false);
@@ -1287,6 +1288,23 @@ export default function App() {
     };
   }, [currentUser?.uid]); // Only re-run if the user ID changes
 
+  // Sincronização e verificação de consistência de nomes de turmas em segundo plano (1x por sessão para gestores)
+  useEffect(() => {
+    if (currentUser && (role === "Gestor" || role === "Diretor Pedagógico") && classes.length > 0) {
+      const hasSynced = sessionStorage.getItem("intervalo_classes_synced_session");
+      if (!hasSynced) {
+        sessionStorage.setItem("intervalo_classes_synced_session", "true");
+        syncAllClassNamesAcrossDatabase(classes).then((report) => {
+          if (report.totalUpdated > 0) {
+            console.log(`[Turmas] Sincronização automática em background corrigiu ${report.totalUpdated} registro(s) desatualizados.`);
+          }
+        }).catch((err) => {
+          console.warn("[Turmas] Verificação automática em background:", err);
+        });
+      }
+    }
+  }, [currentUser, role, classes.length]);
+
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -1296,7 +1314,7 @@ export default function App() {
   const [enrollmentModalClassId, setEnrollmentModalClassId] = useState<string | null>(null);
   const [enrollmentModalDate, setEnrollmentModalDate] = useState("");
 
-  const [editEnrollmentInfo, setEditEnrollmentInfo] = useState<{classId: string, studentId: string, date: string, paymentType?: "Pagante" | "Isento", status?: "Ativo" | "Trancado" | "Inativo"} | null>(null);
+  const [editEnrollmentInfo, setEditEnrollmentInfo] = useState<{classId: string, studentId: string, date: string, paymentType?: "Pagante" | "Isento", status?: "Ativo" | "Trancado" | "Desmatriculado" | "Inativo"} | null>(null);
   const [showEnrollmentDeleteConfirm, setShowEnrollmentDeleteConfirm] = useState(false);
 
   const handleUpdateEnrollmentDate = async (
@@ -1304,7 +1322,7 @@ export default function App() {
     studentId: string, 
     newDate: string, 
     paymentType?: "Pagante" | "Isento",
-    status?: "Ativo" | "Trancado" | "Inativo"
+    status?: "Ativo" | "Trancado" | "Desmatriculado" | "Inativo"
   ) => {
     setIsAppLoading(true);
     try {
@@ -1799,9 +1817,14 @@ export default function App() {
   const [regType, setRegType] = useState<UserRole>("Aluno");
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [filter, setFilter] = useState<UserRole | "Todos">("Todos");
+  const [filter, setFilter] = useState<UserRole | "Todos" | "Desmatriculados">("Todos");
   const filteredUsers = useMemo(() => {
-    const list = filter === "Todos" ? users : users.filter(u => u.role === filter);
+    let list = users;
+    if (filter === "Desmatriculados") {
+      list = users.filter(u => u.role === "Aluno" && isStudentInactive(u));
+    } else if (filter !== "Todos") {
+      list = users.filter(u => u.role === filter);
+    }
     return [...list].sort((a, b) => (a.artisticName || a.name || "").localeCompare(b.artisticName || b.name || "", 'pt-BR'));
   }, [users, filter]);
 
@@ -2427,6 +2450,14 @@ export default function App() {
       };
 
       await updateDoc(doc(db, "classes", targetId), payload);
+
+      // Propagar atualização do código (nome) e tipo para todas as coleções dependentes
+      try {
+        await propagateClassUpdate(targetId, normalizedCode, payload.type);
+      } catch (syncErr) {
+        console.warn("Aviso ao propagar atualização para coleções dependentes:", syncErr);
+      }
+
       showNotification("Turma atualizada com sucesso!", "Sucesso");
       handleResetClassForm();
       setView("classes_list");
@@ -2875,6 +2906,7 @@ export default function App() {
             role={role}
             currentUser={currentUser}
             handleResetClassForm={handleResetClassForm}
+            showNotification={showNotification}
           />
         ) : view === "edit_class" ? (
           <CreateClassView 
@@ -3276,14 +3308,14 @@ export default function App() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, status: "Inativo"})}
+                          onClick={() => setEditEnrollmentInfo({...editEnrollmentInfo, status: "Desmatriculado"})}
                           className={`py-2.5 px-2 rounded-xl font-black text-[10px] uppercase transition-all border ${
-                            editEnrollmentInfo.status === "Inativo"
+                            (editEnrollmentInfo.status === "Desmatriculado" || editEnrollmentInfo.status === "Inativo")
                               ? "bg-rose-600 text-white border-rose-600 shadow-xs"
                               : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                           }`}
                         >
-                          Inativar
+                          Desmatricular
                         </button>
                       </div>
                     </div>

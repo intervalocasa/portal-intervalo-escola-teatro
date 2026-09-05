@@ -22,12 +22,14 @@ import {
   Sparkles, 
   Calendar, 
   AlertCircle,
-  FileCheck
+  FileCheck,
+  RefreshCw
 } from "lucide-react";
 import { Course, CourseSyllabusFile, Class } from "../types";
 import { BackButton, Logo } from "../components/CommonComponents";
 import { doc, setDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { propagateClassUpdate, syncAllClassNamesAcrossDatabase } from "../services/classSyncService";
 
 interface CoursesManagementViewProps {
   courses: Course[];
@@ -57,6 +59,44 @@ export const CoursesManagementView = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncAll = async () => {
+    setIsSyncing(true);
+    try {
+      const report = await syncAllClassNamesAcrossDatabase(classes);
+      if (report.totalUpdated === 0) {
+        if (showNotification) {
+          showNotification(
+            `Todas as turmas e registros vinculados já estão 100% consistentes e atualizados (${report.totalChecked} documentos verificados).`,
+            "Consistência Verificada",
+            "success"
+          );
+        } else {
+          alert(`Todas as turmas já estão consistentes. (${report.totalChecked} documentos verificados)`);
+        }
+      } else {
+        if (showNotification) {
+          showNotification(
+            `Sincronização concluída com sucesso! ${report.totalUpdated} registro(s) com nomes ou tipos pendentes foram corrigidos em todas as coleções do sistema.`,
+            "Nomes Sincronizados",
+            "success"
+          );
+        } else {
+          alert(`${report.totalUpdated} registro(s) foram atualizados com sucesso.`);
+        }
+      }
+    } catch (err: any) {
+      console.error("Erro ao sincronizar turmas:", err);
+      if (showNotification) {
+        showNotification("Erro ao sincronizar os dados das turmas: " + (err.message || "Tente novamente"), "Erro", "error");
+      } else {
+        alert("Erro ao sincronizar turmas.");
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Form State
   const [formId, setFormId] = useState<string>("");
@@ -206,10 +246,18 @@ export const CoursesManagementView = ({
 
       await setDoc(courseRef, courseData, { merge: true });
 
-      // Update class.type in Firestore for all selected classes
+      // Update class.type in Firestore for all selected classes and propagate
       const newCourseName = formName.trim();
-      const updateClassPromises = selectedClassIds.map(classId => {
-        return updateDoc(doc(db, "classes", classId), { type: newCourseName });
+      const updateClassPromises = selectedClassIds.map(async classId => {
+        const cls = classes.find(c => c.id === classId);
+        await updateDoc(doc(db, "classes", classId), { type: newCourseName });
+        if (cls?.code) {
+          try {
+            await propagateClassUpdate(classId, cls.code, newCourseName);
+          } catch (e) {
+            console.warn("Aviso ao propagar tipo do curso:", e);
+          }
+        }
       });
       await Promise.all(updateClassPromises);
 
@@ -307,14 +355,26 @@ export const CoursesManagementView = ({
               </p>
             </div>
 
-            {/* Add Course Button */}
-            <button
-              onClick={handleOpenNewCourse}
-              className="px-6 py-3.5 bg-[#016a86] hover:bg-[#005167] text-white font-bold text-xs md:text-sm rounded-2xl shadow-lg shadow-[#016a86]/20 flex items-center justify-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <Plus size={18} />
-              <span>Novo Curso</span>
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={handleSyncAll}
+                disabled={isSyncing}
+                title="Sincronizar nomes e tipos de cursos com todas as coleções"
+                className="px-5 py-3.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs md:text-sm rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                <RefreshCw size={16} className={`text-pro-teal ${isSyncing ? "animate-spin" : ""}`} />
+                <span>{isSyncing ? "Sincronizando..." : "Sincronizar Nomes"}</span>
+              </button>
+
+              {/* Add Course Button */}
+              <button
+                onClick={handleOpenNewCourse}
+                className="px-6 py-3.5 bg-[#016a86] hover:bg-[#005167] text-white font-bold text-xs md:text-sm rounded-2xl shadow-lg shadow-[#016a86]/20 flex items-center justify-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <Plus size={18} />
+                <span>Novo Curso</span>
+              </button>
+            </div>
           </div>
 
           {/* Courses Grid */}

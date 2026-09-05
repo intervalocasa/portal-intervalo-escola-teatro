@@ -5,9 +5,10 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, ChevronDown, Presentation, Edit, ArrowLeft, Plus } from "lucide-react";
+import { Search, ChevronDown, Presentation, Edit, ArrowLeft, Plus, RefreshCw, CheckCircle2 } from "lucide-react";
 import { Class, User } from "../types";
 import { Logo, BackButton } from "../components/CommonComponents";
+import { syncAllClassNamesAcrossDatabase } from "../services/classSyncService";
 
 interface ClassesListViewProps {
   classes: Class[];
@@ -18,6 +19,7 @@ interface ClassesListViewProps {
   role?: string | null;
   currentUser?: any;
   handleResetClassForm?: () => void;
+  showNotification?: (message: string, title?: string, type?: "success" | "warning" | "error") => void;
 }
 
 export const ClassesListView = ({
@@ -28,9 +30,48 @@ export const ClassesListView = ({
   setClassData,
   role,
   currentUser,
-  handleResetClassForm
+  handleResetClassForm,
+  showNotification
 }: ClassesListViewProps) => {
   const [searchTerm, setSearchTerm] = React.useState("");
+  const [isSyncing, setIsSyncing] = React.useState(false);
+
+  const handleSyncAll = async () => {
+    setIsSyncing(true);
+    try {
+      const report = await syncAllClassNamesAcrossDatabase(classes);
+      if (report.totalUpdated === 0) {
+        if (showNotification) {
+          showNotification(
+            `Todas as turmas e registros vinculados já estão 100% consistentes e atualizados (${report.totalChecked} documentos verificados).`,
+            "Consistência Verificada",
+            "success"
+          );
+        } else {
+          alert(`Todas as turmas já estão consistentes. (${report.totalChecked} documentos verificados)`);
+        }
+      } else {
+        if (showNotification) {
+          showNotification(
+            `Sincronização concluída com sucesso! ${report.totalUpdated} registro(s) com nomes ou tipos pendentes foram corrigidos em todas as coleções do sistema.`,
+            "Nomes Sincronizados",
+            "success"
+          );
+        } else {
+          alert(`${report.totalUpdated} registro(s) foram atualizados com sucesso.`);
+        }
+      }
+    } catch (err: any) {
+      console.error("Erro ao sincronizar turmas:", err);
+      if (showNotification) {
+        showNotification("Erro ao sincronizar os dados das turmas: " + (err.message || "Tente novamente"), "Erro", "error");
+      } else {
+        alert("Erro ao sincronizar turmas.");
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const filteredClasses = classes.filter(c => {
     // If professor, only show their classes by default or match search
@@ -82,15 +123,27 @@ export const ClassesListView = ({
             />
           </div>
           {(role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo") && (
-            <button
-              onClick={() => {
-                if (handleResetClassForm) handleResetClassForm();
-                setView("create_class");
-              }}
-              className="w-full sm:w-auto px-6 py-4 bg-pro-teal text-white font-black rounded-[28px] text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-teal-700 transition-all shadow-md shrink-0 active:scale-95"
-            >
-              <Plus size={18} /> Nova Turma
-            </button>
+            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={handleSyncAll}
+                disabled={isSyncing}
+                title="Verifica se todas as turmas que tiveram o nome atualizado estão propagadas para todos os registros do sistema"
+                className="w-full sm:w-auto px-5 py-4 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-black rounded-[28px] text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-xs shrink-0 active:scale-95 disabled:opacity-50"
+              >
+                <RefreshCw size={16} className={`text-pro-teal ${isSyncing ? "animate-spin" : ""}`} />
+                {isSyncing ? "Sincronizando..." : "Sincronizar Nomes"}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (handleResetClassForm) handleResetClassForm();
+                  setView("create_class");
+                }}
+                className="w-full sm:w-auto px-6 py-4 bg-pro-teal text-white font-black rounded-[28px] text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-teal-700 transition-all shadow-md shrink-0 active:scale-95"
+              >
+                <Plus size={18} /> Nova Turma
+              </button>
+            </div>
           )}
         </div>
 

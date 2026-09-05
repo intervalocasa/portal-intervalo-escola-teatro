@@ -616,16 +616,20 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(p => 
-        (p.title || "").toLowerCase().includes(q) ||
-        (p.className || "").toLowerCase().includes(q) ||
-        (p.proponentName || "").toLowerCase().includes(q) ||
-        (p.genre || "").toLowerCase().includes(q)
-      );
+      list = list.filter(p => {
+        const cls = (classes || []).find(c => c.id === p.classId);
+        const curClassName = cls?.code || p.className || "";
+        return (
+          (p.title || "").toLowerCase().includes(q) ||
+          curClassName.toLowerCase().includes(q) ||
+          (p.proponentName || "").toLowerCase().includes(q) ||
+          (p.genre || "").toLowerCase().includes(q)
+        );
+      });
     }
 
     return list;
-  }, [proposals, isOnlyProfessor, professorClasses.length, professorClassIds, classFilter, statusFilter, searchQuery]);
+  }, [proposals, isOnlyProfessor, professorClasses.length, professorClassIds, classFilter, statusFilter, searchQuery, classes]);
 
   return (
     <div className="w-full min-h-screen bg-[#f8fafc] text-slate-800 pb-24">
@@ -768,7 +772,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
 
                 <div className="px-3.5 py-1.5 bg-purple-100 border border-purple-200 text-purple-900 rounded-xl text-xs font-black flex items-center gap-2">
                   <Building size={14} className="text-purple-700" />
-                  Turma: {selectedProposalToFill.className || "Turma Vinculada"}
+                  Turma: {(classes || []).find(c => c.id === selectedProposalToFill.classId)?.code || selectedProposalToFill.className || "Turma Vinculada"}
                 </div>
               </div>
             </div>
@@ -1378,10 +1382,10 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                             <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${stepInfo.badgeColor}`}>
                               {stepInfo.label}
                             </span>
-                            {proposal.className && (
+                            {((classes || []).find(c => c.id === proposal.classId)?.code || proposal.className) && (
                               <span className="px-2.5 py-1 bg-purple-50 text-purple-900 border border-purple-100 text-[11px] font-black uppercase tracking-wider rounded-lg flex items-center gap-1.5">
                                 <Building size={12} className="text-purple-600" />
-                                {proposal.className}
+                                {(classes || []).find(c => c.id === proposal.classId)?.code || proposal.className}
                               </span>
                             )}
                             {proposal.genre && (
@@ -1398,7 +1402,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                           </div>
 
                           <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
-                            {proposal.title || `Montagem da Turma ${proposal.className || ""}`}
+                            {proposal.title || `Montagem da Turma ${(classes || []).find(c => c.id === proposal.classId)?.code || proposal.className || ""}`}
                           </h3>
 
                           {proposal.title ? (

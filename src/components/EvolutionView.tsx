@@ -18,7 +18,7 @@ import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { motion, AnimatePresence } from 'motion/react';
-import { getUserDisplayName, getUserSecondaryName } from '../lib/userUtils';
+import { getUserDisplayName, getUserSecondaryName, isStudentInactive } from '../lib/userUtils';
 import React from 'react';
 import { generateDiaryPDF } from '../lib/pdfExporter';
 import { 
@@ -68,7 +68,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
 
   const allStudents = React.useMemo(() => {
     return users
-      .filter(u => u.role === "Aluno")
+      .filter(u => u.role === "Aluno" && !isStudentInactive(u))
       .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
   }, [users]);
 
@@ -131,13 +131,28 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
   
   studentEvals.forEach(e => {
     const key = `${e.month}-${e.year}-${e.classId}`;
-    if (!periods.has(key)) periods.set(key, { month: e.month, year: e.year, classId: e.classId, classType: e.classType });
+    const targetCls = classes.find(c => c.id === e.classId);
+    if (!periods.has(key)) periods.set(key, { 
+      month: e.month, 
+      year: e.year, 
+      classId: e.classId, 
+      classType: targetCls?.type || e.classType,
+      className: targetCls?.code || e.className 
+    });
     periods.get(key).selfAssessment = e;
   });
   
   studentDiaries.forEach(d => {
     const key = `${d.month}-${d.year}-${d.classId}`;
-    if (!periods.has(key)) periods.set(key, { month: d.month, year: d.year, classId: d.classId, classType: d.classType, className: d.className, teacherName: d.teacherName });
+    const targetCls = classes.find(c => c.id === d.classId);
+    if (!periods.has(key)) periods.set(key, { 
+      month: d.month, 
+      year: d.year, 
+      classId: d.classId, 
+      classType: targetCls?.type || d.classType, 
+      className: targetCls?.code || d.className, 
+      teacherName: d.teacherName 
+    });
     periods.get(key).professorDiary = d;
   });
   
@@ -294,10 +309,12 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                             <div className="flex items-center gap-2 mb-0.5">
                               <Drama size={14} className="text-pro-teal" />
                               <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight leading-none break-all line-clamp-2">
-                                {classes.find(c => c.id === period.classId)?.code || "Turma Especial"}
+                                {classes.find(c => c.id === period.classId)?.code || period.className || "Turma Especial"}
                               </h3>
                             </div>
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">{period.classType}</p>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                              {classes.find(c => c.id === period.classId)?.type || period.classType}
+                            </p>
                             <div className={`inline-flex px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${statusColor}`}>
                               {statusText}
                             </div>
@@ -843,7 +860,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                   <Drama size={40} />
                 </div>
                 <h3 className="text-white text-2xl font-black uppercase tracking-tight">Avaliação Pedagógica</h3>
-                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-2">{meetingModal.className}</p>
+                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-2">{classes.find(c => c.id === meetingModal.classId)?.code || meetingModal.className}</p>
                 <button 
                   onClick={() => setMeetingModal(null)}
                   className="absolute top-6 right-6 text-white/50 hover:text-white"
@@ -866,7 +883,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                   <>
                     <div className="space-y-4">
                       <p className="text-slate-600 font-medium leading-relaxed text-center">
-                        Para saber as notas e feedbacks detalhados dados pelo professor na turma de <strong>{meetingModal.className}</strong>, você deve agendar um horário para uma devolutiva pedagógica.
+                        Para saber as notas e feedbacks detalhados dados pelo professor na turma de <strong>{classes.find(c => c.id === meetingModal.classId)?.code || meetingModal.className}</strong>, você deve agendar um horário para uma devolutiva pedagógica.
                       </p>
                       <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-3">
                         <AlertCircle className="text-amber-500 shrink-0" size={18} />

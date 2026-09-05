@@ -414,8 +414,11 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
       // 5. Search text query
       if (historySearchQuery.trim()) {
         const query = historySearchQuery.toLowerCase().trim();
+        const targetCls = classes.find(c => c.id === d.classId);
+        const currentClassCode = (targetCls?.code || d.className || d.classCode || "").toLowerCase();
+        const currentClassType = (targetCls?.type || d.classType || "").toLowerCase();
         const matchesComment = (d.classComment || "").toLowerCase().includes(query);
-        const matchesClass = (d.className || d.classCode || "").toLowerCase().includes(query);
+        const matchesClass = currentClassCode.includes(query) || currentClassType.includes(query);
         const matchesTeacher = (d.teacherName || "").toLowerCase().includes(query);
         const matchesDate = (d.date || "").includes(query);
         
@@ -1186,10 +1189,10 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <span className="px-2.5 py-0.5 bg-pro-teal/10 text-pro-teal text-[10px] font-black uppercase tracking-wider rounded-md">
-                                {entry.classType || "Turma"}
+                                {classes.find(c => c.id === entry.classId)?.type || entry.classType || "Turma"}
                               </span>
                               <h4 className="text-base font-black text-slate-800 uppercase tracking-tight mt-1">
-                                {entry.className || entry.classCode}
+                                {classes.find(c => c.id === entry.classId)?.code || entry.className || entry.classCode}
                               </h4>
                             </div>
                             <div className="px-3 py-1 bg-slate-100 text-slate-800 text-xs font-black rounded-xl shrink-0 flex items-center gap-1.5 border border-slate-200">
@@ -1318,7 +1321,7 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                     </span>
                   </div>
                   <h3 className="text-xl font-black uppercase tracking-tight mt-1">
-                    {viewingDetailDiary.className || viewingDetailDiary.classCode}
+                    {classes.find(c => c.id === viewingDetailDiary.classId)?.code || viewingDetailDiary.className || viewingDetailDiary.classCode}
                   </h3>
                   <p className="text-xs text-teal-100/90 font-medium flex items-center gap-2 mt-1">
                     <GraduationCap size={14} className="text-pro-yellow" /> Professor(a):{" "}

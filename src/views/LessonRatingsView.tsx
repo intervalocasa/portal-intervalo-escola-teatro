@@ -240,7 +240,9 @@ export const LessonRatingsView: React.FC<LessonRatingsViewProps> = ({ onBack, cl
                         <Avatar src={student?.photo} className="w-14 h-14 rounded-full" fallbackSize={24} />
                         <div>
                           <h4 className="text-slate-800 font-black uppercase text-sm leading-tight">{student ? getUserDisplayName(student) : item.studentName}</h4>
-                          <p className="text-[10px] font-bold text-pro-teal uppercase tracking-widest mt-0.5">{classItem?.type || "Turma não encontrada"}</p>
+                          <p className="text-[10px] font-bold text-pro-teal uppercase tracking-widest mt-0.5">
+                            {classItem ? `${classItem.code} • ${classItem.type}` : (item.className || "Turma não encontrada")}
+                          </p>
                           <div className="flex items-center gap-1.5 text-slate-400 mt-1">
                             <Calendar size={12} />
                             <span className="text-[10px] font-bold uppercase tracking-tight">

@@ -83,7 +83,7 @@ export const StudentDiaryFormView = ({
 
   const handleValidatedSubmit = (status: "rascunho" | "concluido") => {
     if (isInactiveStudent) {
-      alert("Alunos inativos ou trancados não devem ter lançamentos no diário.");
+      alert("Alunos desmatriculados ou trancados não devem ter lançamentos no diário.");
       return;
     }
     if (deadlineInfo.isExpired && !isGestorOrDirector) {

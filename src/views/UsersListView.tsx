@@ -8,14 +8,14 @@ import { motion, AnimatePresence } from "motion/react";
 import { UserCircle, ChevronDown, ArrowLeft, AlertTriangle, Trash2, CheckCircle, X, Loader2 } from "lucide-react";
 import { User, UserRole } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
-import { getUserDisplayName, getUserSecondaryName } from "../lib/userUtils";
+import { getUserDisplayName, getUserSecondaryName, isStudentInactive, isStudentDesmatriculado } from "../lib/userUtils";
 import { db } from "../lib/firebase";
 import { doc, deleteDoc } from "firebase/firestore";
 
 interface UsersListViewProps {
   users: User[];
-  filter: "Todos" | UserRole;
-  setFilter: (filter: "Todos" | UserRole) => void;
+  filter: "Todos" | "Desmatriculados" | UserRole;
+  setFilter: (filter: "Todos" | "Desmatriculados" | UserRole) => void;
   filteredUsers: User[];
   setSelectedUserId: (id: string | null) => void;
   setView: (view: string) => void;
@@ -131,7 +131,7 @@ export const UsersListView = ({
       <div className="p-8 md:p-16 space-y-6 flex-1 flex flex-col max-w-7xl mx-auto w-full">
         {/* Filters */}
         <div className="flex flex-wrap items-center justify-center gap-3 pb-6 border-b border-slate-100">
-          {["Todos", "Aluno", "Professor", "Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor", "Auxiliar Administrativo"].map((type) => (
+          {["Todos", "Aluno", "Desmatriculados", "Professor", "Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor", "Auxiliar Administrativo"].map((type) => (
             <button
               key={type}
               onClick={() => setFilter(type as any)}
@@ -200,7 +200,12 @@ export const UsersListView = ({
                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{getUserSecondaryName(u) ? `Nome social: ${getUserSecondaryName(u)}${u.pronouns ? ` • (${u.pronouns})` : ''}` : (u.pronouns ? `(${u.pronouns})` : "...")}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      {u.role === "Aluno" && (isStudentInactive(u) || isStudentDesmatriculado(u)) && (
+                        <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-200">
+                          Desmatriculado
+                        </span>
+                      )}
                       <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{u.role}</span>
                       <ChevronDown size={16} className="text-slate-300 -rotate-90" />
                     </div>

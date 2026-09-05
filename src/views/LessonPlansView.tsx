@@ -391,8 +391,11 @@ export const LessonPlansView = ({
 
       // 4. Search query
       const query = searchQuery.toLowerCase().trim();
+      const currentClassCode = (classes.find(c => c.id === p.classId)?.code || p.className || "").toLowerCase();
+      const currentClassType = (classes.find(c => c.id === p.classId)?.type || p.classType || "").toLowerCase();
       const matchQuery = !query || 
-        p.className?.toLowerCase().includes(query) ||
+        currentClassCode.includes(query) ||
+        currentClassType.includes(query) ||
         p.generalObjective?.toLowerCase().includes(query) ||
         p.teacherName?.toLowerCase().includes(query) ||
         p.observations?.toLowerCase().includes(query) ||
@@ -400,7 +403,7 @@ export const LessonPlansView = ({
 
       return matchTeacher && matchClass && matchMonth && matchYear && matchQuery;
     });
-  }, [userVisiblePlans, filterTeacherId, filterClassId, filterMonth, filterYear, searchQuery, users]);
+  }, [userVisiblePlans, filterTeacherId, filterClassId, filterMonth, filterYear, searchQuery, users, classes]);
 
   return (
     <motion.div
@@ -706,7 +709,7 @@ export const LessonPlansView = ({
                           <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="px-3 py-1 rounded-xl bg-teal-50 text-pro-teal text-xs font-black uppercase tracking-wider">
-                                {plan.className || "Turma"}
+                                {classes.find(c => c.id === plan.classId)?.code || plan.className || "Turma"}
                               </span>
                               <span className="text-xs font-bold text-slate-600 bg-slate-50 px-3 py-1 rounded-xl flex items-center gap-1.5 border border-slate-200/60">
                                 <Calendar size={13} className="text-pro-orange" /> {dateFormatted}
@@ -880,7 +883,7 @@ export const LessonPlansView = ({
                   <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
                     Plano de Aula Pedagógico • Detalhes
                   </span>
-                  <h3 className="text-xl font-black tracking-tight">{viewingPlan.className}</h3>
+                  <h3 className="text-xl font-black tracking-tight">{classes.find(c => c.id === viewingPlan.classId)?.code || viewingPlan.className}</h3>
                   <p className="text-xs text-slate-300 font-bold">
                     📅 {typeof viewingPlan.date === "string" ? viewingPlan.date.split("-").reverse().join("/") : new Date(viewingPlan.date?.toDate?.() || viewingPlan.date).toLocaleDateString("pt-BR")} • Prof. {viewingPlan.teacherName || "Professor"}
                   </p>
@@ -888,7 +891,11 @@ export const LessonPlansView = ({
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => generateLessonPlanPDF(viewingPlan, skillsList)}
+                    onClick={() => generateLessonPlanPDF({
+                      ...viewingPlan,
+                      className: classes.find(c => c.id === viewingPlan.classId)?.code || viewingPlan.className,
+                      classType: classes.find(c => c.id === viewingPlan.classId)?.type || viewingPlan.classType
+                    }, skillsList)}
                     className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-950/20"
                   >
                     <Download size={15} /> Baixar PDF
@@ -908,7 +915,7 @@ export const LessonPlansView = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-4 bg-white rounded-2xl border border-slate-200/80">
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Turma</span>
-                    <p className="text-sm font-bold text-slate-800 mt-0.5">{viewingPlan.className || "Turma"}</p>
+                    <p className="text-sm font-bold text-slate-800 mt-0.5">{classes.find(c => c.id === viewingPlan.classId)?.code || viewingPlan.className || "Turma"}</p>
                   </div>
                   <div className="p-4 bg-white rounded-2xl border border-slate-200/80">
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Professor(a)</span>

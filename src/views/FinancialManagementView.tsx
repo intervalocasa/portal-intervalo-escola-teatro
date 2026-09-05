@@ -185,7 +185,7 @@ export interface EnrollmentRecord {
   enrollmentDate: string; // YYYY-MM-DD
   paymentType: "Pagante" | "Isento";
   isEnrollmentActive: boolean;
-  statusLabel: "Ativa" | "Inativa";
+  statusLabel: "Ativa" | "Desmatriculado";
 }
 
 export interface PaymentRecord {
@@ -223,7 +223,7 @@ export const FinancialManagementView = ({
   const [activeTab, setActiveTab] = useState<"matriculas" | "pagamentos">("matriculas");
   
   // Matrículas States
-  const [statusFilter, setStatusFilter] = useState<"Todas" | "Ativas" | "Inativas">("Todas");
+  const [statusFilter, setStatusFilter] = useState<"Todas" | "Ativas" | "Desmatriculados">("Todas");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>("Todas");
 
@@ -304,9 +304,37 @@ export const FinancialManagementView = ({
           enrollmentDate: dateStr,
           paymentType,
           isEnrollmentActive,
-          statusLabel: isEnrollmentActive ? "Ativa" : "Inativa"
+          statusLabel: isEnrollmentActive ? "Ativa" : "Desmatriculado"
         });
       });
+    });
+
+    // Also include desmatriculado students who may not have a current class assignment
+    const enrolledStudentIds = new Set(records.map(r => r.studentId));
+    studentUsers.forEach(student => {
+      if (isStudentUserInactive(student) && !enrolledStudentIds.has(student.id)) {
+        records.push({
+          id: `desmat_${student.id}`,
+          studentId: student.id,
+          studentName: student.name,
+          studentSocialName: student.socialName,
+          studentCpf: student.cpf || "Não informado",
+          studentEmail: student.email || "",
+          studentPhone: student.phone || "Não informado",
+          studentPhoto: student.photo,
+          isStudentInactive: true,
+          classId: "sem_turma",
+          classCode: "Sem Turma",
+          classType: "Desmatriculado",
+          classWeekday: "",
+          classTime: "",
+          isClassActive: false,
+          enrollmentDate: (student.createdAt?.toDate ? student.createdAt.toDate().toISOString().split('T')[0] : "") || "Data N/D",
+          paymentType: "Pagante",
+          isEnrollmentActive: false,
+          statusLabel: "Desmatriculado"
+        });
+      }
     });
 
     return records.sort((a, b) => a.studentName.localeCompare(b.studentName, "pt-BR"));
@@ -317,7 +345,7 @@ export const FinancialManagementView = ({
     return allEnrollmentRecords.filter(rec => {
       // Status filter
       if (statusFilter === "Ativas" && !rec.isEnrollmentActive) return false;
-      if (statusFilter === "Inativas" && rec.isEnrollmentActive) return false;
+      if (statusFilter === "Desmatriculados" && rec.isEnrollmentActive) return false;
 
       // Class filter
       if (selectedClassFilter !== "Todas" && rec.classId !== selectedClassFilter) return false;
@@ -339,7 +367,7 @@ export const FinancialManagementView = ({
   // Metrics for Matrículas
   const totalMatriculas = allEnrollmentRecords.length;
   const matriculasAtivas = allEnrollmentRecords.filter(r => r.isEnrollmentActive).length;
-  const matriculasInativas = allEnrollmentRecords.filter(r => !r.isEnrollmentActive).length;
+  const matriculasDesmatriculadas = allEnrollmentRecords.filter(r => !r.isEnrollmentActive).length;
   const taxaAtividade = totalMatriculas > 0 ? Math.round((matriculasAtivas / totalMatriculas) * 100) : 0;
 
   // Payments computation
@@ -658,7 +686,7 @@ export const FinancialManagementView = ({
       docPDF.text(`Filtro de Status: ${statusFilter.toUpperCase()}`, 18, 58);
       docPDF.text(`Total Exibido: ${filteredEnrollments.length}`, 80, 58);
       docPDF.text(`Matrículas Ativas: ${matriculasAtivas}`, 130, 58);
-      docPDF.text(`Matrículas Inativas: ${matriculasInativas}`, 175, 58, { align: "right" });
+      docPDF.text(`Desmatriculados: ${matriculasDesmatriculadas}`, 175, 58, { align: "right" });
 
       // Table Data Preparation
       const tableRows = filteredEnrollments.map((item, index) => {
@@ -998,12 +1026,12 @@ export const FinancialManagementView = ({
 
                 <div className="bg-white p-5 rounded-2xl border border-rose-100 shadow-sm flex flex-col justify-between">
                   <div className="flex items-center justify-between text-rose-500">
-                    <span className="text-[10px] font-black uppercase tracking-wider">Inativas</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider">Desmatriculados</span>
                     <UserX size={18} />
                   </div>
                   <div className="mt-3">
-                    <div className="text-2xl md:text-3xl font-black text-rose-500">{matriculasInativas}</div>
-                    <div className="text-[10px] font-bold text-rose-400 mt-0.5">Trancadas ou encerradas</div>
+                    <div className="text-2xl md:text-3xl font-black text-rose-500">{matriculasDesmatriculadas}</div>
+                    <div className="text-[10px] font-bold text-rose-400 mt-0.5">Alunos desmatriculados</div>
                   </div>
                 </div>
 
@@ -1025,7 +1053,7 @@ export const FinancialManagementView = ({
                   
                   {/* Status Filter Buttons */}
                   <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl w-full lg:w-auto">
-                    {(["Todas", "Ativas", "Inativas"] as const).map(st => (
+                    {(["Todas", "Ativas", "Desmatriculados"] as const).map(st => (
                       <button
                         key={st}
                         onClick={() => setStatusFilter(st)}
@@ -1035,7 +1063,7 @@ export const FinancialManagementView = ({
                             : "text-slate-500 hover:text-slate-800"
                         }`}
                       >
-                        {st === "Todas" ? "Todas" : st === "Ativas" ? "Matrículas Ativas" : "Matrículas Inativas"}
+                        {st === "Todas" ? "Todas" : st === "Ativas" ? "Matrículas Ativas" : "Desmatriculados"}
                       </button>
                     ))}
                   </div>
@@ -1176,17 +1204,35 @@ export const FinancialManagementView = ({
                               type="button"
                               onClick={async () => {
                                 try {
-                                  const classRef = doc(db, "classes", record.classId);
-                                  const newStatus = record.isEnrollmentActive ? "Inativo" : "Ativo";
-                                  await updateDoc(classRef, {
-                                    [`studentEnrollmentStatuses.${record.studentId}`]: newStatus
-                                  });
+                                  const newStatus = record.isEnrollmentActive ? "Desmatriculado" : "Ativo";
+                                  if (record.classId && record.classId !== "sem_turma") {
+                                    const classRef = doc(db, "classes", record.classId);
+                                    await updateDoc(classRef, {
+                                      [`studentEnrollmentStatuses.${record.studentId}`]: newStatus
+                                    });
+                                  }
+                                  const userRef = doc(db, "usuarios", record.studentId);
+                                  if (record.isEnrollmentActive) {
+                                    await updateDoc(userRef, {
+                                      desmatriculado: true,
+                                      inactive: true,
+                                      status: "desmatriculado",
+                                      enrollmentStatus: "Desmatriculado"
+                                    });
+                                  } else {
+                                    await updateDoc(userRef, {
+                                      desmatriculado: false,
+                                      inactive: false,
+                                      status: "ativo",
+                                      enrollmentStatus: "Ativo"
+                                    });
+                                  }
                                 } catch (err) {
                                   console.error("Erro ao alterar status da matrícula:", err);
                                   alert("Erro ao alterar status da matrícula.");
                                 }
                               }}
-                              title="Clique para alternar o status da matrícula (Ativa / Inativa)"
+                              title="Clique para alternar o status da matrícula (Ativa / Desmatriculado)"
                               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-xs ${
                                 record.isEnrollmentActive
                                   ? "bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100"
@@ -1200,8 +1246,8 @@ export const FinancialManagementView = ({
                                 </>
                               ) : (
                                 <>
-                                  <XCircle size={14} className="text-rose-500" />
-                                  Inativa
+                                  <UserX size={14} className="text-rose-500" />
+                                  Desmatriculado
                                 </>
                               )}
                             </button>

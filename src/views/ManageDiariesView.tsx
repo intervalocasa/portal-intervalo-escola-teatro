@@ -65,11 +65,13 @@ export const ManageDiariesView = ({
     return activeDiaries.filter(d => {
       const student = users.find(u => u.id === d.studentId || u.migratedFrom === d.studentId || u.migratedTo === d.studentId);
       const studentName = (d.studentName || (student ? getUserDisplayName(student) : "") || "").toLowerCase();
-      const className = (d.className || "").toLowerCase();
+      const cls = classes.find(c => c.id === d.classId);
+      const currentClassName = (cls?.code || d.className || "").toLowerCase();
+      const currentClassType = (cls?.type || d.classType || "").toLowerCase();
       const teacherName = (d.teacherName || "").toLowerCase();
       const term = searchTerm.toLowerCase();
 
-      const matchesSearch = !term || studentName.includes(term) || className.includes(term) || teacherName.includes(term);
+      const matchesSearch = !term || studentName.includes(term) || currentClassName.includes(term) || currentClassType.includes(term) || teacherName.includes(term);
       const matchesClass = filterClassId === "all" || d.classId === filterClassId;
       const matchesMonth = filterMonth === "all" || d.month === Number(filterMonth);
       const matchesYear = filterYear === "all" || d.year === Number(filterYear);
@@ -77,7 +79,7 @@ export const ManageDiariesView = ({
 
       return matchesSearch && matchesClass && matchesMonth && matchesYear && matchesStatus;
     });
-  }, [activeDiaries, users, searchTerm, filterClassId, filterMonth, filterYear, filterStatus]);
+  }, [activeDiaries, users, classes, searchTerm, filterClassId, filterMonth, filterYear, filterStatus]);
 
   const handleUpdateRequestStatus = async (requestId: string, status: 'pendente' | 'em_atendimento' | 'concluido') => {
     try {
@@ -212,7 +214,7 @@ export const ManageDiariesView = ({
                             />
                             <div>
                               <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{request.studentName}</p>
-                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{request.className}</p>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{classes.find(c => c.id === request.classId)?.code || request.className}</p>
                             </div>
                           </div>
                           <div className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${
@@ -379,8 +381,8 @@ export const ManageDiariesView = ({
                          </td>
                          <td className="px-6 py-5">
                             <div className="space-y-0.5">
-                               <p className="text-xs font-black text-slate-700 uppercase tracking-tight">{d.className}</p>
-                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">{d.classType?.split(" - ")[1] || d.classType}</p>
+                               <p className="text-xs font-black text-slate-700 uppercase tracking-tight">{classes.find(c => c.id === d.classId)?.code || d.className}</p>
+                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">{(classes.find(c => c.id === d.classId)?.type || d.classType)?.split(" - ")[1] || (classes.find(c => c.id === d.classId)?.type || d.classType)}</p>
                             </div>
                          </td>
                          <td className="px-6 py-5 text-center">
@@ -416,8 +418,8 @@ export const ManageDiariesView = ({
                                   const stEval = evaluations.find(ev => ev.studentId === d.studentId && ev.classId === d.classId && ev.month === d.month && ev.year === d.year);
                                   generateDiaryPDF({
                                     studentName: d.studentName || "Aluno",
-                                    className: d.className || cls?.code || "Turma",
-                                    classType: d.classType || cls?.type,
+                                    className: cls?.code || d.className || "Turma",
+                                    classType: cls?.type || d.classType,
                                     teacherName: d.teacherName || "Professor Responsável",
                                     month: d.month,
                                     year: d.year,

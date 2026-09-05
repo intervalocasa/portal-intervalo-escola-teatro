@@ -38,7 +38,7 @@ import { MuralTurma } from "../components/MuralTurma";
 import { db } from "../lib/firebase";
 import { doc, updateDoc, arrayUnion, arrayRemove, deleteField, getDoc, collection, query, onSnapshot, orderBy } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
-import { getUserDisplayName, getUserSecondaryName, isStudentActiveInClass } from "../lib/userUtils";
+import { getUserDisplayName, getUserSecondaryName, isStudentActiveInClass, isStudentInactive, isStudentDesmatriculado } from "../lib/userUtils";
 
 interface ClassDetailsViewProps {
   selectedClassId: string | null;
@@ -196,19 +196,34 @@ export const ClassDetailsView = ({
   const enrichedUser = users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || null;
   const classStudents = useMemo(() => {
     if (!targetClass) return [];
-    if (isGestorRole) {
-      // Gestores see all students enrolled in the class to be able to manage them (active, locked, inactive)
-      const studentIds = (targetClass.studentIds || []).map(id => String(id).trim().toLowerCase());
-      return users
-        .filter(u => {
-          const candidateIds = [u.id, u.migratedFrom, u.migratedTo, u.email].filter(Boolean).map(id => String(id).trim().toLowerCase());
-          return candidateIds.some(cid => studentIds.includes(cid));
-        })
-        .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
-    }
-    // Teachers and other roles only see active students in class
+    const studentIds = (targetClass.studentIds || []).map(id => String(id).trim().toLowerCase());
     return users
-      .filter(u => isStudentActiveInClass(u, targetClass))
+      .filter(u => {
+        const candidateIds = [u.id, u.migratedFrom, u.migratedTo, u.email].filter(Boolean).map(id => String(id).trim().toLowerCase());
+        if (!candidateIds.some(cid => studentIds.includes(cid))) return false;
+
+        // Never show inactive or desmatriculado students in ANY class
+        if (isStudentInactive(u) || isStudentDesmatriculado(u)) return false;
+
+        const classStatus = String(targetClass.studentEnrollmentStatuses?.[u.id] || "").trim().toLowerCase();
+        if (
+          classStatus === "inativo" || 
+          classStatus === "inativa" || 
+          classStatus === "desmatriculado" || 
+          classStatus === "desmatriculada" || 
+          classStatus === "cancelado" || 
+          classStatus === "removido"
+        ) {
+          return false;
+        }
+
+        // Non-gestores also do not see locked (Trancado) students
+        if (!isGestorRole && classStatus === "trancado") {
+          return false;
+        }
+
+        return true;
+      })
       .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), 'pt-BR'));
   }, [users, targetClass, isGestorRole]);
 
@@ -217,6 +232,8 @@ export const ClassDetailsView = ({
     return users
       .filter(u => 
         u.role === "Aluno" && 
+        !isStudentInactive(u) &&
+        !isStudentDesmatriculado(u) &&
         !targetClass.studentIds?.includes(u.id) &&
         (getUserDisplayName(u).toLowerCase().includes(searchQuery.toLowerCase()) || 
          getUserSecondaryName(u)?.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -556,11 +573,6 @@ export const ClassDetailsView = ({
                                   Trancado(a)
                                 </span>
                               )}
-                              {targetClass.studentEnrollmentStatuses?.[s.id] === "Inativo" && (
-                                <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200">
-                                  Inativo(a)
-                                </span>
-                              )}
                               {isGestorOnly && (
                                 targetClass.studentPaymentTypes?.[s.id] === "Isento" ? (
                                   <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
@@ -898,8 +910,8 @@ export const ClassDetailsView = ({
                       if (currentStatus === "Trancado") {
                         statusLabel = "Status: Trancado(a)";
                         statusColor = "text-amber-600";
-                      } else if (currentStatus === "Inativo") {
-                        statusLabel = "Status: Inativo(a)";
+                      } else if (currentStatus === "Inativo" || currentStatus === "Desmatriculado") {
+                        statusLabel = "Status: Desmatriculado(a)";
                         statusColor = "text-rose-600";
                       }
                       return (
@@ -937,11 +949,11 @@ export const ClassDetailsView = ({
                         <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase ${
                           targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Trancado"
                             ? "bg-amber-100 text-amber-800"
-                            : targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Inativo"
+                            : (targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Inativo" || targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Desmatriculado")
                             ? "bg-rose-100 text-rose-800"
                             : "bg-teal-50 text-teal-700"
                         }`}>
-                          {targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] || "Ativo"}
+                          {targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Inativo" ? "Desmatriculado" : (targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] || "Ativo")}
                         </span>
                       </div>
 
@@ -996,20 +1008,21 @@ export const ClassDetailsView = ({
                             if (!selectedClassId || !selectedStudentForManagement) return;
                             try {
                               await updateDoc(doc(db, "classes", selectedClassId), {
-                                [`studentEnrollmentStatuses.${selectedStudentForManagement.id}`]: "Inativo"
+                                [`studentEnrollmentStatuses.${selectedStudentForManagement.id}`]: "Desmatriculado"
                               });
-                              showNotification("Matrícula inativada com sucesso!", "Sucesso", "success");
+                              showNotification("Aluno desmatriculado com sucesso!", "Sucesso", "success");
+                              setSelectedStudentForManagement(null);
                             } catch (err) {
                               showNotification("Erro ao atualizar status da matrícula.", "Erro", "error");
                             }
                           }}
                           className={`py-2.5 px-2 rounded-xl font-extrabold text-[10px] uppercase flex items-center justify-center gap-1.5 border transition-all ${
-                            targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Inativo"
+                            (targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Inativo" || targetClass.studentEnrollmentStatuses?.[selectedStudentForManagement.id] === "Desmatriculado")
                               ? "bg-rose-600 text-white border-rose-600 shadow-md"
                               : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
                           }`}
                         >
-                          <UserX size={13} /> Inativar
+                          <UserX size={13} /> Desmatricular
                         </button>
                       </div>
                     </div>

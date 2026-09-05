@@ -4,13 +4,15 @@
  */
 
 import { motion } from "motion/react";
-import { UserCircle, Eye, ArrowLeft, Award, Trash2, X } from "lucide-react";
+import { UserCircle, Eye, ArrowLeft, Award, Trash2, X, UserX } from "lucide-react";
 import { User, Class, Evaluation, UserBadge, UserRole } from "../types";
 import { DetailItem, Avatar, BackButton } from "../components/CommonComponents";
 import { BadgeAwardModal } from "../components/BadgeAwardModal";
 import { BADGES } from "../constants/badges";
 import { useState } from "react";
-import { getUserDisplayName, getUserPronouns } from "../lib/userUtils";
+import { getUserDisplayName, getUserPronouns, isStudentInactive, isStudentDesmatriculado } from "../lib/userUtils";
+import { db } from "../lib/firebase";
+import { doc, updateDoc } from "firebase/firestore";
 
 interface UserDetailsViewProps {
   selectedUserId: string | null;
@@ -32,7 +34,7 @@ interface UserDetailsViewProps {
   currentUserRole?: string;
   isGestor: boolean;
   setSelectedEnrollmentDates: (dates: Record<string, string>) => void;
-  setEditEnrollmentInfo: (info: {classId: string, studentId: string, date: string, paymentType?: "Pagante" | "Isento", status?: "Ativo" | "Trancado" | "Inativo"} | null) => void;
+  setEditEnrollmentInfo: (info: {classId: string, studentId: string, date: string, paymentType?: "Pagante" | "Isento", status?: "Ativo" | "Trancado" | "Desmatriculado" | "Inativo"} | null) => void;
   setRegType?: (role: UserRole) => void;
 }
 
@@ -97,12 +99,55 @@ export const UserDetailsView = ({
            <p className="text-pro-yellow text-xs md:text-sm mt-3 uppercase tracking-[0.4em] font-black bg-white/10 p-2 rounded-lg backdrop-blur-sm border border-white/10 inline-block">
              {user.role}
            </p>
+           {user.role === "Aluno" && (isStudentInactive(user) || isStudentDesmatriculado(user)) && (
+             <span className="ml-2 text-xs md:text-sm uppercase tracking-wider font-black bg-rose-500/20 text-rose-200 p-2 rounded-lg backdrop-blur-sm border border-rose-400/30 inline-block">
+               Desmatriculado
+             </span>
+           )}
          </div>
       </div>
 
       <div className="p-10 md:p-20 space-y-8 flex-1 overflow-y-auto custom-scrollbar bg-slate-50">
         {/* Action Bar */}
         <div className="max-w-7xl mx-auto w-full flex justify-end gap-3 mb-4">
+           {isGestor && user.role === "Aluno" && (
+             <button
+               onClick={async () => {
+                 const isDesmat = isStudentInactive(user) || isStudentDesmatriculado(user);
+                 if (!window.confirm(`Deseja realmente ${isDesmat ? "rematricular" : "desmatricular"} este aluno?`)) return;
+                 try {
+                   const userRef = doc(db, "usuarios", user.id);
+                   if (isDesmat) {
+                     await updateDoc(userRef, {
+                       desmatriculado: false,
+                       inactive: false,
+                       status: "ativo",
+                       enrollmentStatus: "Ativo"
+                     });
+                     alert("Aluno rematriculado com sucesso!");
+                   } else {
+                     await updateDoc(userRef, {
+                       desmatriculado: true,
+                       inactive: true,
+                       status: "desmatriculado",
+                       enrollmentStatus: "Desmatriculado"
+                     });
+                     alert("Aluno desmatriculado com sucesso!");
+                   }
+                 } catch (err: any) {
+                   alert("Erro ao atualizar situação do aluno: " + err.message);
+                 }
+               }}
+               className={`p-3 rounded-xl border transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-sm ${
+                 (isStudentInactive(user) || isStudentDesmatriculado(user))
+                   ? "bg-white text-emerald-600 border-emerald-200 hover:border-emerald-600"
+                   : "bg-white text-rose-600 border-rose-200 hover:border-rose-600"
+               }`}
+             >
+               <UserX size={14} />
+               {(isStudentInactive(user) || isStudentDesmatriculado(user)) ? "Rematricular Aluno" : "Desmatricular Aluno"}
+             </button>
+           )}
            <button 
              onClick={() => {
                setFormData({
@@ -260,7 +305,7 @@ export const UserDetailsView = ({
                                         ? "bg-amber-100 text-amber-800 border border-amber-200"
                                         : "bg-rose-100 text-rose-800 border border-rose-200"
                                     }`}>
-                                      {c.studentEnrollmentStatuses[user.id]}
+                                      {c.studentEnrollmentStatuses[user.id] === "Inativo" ? "Desmatriculado" : c.studentEnrollmentStatuses[user.id]}
                                     </span>
                                   </div>
                                 )}

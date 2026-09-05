@@ -316,3 +316,18 @@ export function isStudentActiveInClass(
   return isEnrolled;
 }
 
+/**
+ * Checks if a student is desmatriculado (formerly inativo).
+ * Mirrors isStudentInactive to ensure all inactive and desmatriculado students
+ * are uniformly treated as desmatriculados across the application.
+ */
+export const isStudentDesmatriculado = isStudentInactive;
+
+/**
+ * Returns the human-readable enrollment status label for a student.
+ * Excludes "Inativo" tag entirely, mapping all inactive states to "Desmatriculado".
+ */
+export function getStudentStatusLabel(user: Partial<User> | null | undefined): "Matriculado" | "Desmatriculado" {
+  return isStudentInactive(user) ? "Desmatriculado" : "Matriculado";
+}
+

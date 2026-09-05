@@ -117,6 +117,8 @@ export interface User {
   migratedFrom?: string;
   migratedTo?: string;
   inactive?: boolean;
+  desmatriculado?: boolean;
+  statusMatricula?: "Matriculado" | "Desmatriculado" | "Trancado";
   customMonthlyFee?: number;
 }
 
@@ -133,7 +135,7 @@ export interface Class {
   studentIds: string[];
   enrollmentDates?: Record<string, string>;
   studentPaymentTypes?: Record<string, "Pagante" | "Isento">;
-  studentEnrollmentStatuses?: Record<string, "Ativo" | "Trancado" | "Inativo">;
+  studentEnrollmentStatuses?: Record<string, "Ativo" | "Trancado" | "Desmatriculado" | "Inativo">;
   year: string;
 }
 
