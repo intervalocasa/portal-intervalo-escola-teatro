@@ -100,6 +100,38 @@ export function formatDateBR(dateString: string): string {
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
 
+export function getBookingMonthKey(dateString?: string): string {
+  if (!dateString) return "";
+  const parts = dateString.trim().split('-');
+  if (parts.length >= 2) {
+    const year = parts[0];
+    const month = parts[1].padStart(2, "0");
+    return `${year}-${month}`;
+  }
+  return "";
+}
+
+export function getCurrentMonthKey(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+export function getMonthYearLabel(yearMonthString: string): string {
+  if (!yearMonthString) return "";
+  const parts = yearMonthString.split('-');
+  if (parts.length < 2) return yearMonthString;
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  if (isNaN(year) || isNaN(month)) return yearMonthString;
+  const monthNames = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+  return `${monthNames[month - 1]} de ${year}`;
+}
+
 export function formatCreationTimestamp(createdAt: any): string | null {
   if (!createdAt) return null;
   let dateObj: Date | null = null;
@@ -158,10 +190,12 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const [bookings, setBookings] = useState<ExperimentalClassBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [monthFilter, setMonthFilter] = useState<string>("TODOS");
   const [statusFilter, setStatusFilter] = useState<"TODOS" | "PAGAMENTO_PENDENTE" | "AGENDAMENTO_CONFIRMADO">("TODOS");
   const [classFilter, setClassFilter] = useState<string>("TODOS");
   const [creatorFilter, setCreatorFilter] = useState<string>("TODOS"); // "TODOS" | "MEUS" | id/name
   const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
+  const [revenueModalTab, setRevenueModalTab] = useState<"ACUMULADO" | "MES_VIGENTE">("ACUMULADO");
   
   // Specific Tabs Filter
   const [tabFilter, setTabFilter] = useState<
@@ -782,18 +816,82 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     return false;
   };
 
+  // Month & Period Helpers
+  const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
+  const currentMonthName = useMemo(() => getMonthYearLabel(currentMonthKey), [currentMonthKey]);
+
+  // Available Months for Month Filter Dropdown (gathered from bookings + current month)
+  const availableMonths = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; count: number; isCurrent: boolean }>();
+    
+    // Always include current month
+    map.set(currentMonthKey, {
+      key: currentMonthKey,
+      label: getMonthYearLabel(currentMonthKey),
+      count: 0,
+      isCurrent: true,
+    });
+
+    bookings.forEach(b => {
+      const mKey = getBookingMonthKey(b.date);
+      if (mKey) {
+        if (!map.has(mKey)) {
+          map.set(mKey, {
+            key: mKey,
+            label: getMonthYearLabel(mKey),
+            count: 0,
+            isCurrent: mKey === currentMonthKey,
+          });
+        }
+        map.get(mKey)!.count += 1;
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.key.localeCompare(a.key));
+  }, [bookings, currentMonthKey]);
+
+  // Scoped bookings for tabs (reflects month filter if selected)
+  const scopedBookingsForTabs = useMemo(() => {
+    if (monthFilter === "TODOS") return bookings;
+    return bookings.filter(b => getBookingMonthKey(b.date) === monthFilter);
+  }, [bookings, monthFilter]);
+
   // Tab counts
-  const totalCount = bookings.length;
-  const agendadosCount = bookings.filter(b => !b.triageStatus).length;
-  const matriculadosCount = bookings.filter(b => b.triageStatus === "MATRICULADO").length;
-  const aguardandoCount = bookings.filter(b => b.triageStatus === "AGUARDANDO_RESPOSTA").length;
-  const naoMatriculadosCount = bookings.filter(b => b.triageStatus === "NAO_MATRICULOU").length;
-  const naoCompareceuCount = bookings.filter(b => b.triageStatus === "NAO_COMPARECEU" || b.attended === false).length;
+  const totalCount = scopedBookingsForTabs.length;
+  const agendadosCount = scopedBookingsForTabs.filter(b => !b.triageStatus).length;
+  const matriculadosCount = scopedBookingsForTabs.filter(b => b.triageStatus === "MATRICULADO").length;
+  const aguardandoCount = scopedBookingsForTabs.filter(b => b.triageStatus === "AGUARDANDO_RESPOSTA").length;
+  const naoMatriculadosCount = scopedBookingsForTabs.filter(b => b.triageStatus === "NAO_MATRICULOU").length;
+  const naoCompareceuCount = scopedBookingsForTabs.filter(b => b.triageStatus === "NAO_COMPARECEU" || b.attended === false).length;
 
-  const confirmedCount = bookings.filter(b => b.status === "AGENDAMENTO_CONFIRMADO").length;
-  const pendingCount = bookings.filter(b => b.status === "PAGAMENTO_PENDENTE").length;
+  const confirmedCount = scopedBookingsForTabs.filter(b => b.status === "AGENDAMENTO_CONFIRMADO").length;
+  const pendingCount = scopedBookingsForTabs.filter(b => b.status === "PAGAMENTO_PENDENTE").length;
 
-  // Logged-in User Metrics & Revenue
+  // --- CURRENT MONTH (MÊS VIGENTE) METRICS ---
+  // A receita do topo é baseada exclusivamente nos comparecimentos do mês vigente e zera ao final de cada mês
+  const currentMonthBookings = useMemo(() => {
+    return bookings.filter(b => getBookingMonthKey(b.date) === currentMonthKey);
+  }, [bookings, currentMonthKey]);
+
+  const myCurrentMonthBookings = useMemo(() => {
+    return currentMonthBookings.filter(b => 
+      isBookingCreatedByUser(b, currentUser?.uid || loggedUser?.id, loggedUser?.name, currentUser?.email)
+    );
+  }, [currentMonthBookings, currentUser, loggedUser]);
+
+  const myCurrentMonthAttendedBookings = useMemo(() => myCurrentMonthBookings.filter(isBookingAttended), [myCurrentMonthBookings]);
+  const myCurrentMonthAttendedCount = myCurrentMonthAttendedBookings.length;
+  // Receita do usuário no mês vigente (R$ 25 por aluno presente no mês vigente)
+  const myCurrentMonthGeneratedRevenue = myCurrentMonthAttendedCount * 25;
+  const myCurrentMonthPendingCount = useMemo(() => myCurrentMonthBookings.filter(isBookingPending).length, [myCurrentMonthBookings]);
+  const myCurrentMonthProjectedRevenue = myCurrentMonthPendingCount * 25;
+  const myCurrentMonthAbsentCount = useMemo(() => myCurrentMonthBookings.filter(isBookingAbsent).length, [myCurrentMonthBookings]);
+
+  const totalCurrentMonthAttendedCount = useMemo(() => currentMonthBookings.filter(isBookingAttended).length, [currentMonthBookings]);
+  const totalCurrentMonthGeneratedRevenue = totalCurrentMonthAttendedCount * 25;
+
+  // --- ACCUMULATED (HISTÓRICO ACUMULADO) METRICS ---
+  // Acessível detalhadamente no Extrato de Receita
   const myBookings = useMemo(() => {
     return bookings.filter(b => 
       isBookingCreatedByUser(b, currentUser?.uid || loggedUser?.id, loggedUser?.name, currentUser?.email)
@@ -806,29 +904,38 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const myAbsentCount = useMemo(() => myBookings.filter(isBookingAbsent).length, [myBookings]);
   const myPendingCount = useMemo(() => myBookings.filter(isBookingPending).length, [myBookings]);
 
-  // Revenue for user: exactly R$ 25 per ATTENDED student only!
-  const myGeneratedRevenue = myAttendedCount * 25;
-  const myProjectedRevenue = myPendingCount * 25;
+  // Receita acumulada histórica do usuário
+  const myAccumulatedRevenue = myAttendedCount * 25;
+  const myAccumulatedProjectedRevenue = myPendingCount * 25;
 
-  // Total school metrics
+  // Total acumulado histórico da escola
   const totalAttendedCount = useMemo(() => bookings.filter(isBookingAttended).length, [bookings]);
   const totalAbsentCount = useMemo(() => bookings.filter(isBookingAbsent).length, [bookings]);
   const totalPendingAttendanceCount = useMemo(() => bookings.filter(isBookingPending).length, [bookings]);
-  const totalGeneratedRevenue = totalAttendedCount * 25;
+  const totalAccumulatedRevenue = totalAttendedCount * 25;
 
-  // Breakdown per Creator/User
+  // Breakdown per Creator/User (com suporte tanto a mês vigente quanto a acumulado)
   const creatorRevenueStats = useMemo(() => {
     const map = new Map<string, {
       id: string;
       name: string;
       role: string;
+      totalBookings: number;
+      attendedBookings: number;
+      absentBookings: number;
+      pendingBookings: number;
+      earnedRevenue: number;
+      pendingRevenue: number;
+      currentMonthAttended: number;
+      currentMonthRevenue: number;
+      currentMonthTotal: number;
+      isCurrentUser: boolean;
       total: number;
       attended: number;
       absent: number;
       pending: number;
       revenue: number;
       projected: number;
-      isCurrentUser: boolean;
     }>();
 
     bookings.forEach(b => {
@@ -842,34 +949,59 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           id,
           name,
           role,
+          totalBookings: 0,
+          attendedBookings: 0,
+          absentBookings: 0,
+          pendingBookings: 0,
+          earnedRevenue: 0,
+          pendingRevenue: 0,
+          currentMonthAttended: 0,
+          currentMonthRevenue: 0,
+          currentMonthTotal: 0,
+          isCurrentUser: isMe,
           total: 0,
           attended: 0,
           absent: 0,
           pending: 0,
           revenue: 0,
           projected: 0,
-          isCurrentUser: isMe,
         });
       }
 
       const item = map.get(id)!;
+      item.totalBookings += 1;
       item.total += 1;
+
+      const isCurrentMonth = getBookingMonthKey(b.date) === currentMonthKey;
+      if (isCurrentMonth) {
+        item.currentMonthTotal += 1;
+      }
+
       if (isBookingAttended(b)) {
+        item.attendedBookings += 1;
         item.attended += 1;
+        item.earnedRevenue += 25;
         item.revenue += 25;
+        if (isCurrentMonth) {
+          item.currentMonthAttended += 1;
+          item.currentMonthRevenue += 25;
+        }
       } else if (isBookingAbsent(b)) {
+        item.absentBookings += 1;
         item.absent += 1;
       } else {
+        item.pendingBookings += 1;
         item.pending += 1;
+        item.pendingRevenue += 25;
         item.projected += 25;
       }
     });
 
     return Array.from(map.values()).sort((a, b) => {
-      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
-      return b.attended - a.attended;
+      if (b.earnedRevenue !== a.earnedRevenue) return b.earnedRevenue - a.earnedRevenue;
+      return b.attendedBookings - a.attendedBookings;
     });
-  }, [bookings, currentUser, loggedUser]);
+  }, [bookings, currentUser, loggedUser, currentMonthKey]);
 
   // List of distinct creators in bookings for the filter dropdown
   const distinctBookingCreators = useMemo(() => {
@@ -930,6 +1062,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       const matchClass = 
         classFilter === "TODOS" || b.classGroup === classFilter;
 
+      const matchMonth = 
+        monthFilter === "TODOS" || getBookingMonthKey(b.date) === monthFilter;
+
       let matchTab = true;
       if (tabFilter === "AGENDADOS") {
         matchTab = !b.triageStatus;
@@ -962,9 +1097,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         matchAttendance = !b.attendanceConfirmation;
       }
 
-      return matchSearch && matchStatus && matchClass && matchTab && matchCreator && matchAttendance;
+      return matchSearch && matchStatus && matchClass && matchMonth && matchTab && matchCreator && matchAttendance;
     });
-  }, [bookings, searchTerm, statusFilter, classFilter, tabFilter, creatorFilter, attendanceFilter, currentUser, loggedUser]);
+  }, [bookings, searchTerm, statusFilter, classFilter, monthFilter, tabFilter, creatorFilter, attendanceFilter, currentUser, loggedUser]);
 
   return (
     <motion.div
@@ -1020,24 +1155,24 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-black uppercase tracking-wider">
                 <Coins size={13} className="text-emerald-400" />
-                Receita de Aulas Experimentais
+                Receita do Mês Vigente ({currentMonthName})
               </span>
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-300">
                 <Info size={12} className="text-teal-400" />
-                R$ 25,00 por aluno que compareceu
+                R$ 25,00 por aluno que compareceu • Zera no fim de cada mês
               </span>
             </div>
 
             <div>
               <span className="text-xs font-bold text-slate-300 uppercase tracking-widest block">
-                Sua Receita Gerada ({loggedUser?.name || "Você"})
+                Sua Receita no Mês Vigente ({loggedUser?.name || "Você"})
               </span>
               <div className="flex items-baseline gap-3 mt-1 flex-wrap">
                 <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                  R$ {myGeneratedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  R$ {myCurrentMonthGeneratedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-xs font-bold text-emerald-300 bg-emerald-950/80 px-2.5 py-1 rounded-lg border border-emerald-500/30">
-                  {myAttendedCount} {myAttendedCount === 1 ? "aluno compareceu" : "alunos compareceram"} (R$ 25 cada)
+                  {myCurrentMonthAttendedCount} {myCurrentMonthAttendedCount === 1 ? "aluno compareceu este mês" : "alunos compareceram este mês"} (R$ 25 cada)
                 </span>
               </div>
             </div>
@@ -1046,19 +1181,19 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap text-xs text-slate-300 font-semibold pt-1">
               <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl">
                 <Calendar size={13} className="text-teal-300" />
-                <span>{myTotalCount} agendados por você</span>
+                <span>{myCurrentMonthBookings.length} agendados no mês</span>
               </div>
               <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl">
                 <CheckCircle size={13} className="text-emerald-400" />
-                <span>{myAttendedCount} presenças (R$ {myGeneratedRevenue},00)</span>
+                <span>{myCurrentMonthAttendedCount} presenças este mês (R$ {myCurrentMonthGeneratedRevenue},00)</span>
               </div>
               <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl" title="Aguardando realização da aula e triagem de presença">
                 <Clock size={13} className="text-amber-300" />
-                <span>{myPendingCount} a realizar (R$ {myProjectedRevenue},00 previstos)</span>
+                <span>{myCurrentMonthPendingCount} a realizar (R$ {myCurrentMonthProjectedRevenue},00 previstos)</span>
               </div>
               <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl" title="Alunos que faltaram não geram receita (R$ 0,00)">
                 <UserX size={13} className="text-rose-400" />
-                <span>{myAbsentCount} faltas (R$ 0,00)</span>
+                <span>{myCurrentMonthAbsentCount} faltas (R$ 0,00)</span>
               </div>
             </div>
           </div>
@@ -1067,13 +1202,16 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           <div className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end justify-between gap-3 bg-white/5 p-4 rounded-2xl border border-white/10 shrink-0">
             <div className="text-left sm:text-right lg:text-right">
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                Total Geral da Escola
+                Total da Escola no Mês Vigente
               </span>
               <div className="text-xl font-black text-white mt-0.5">
-                R$ {totalGeneratedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                R$ {totalCurrentMonthGeneratedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <span className="text-[10px] font-medium text-slate-300">
-                {totalAttendedCount} presenças confirmadas no total
+              <span className="text-[10px] font-medium text-slate-300 block">
+                {totalCurrentMonthAttendedCount} presenças confirmadas em {currentMonthName}
+              </span>
+              <span className="text-[10px] font-bold text-teal-300 block mt-1">
+                Acumulado histórico: R$ {totalAccumulatedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
 
@@ -1097,7 +1235,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                 className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-pro-teal hover:bg-teal-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-teal-900/40 cursor-pointer"
               >
                 <FileSpreadsheet size={14} />
-                Demonstrativo por Agendador
+                Extrato com Receita Acumulada
               </button>
             </div>
           </div>
@@ -1120,10 +1258,12 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
             </div>
           </div>
           <p className="text-2xl font-black text-slate-800 mt-2">{totalCount}</p>
-          <span className="text-[10px] text-slate-400 font-medium block mt-0.5">Todos registros</span>
+          <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+            {monthFilter !== "TODOS" ? `No mês selecionado` : `Todos registros`}
+          </span>
         </div>
 
-        {/* Minha Receita */}
+        {/* Minha Receita Mês Vigente */}
         <div 
           onClick={() => setCreatorFilter(creatorFilter === "MEUS" ? "TODOS" : "MEUS")}
           className={`cursor-pointer bg-white p-4 rounded-2xl border transition-all hover:shadow-md ${
@@ -1131,16 +1271,16 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Minha Receita</span>
+            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Receita Mês Vigente</span>
             <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
               <DollarSign size={16} />
             </div>
           </div>
           <p className="text-2xl font-black text-emerald-700 mt-2">
-            R$ {myGeneratedRevenue}
+            R$ {myCurrentMonthGeneratedRevenue}
           </p>
           <span className="text-[10px] text-emerald-700/80 font-bold block mt-0.5">
-            {myAttendedCount} {myAttendedCount === 1 ? "presença" : "presenças"}
+            {myCurrentMonthAttendedCount} {myCurrentMonthAttendedCount === 1 ? "presença este mês" : "presenças este mês"}
           </span>
         </div>
 
@@ -1349,7 +1489,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
           {/* Search Input */}
-          <div className="relative flex-1 min-w-[220px]">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
@@ -1370,8 +1510,46 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
             )}
           </div>
 
+          {/* Filtro de Mês */}
+          <div className="flex items-center gap-2 min-w-[210px]">
+            <div className="relative w-full">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-pro-teal pointer-events-none flex items-center gap-1">
+                <Calendar size={14} />
+              </div>
+              <select
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className={`w-full pl-9 pr-8 py-2.5 rounded-xl text-xs font-bold appearance-none transition-all cursor-pointer border focus:outline-none focus:border-pro-teal ${
+                  monthFilter !== "TODOS"
+                    ? "bg-teal-50 border-teal-300 text-teal-950 font-black shadow-xs"
+                    : "bg-slate-50 border-slate-200 text-slate-700"
+                }`}
+              >
+                <option value="TODOS">Todos os Meses ({bookings.length})</option>
+                {availableMonths.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.isCurrent ? `📅 ${m.label} (Mês Vigente)` : m.label} {m.count > 0 ? `(${m.count})` : ''}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                <Filter size={12} />
+              </div>
+            </div>
+            {monthFilter !== "TODOS" && (
+              <button
+                type="button"
+                onClick={() => setMonthFilter("TODOS")}
+                className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-all cursor-pointer"
+                title="Limpar filtro de mês"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
           {/* Agendador / Responsável Filter Dropdown */}
-          <div className="flex items-center gap-2 min-w-[200px]">
+          <div className="flex items-center gap-2 min-w-[190px]">
             <div className="relative w-full">
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none flex items-center gap-1">
                 <User size={14} />
@@ -1508,16 +1686,28 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         </div>
 
         {/* Active Filters Summary Chips */}
-        {(searchTerm || classFilter !== "TODOS" || attendanceFilter !== "TODOS" || statusFilter !== "TODOS" || tabFilter !== "TODOS" || creatorFilter !== "TODOS") && (
+        {(searchTerm || monthFilter !== "TODOS" || classFilter !== "TODOS" || attendanceFilter !== "TODOS" || statusFilter !== "TODOS" || tabFilter !== "TODOS" || creatorFilter !== "TODOS") && (
           <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 text-xs flex-wrap gap-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                 Filtros Ativos ({filteredBookings.length} encontrados):
               </span>
+              {monthFilter !== "TODOS" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-100 text-teal-950 rounded-lg text-[11px] font-bold border border-teal-200">
+                  <Calendar size={12} className="text-teal-700" /> Mês: {
+                    monthFilter === currentMonthKey
+                      ? `${getMonthYearLabel(monthFilter)} (Mês Vigente)`
+                      : getMonthYearLabel(monthFilter)
+                  }
+                  <button type="button" onClick={() => setMonthFilter("TODOS")} className="hover:text-teal-950 ml-0.5 cursor-pointer">
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
               {creatorFilter !== "TODOS" && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-950 rounded-lg text-[11px] font-bold border border-amber-200">
                   <User size={12} className="text-amber-800" /> Agendador: {creatorFilter === "MEUS" ? "Meus Agendamentos" : (distinctBookingCreators.find(c => c.id === creatorFilter)?.name || creatorFilter)}
-                  <button type="button" onClick={() => setCreatorFilter("TODOS")} className="hover:text-amber-950 ml-0.5">
+                  <button type="button" onClick={() => setCreatorFilter("TODOS")} className="hover:text-amber-950 ml-0.5 cursor-pointer">
                     <X size={12} />
                   </button>
                 </span>
@@ -1525,7 +1715,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               {classFilter !== "TODOS" && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-100 text-teal-800 rounded-lg text-[11px] font-bold border border-teal-200">
                   <Users size={12} /> Turma: {classFilter}
-                  <button type="button" onClick={() => setClassFilter("TODOS")} className="hover:text-teal-950 ml-0.5">
+                  <button type="button" onClick={() => setClassFilter("TODOS")} className="hover:text-teal-950 ml-0.5 cursor-pointer">
                     <X size={12} />
                   </button>
                 </span>
@@ -1537,7 +1727,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     attendanceFilter === "CONFIRMOU_NO_DIA" ? "Confirmou no Dia" :
                     attendanceFilter === "REAGENDOU" ? "Reagendou" : "Pendente"
                   }
-                  <button type="button" onClick={() => setAttendanceFilter("TODOS")} className="hover:text-indigo-950 ml-0.5">
+                  <button type="button" onClick={() => setAttendanceFilter("TODOS")} className="hover:text-indigo-950 ml-0.5 cursor-pointer">
                     <X size={12} />
                   </button>
                 </span>
@@ -1545,7 +1735,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               {statusFilter !== "TODOS" && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-200 text-slate-800 rounded-lg text-[11px] font-bold">
                   Pgto: {statusFilter === "PAGAMENTO_PENDENTE" ? "Pendentes" : "Confirmados"}
-                  <button type="button" onClick={() => setStatusFilter("TODOS")} className="hover:text-slate-950 ml-0.5">
+                  <button type="button" onClick={() => setStatusFilter("TODOS")} className="hover:text-slate-950 ml-0.5 cursor-pointer">
                     <X size={12} />
                   </button>
                 </span>
@@ -1558,7 +1748,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     tabFilter === "AGUARDANDO_RESPOSTA" ? "Em Decisão" :
                     tabFilter === "NAO_MATRICULOU" ? "Não Matriculou" : "Não Compareceu"
                   }
-                  <button type="button" onClick={() => setTabFilter("TODOS")} className="hover:text-amber-950 ml-0.5">
+                  <button type="button" onClick={() => setTabFilter("TODOS")} className="hover:text-amber-950 ml-0.5 cursor-pointer">
                     <X size={12} />
                   </button>
                 </span>
@@ -1566,7 +1756,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               {searchTerm && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-[11px] font-medium border border-slate-200">
                   Busca: "{searchTerm}"
-                  <button type="button" onClick={() => setSearchTerm("")} className="hover:text-slate-950 ml-0.5">
+                  <button type="button" onClick={() => setSearchTerm("")} className="hover:text-slate-950 ml-0.5 cursor-pointer">
                     <X size={12} />
                   </button>
                 </span>
@@ -1577,6 +1767,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               type="button"
               onClick={() => {
                 setSearchTerm("");
+                setMonthFilter("TODOS");
                 setClassFilter("TODOS");
                 setAttendanceFilter("TODOS");
                 setStatusFilter("TODOS");
@@ -1602,20 +1793,23 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           <Calendar className="mx-auto text-slate-300 h-12 w-12" />
           <p className="text-base font-black text-slate-700">Nenhum agendamento encontrado</p>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            {searchTerm || statusFilter !== "TODOS" || classFilter !== "TODOS" || tabFilter !== "TODOS"
+            {searchTerm || monthFilter !== "TODOS" || statusFilter !== "TODOS" || classFilter !== "TODOS" || tabFilter !== "TODOS" || creatorFilter !== "TODOS" || attendanceFilter !== "TODOS"
               ? "Nenhum agendamento corresponde aos filtros selecionados." 
               : "Clique em 'Novo Agendamento' para registrar uma aula experimental."}
           </p>
-          {(searchTerm || statusFilter !== "TODOS" || classFilter !== "TODOS" || tabFilter !== "TODOS") && (
+          {(searchTerm || monthFilter !== "TODOS" || statusFilter !== "TODOS" || classFilter !== "TODOS" || tabFilter !== "TODOS" || creatorFilter !== "TODOS" || attendanceFilter !== "TODOS") && (
             <button
               type="button"
               onClick={() => {
                 setSearchTerm("");
+                setMonthFilter("TODOS");
                 setClassFilter("TODOS");
+                setAttendanceFilter("TODOS");
                 setStatusFilter("TODOS");
                 setTabFilter("TODOS");
+                setCreatorFilter("TODOS");
               }}
-              className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase transition-all"
+              className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase transition-all cursor-pointer"
             >
               Limpar Filtros e Ver Todos
             </button>
@@ -3419,15 +3613,43 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                 <X size={20} />
               </button>
 
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-emerald-50 text-emerald-800 rounded-2xl">
-                  <Coins size={24} />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-emerald-50 text-emerald-800 rounded-2xl">
+                    <Coins size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-800">Extrato de Receita de Aulas Experimentais</h3>
+                    <p className="text-xs font-bold text-slate-400">
+                      Regra: <strong className="text-emerald-700">R$ 25,00</strong> por agendamento com presença confirmada na aula
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-800">Extrato de Receita de Aulas Experimentais</h3>
-                  <p className="text-xs font-bold text-slate-400">
-                    Regra: <strong className="text-emerald-700">R$ 25,00</strong> por agendamento com presença confirmada na aula
-                  </p>
+
+                {/* Switcher: Acumulado vs Mês Vigente */}
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl self-start sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setRevenueModalTab("ACUMULADO")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      revenueModalTab === "ACUMULADO"
+                        ? "bg-white text-slate-900 shadow-xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Receita Acumulada
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRevenueModalTab("MES_VIGENTE")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      revenueModalTab === "MES_VIGENTE"
+                        ? "bg-white text-emerald-900 shadow-xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Mês Vigente ({currentMonthName.split(" ")[0]})
+                  </button>
                 </div>
               </div>
 
@@ -3437,20 +3659,28 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1">
                       <DollarSign size={13} />
-                      Minha Receita Gerada
+                      {revenueModalTab === "ACUMULADO" ? "Minha Receita Acumulada (Total Histórico)" : `Minha Receita no Mês Vigente (${currentMonthName})`}
                     </span>
                     <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-full">
                       Você ({loggedUser?.name || "Usuário"})
                     </span>
                   </div>
                   <div className="text-2xl font-black text-emerald-950">
-                    R$ {myGeneratedRevenue.toFixed(2).replace(".", ",")}
+                    R$ {revenueModalTab === "ACUMULADO" ? myAccumulatedRevenue.toFixed(2).replace(".", ",") : myCurrentMonthGeneratedRevenue.toFixed(2).replace(".", ",")}
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-emerald-800 font-bold mt-2 pt-2 border-t border-emerald-200/60">
-                    <span>{myAttendedCount} presenças confirmadas</span>
-                    {myPendingCount > 0 && (
-                      <span className="text-slate-500 font-medium">
-                        + R$ {myProjectedRevenue.toFixed(2).replace(".", ",")} a realizar
+                  <div className="flex items-center justify-between text-[11px] text-emerald-800 font-bold mt-2 pt-2 border-t border-emerald-200/60 flex-wrap gap-1">
+                    <span>
+                      {revenueModalTab === "ACUMULADO" 
+                        ? `${myAttendedCount} presenças confirmadas no histórico` 
+                        : `${myCurrentMonthAttendedCount} presenças este mês (${currentMonthName})`}
+                    </span>
+                    {revenueModalTab === "ACUMULADO" ? (
+                      <span className="text-teal-800 font-semibold">
+                        Mês vigente: R$ {myCurrentMonthGeneratedRevenue.toFixed(2).replace(".", ",")}
+                      </span>
+                    ) : (
+                      <span className="text-slate-600 font-semibold">
+                        Acumulado: R$ {myAccumulatedRevenue.toFixed(2).replace(".", ",")}
                       </span>
                     )}
                   </div>
@@ -3460,18 +3690,24 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1">
                       <Coins size={13} />
-                      Receita Total da Escola
+                      {revenueModalTab === "ACUMULADO" ? "Receita Total Acumulada da Escola" : `Receita da Escola no Mês Vigente (${currentMonthName})`}
                     </span>
                     <span className="text-[10px] font-black px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full">
                       Geral
                     </span>
                   </div>
                   <div className="text-2xl font-black text-slate-800">
-                    R$ {totalGeneratedRevenue.toFixed(2).replace(".", ",")}
+                    R$ {revenueModalTab === "ACUMULADO" ? totalAccumulatedRevenue.toFixed(2).replace(".", ",") : totalCurrentMonthGeneratedRevenue.toFixed(2).replace(".", ",")}
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-600 font-bold mt-2 pt-2 border-t border-slate-200">
-                    <span>{totalAttendedCount} presenças na escola</span>
-                    <span className="text-slate-400 font-medium">{bookings.length} agendamentos totais</span>
+                  <div className="flex items-center justify-between text-[11px] text-slate-600 font-bold mt-2 pt-2 border-t border-slate-200 flex-wrap gap-1">
+                    <span>
+                      {revenueModalTab === "ACUMULADO"
+                        ? `${totalAttendedCount} presenças acumuladas na escola`
+                        : `${totalCurrentMonthAttendedCount} presenças na escola em ${currentMonthName}`}
+                    </span>
+                    <span className="text-slate-400 font-medium">
+                      {revenueModalTab === "ACUMULADO" ? `${bookings.length} agendamentos no total` : `${currentMonthBookings.length} agendamentos no mês`}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -3479,7 +3715,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               {/* Table / List of Creators */}
               <div className="flex-1 overflow-y-auto pr-1">
                 <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
-                  <span>Detalhamento por Agendador ({creatorRevenueStats.length})</span>
+                  <span>
+                    Detalhamento por Agendador • {revenueModalTab === "ACUMULADO" ? "Visão Acumulada Histórica" : `Visão do Mês Vigente (${currentMonthName})`} ({creatorRevenueStats.length})
+                  </span>
                   <span>R$ 25 / presença</span>
                 </div>
 
@@ -3493,19 +3731,19 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                       <div
                         key={stat.id || idx}
                         className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                          stat.isMe
+                          stat.isCurrentUser
                             ? "bg-emerald-50/60 border-emerald-300 ring-1 ring-emerald-200"
                             : "bg-slate-50 border-slate-200/80 hover:bg-slate-100/70"
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`p-2.5 rounded-xl ${stat.isMe ? "bg-emerald-100 text-emerald-800 font-black" : "bg-white text-slate-600 border border-slate-200"}`}>
+                          <div className={`p-2.5 rounded-xl ${stat.isCurrentUser ? "bg-emerald-100 text-emerald-800 font-black" : "bg-white text-slate-600 border border-slate-200"}`}>
                             <User size={18} />
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-black text-slate-800 text-sm">{stat.name}</span>
-                              {stat.isMe && (
+                              {stat.isCurrentUser && (
                                 <span className="text-[9px] font-black px-2 py-0.5 bg-emerald-600 text-white rounded-full uppercase tracking-wider">
                                   Você
                                 </span>
@@ -3514,20 +3752,28 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                                 <span className="text-[10px] text-slate-400 font-medium">({stat.role})</span>
                               )}
                             </div>
-                            <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium mt-0.5">
-                              <span>Total: <strong>{stat.totalBookings}</strong> agendamento(s)</span>
-                              <span>•</span>
-                              <span className="text-emerald-700 font-bold">Compareceram: <strong>{stat.attendedBookings}</strong></span>
-                              {stat.absentBookings > 0 && (
+                            <div className="flex items-center gap-2.5 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
+                              {revenueModalTab === "ACUMULADO" ? (
                                 <>
+                                  <span>Total Histórico: <strong>{stat.totalBookings}</strong> agendamentos</span>
                                   <span>•</span>
-                                  <span className="text-rose-600">Faltas: {stat.absentBookings}</span>
+                                  <span className="text-emerald-700 font-bold">Compareceram: <strong>{stat.attendedBookings}</strong></span>
+                                  <span>•</span>
+                                  <span className="text-teal-800 font-bold">Mês Vigente: <strong>{stat.currentMonthAttended}</strong> presenças (R$ {stat.currentMonthRevenue},00)</span>
+                                  {stat.absentBookings > 0 && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-rose-600">Faltas: {stat.absentBookings}</span>
+                                    </>
+                                  )}
                                 </>
-                              )}
-                              {stat.pendingBookings > 0 && (
+                              ) : (
                                 <>
+                                  <span>Agendados no Mês: <strong>{stat.currentMonthTotal}</strong></span>
                                   <span>•</span>
-                                  <span className="text-slate-400">A realizar: {stat.pendingBookings}</span>
+                                  <span className="text-emerald-700 font-bold">Presenças no Mês: <strong>{stat.currentMonthAttended}</strong></span>
+                                  <span>•</span>
+                                  <span className="text-slate-600 font-medium">Acumulado Histórico: <strong>{stat.attendedBookings}</strong> presenças (R$ {stat.earnedRevenue},00)</span>
                                 </>
                               )}
                             </div>
@@ -3536,14 +3782,21 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
 
                         <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200/60 shrink-0">
                           <div className="text-right">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block sm:inline mr-1">Receita:</span>
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block sm:inline mr-1">
+                              {revenueModalTab === "ACUMULADO" ? "Acumulado:" : "No Mês:"}
+                            </span>
                             <span className="text-base font-black text-emerald-800">
-                              R$ {stat.earnedRevenue.toFixed(2).replace(".", ",")}
+                              R$ {(revenueModalTab === "ACUMULADO" ? stat.earnedRevenue : stat.currentMonthRevenue).toFixed(2).replace(".", ",")}
                             </span>
                           </div>
-                          {stat.pendingRevenue > 0 && (
+                          {revenueModalTab === "ACUMULADO" && stat.pendingRevenue > 0 && (
                             <span className="text-[10px] font-bold text-slate-400">
-                              + R$ {stat.pendingRevenue.toFixed(2).replace(".", ",")} a confirmar
+                              + R$ {stat.pendingRevenue.toFixed(2).replace(".", ",")} previstos
+                            </span>
+                          )}
+                          {revenueModalTab === "MES_VIGENTE" && (
+                            <span className="text-[10px] font-bold text-teal-700">
+                              Total acumulado: R$ {stat.earnedRevenue.toFixed(2).replace(".", ",")}
                             </span>
                           )}
                         </div>
@@ -3556,7 +3809,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               {/* Footer */}
               <div className="flex items-center justify-between pt-4 border-t border-slate-100 shrink-0">
                 <p className="text-[11px] text-slate-400 font-medium">
-                  A receita é creditada automaticamente assim que a triagem confirma a presença do aluno.
+                  A receita do topo zera mensalmente. A receita acumulada de todos os meses permanece registrada aqui no extrato.
                 </p>
                 <button
                   type="button"
