@@ -224,6 +224,7 @@ export const FinancialManagementView = ({
   
   // Matrículas States
   const [statusFilter, setStatusFilter] = useState<"Todas" | "Ativas" | "Desmatriculados">("Todas");
+  const [paymentConditionFilter, setPaymentConditionFilter] = useState<"Todos" | "Pagante" | "Isento">("Todos");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>("Todas");
 
@@ -347,6 +348,10 @@ export const FinancialManagementView = ({
       if (statusFilter === "Ativas" && !rec.isEnrollmentActive) return false;
       if (statusFilter === "Desmatriculados" && rec.isEnrollmentActive) return false;
 
+      // Condition filter (Pagante / Isento)
+      if (paymentConditionFilter === "Pagante" && rec.paymentType !== "Pagante") return false;
+      if (paymentConditionFilter === "Isento" && rec.paymentType !== "Isento") return false;
+
       // Class filter
       if (selectedClassFilter !== "Todas" && rec.classId !== selectedClassFilter) return false;
 
@@ -362,11 +367,13 @@ export const FinancialManagementView = ({
 
       return true;
     });
-  }, [allEnrollmentRecords, statusFilter, selectedClassFilter, searchTerm]);
+  }, [allEnrollmentRecords, statusFilter, paymentConditionFilter, selectedClassFilter, searchTerm]);
 
   // Metrics for Matrículas
   const totalMatriculas = allEnrollmentRecords.length;
   const matriculasAtivas = allEnrollmentRecords.filter(r => r.isEnrollmentActive).length;
+  const matriculasPagantes = allEnrollmentRecords.filter(r => r.paymentType === "Pagante" && r.isEnrollmentActive).length;
+  const matriculasIsentas = allEnrollmentRecords.filter(r => r.paymentType === "Isento" && r.isEnrollmentActive).length;
   const matriculasDesmatriculadas = allEnrollmentRecords.filter(r => !r.isEnrollmentActive).length;
   const taxaAtividade = totalMatriculas > 0 ? Math.round((matriculasAtivas / totalMatriculas) * 100) : 0;
 
@@ -1001,48 +1008,70 @@ export const FinancialManagementView = ({
             <div className="space-y-8 animate-fadeIn">
               
               {/* Metrics Cards Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
                   <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-[10px] font-black uppercase tracking-wider">Total Registros</span>
-                    <Users size={18} className="text-[#016a86]" />
+                    <span className="text-[9px] font-black uppercase tracking-wider">Total</span>
+                    <Users size={16} className="text-[#016a86]" />
                   </div>
-                  <div className="mt-3">
-                    <div className="text-2xl md:text-3xl font-black text-slate-800">{totalMatriculas}</div>
-                    <div className="text-[10px] font-bold text-slate-400 mt-0.5">Matrículas cadastradas</div>
+                  <div className="mt-2">
+                    <div className="text-xl md:text-2xl font-black text-slate-800">{totalMatriculas}</div>
+                    <div className="text-[9px] font-bold text-slate-400 mt-0.5">Matrículas</div>
                   </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-sm flex flex-col justify-between">
+                <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm flex flex-col justify-between">
                   <div className="flex items-center justify-between text-emerald-600">
-                    <span className="text-[10px] font-black uppercase tracking-wider">Matrículas Ativas</span>
-                    <UserCheck size={18} />
+                    <span className="text-[9px] font-black uppercase tracking-wider">Ativas</span>
+                    <UserCheck size={16} />
                   </div>
-                  <div className="mt-3">
-                    <div className="text-2xl md:text-3xl font-black text-emerald-600">{matriculasAtivas}</div>
-                    <div className="text-[10px] font-bold text-emerald-600/70 mt-0.5">Alunos ativos em turma</div>
+                  <div className="mt-2">
+                    <div className="text-xl md:text-2xl font-black text-emerald-600">{matriculasAtivas}</div>
+                    <div className="text-[9px] font-bold text-emerald-600/70 mt-0.5">Alunos ativos</div>
                   </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-2xl border border-rose-100 shadow-sm flex flex-col justify-between">
+                <div className="bg-white p-4 rounded-2xl border border-teal-100 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-pro-teal">
+                    <span className="text-[9px] font-black uppercase tracking-wider">Pagantes</span>
+                    <DollarSign size={16} />
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-xl md:text-2xl font-black text-pro-teal">{matriculasPagantes}</div>
+                    <div className="text-[9px] font-bold text-pro-teal/70 mt-0.5">Alunos pagantes</div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-amber-100 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-amber-600">
+                    <span className="text-[9px] font-black uppercase tracking-wider">Isentos</span>
+                    <Award size={16} />
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-xl md:text-2xl font-black text-amber-600">{matriculasIsentas}</div>
+                    <div className="text-[9px] font-bold text-amber-600/70 mt-0.5">Bolsistas / isentos</div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm flex flex-col justify-between">
                   <div className="flex items-center justify-between text-rose-500">
-                    <span className="text-[10px] font-black uppercase tracking-wider">Desmatriculados</span>
-                    <UserX size={18} />
+                    <span className="text-[9px] font-black uppercase tracking-wider">Desmatriculados</span>
+                    <UserX size={16} />
                   </div>
-                  <div className="mt-3">
-                    <div className="text-2xl md:text-3xl font-black text-rose-500">{matriculasDesmatriculadas}</div>
-                    <div className="text-[10px] font-bold text-rose-400 mt-0.5">Alunos desmatriculados</div>
+                  <div className="mt-2">
+                    <div className="text-xl md:text-2xl font-black text-rose-500">{matriculasDesmatriculadas}</div>
+                    <div className="text-[9px] font-bold text-rose-400 mt-0.5">Inativos</div>
                   </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm flex flex-col justify-between">
+                <div className="bg-white p-4 rounded-2xl border border-sky-100 shadow-sm flex flex-col justify-between">
                   <div className="flex items-center justify-between text-sky-600">
-                    <span className="text-[10px] font-black uppercase tracking-wider">Taxa Ativa</span>
-                    <TrendingUp size={18} />
+                    <span className="text-[9px] font-black uppercase tracking-wider">Taxa Ativa</span>
+                    <TrendingUp size={16} />
                   </div>
-                  <div className="mt-3">
-                    <div className="text-2xl md:text-3xl font-black text-sky-600">{taxaAtividade}%</div>
-                    <div className="text-[10px] font-bold text-sky-500/70 mt-0.5">Retenção de alunos</div>
+                  <div className="mt-2">
+                    <div className="text-xl md:text-2xl font-black text-sky-600">{taxaAtividade}%</div>
+                    <div className="text-[9px] font-bold text-sky-500/70 mt-0.5">Retenção</div>
                   </div>
                 </div>
               </div>
@@ -1081,21 +1110,52 @@ export const FinancialManagementView = ({
                   </div>
                 </div>
 
-                {/* Class Select Filter */}
-                <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-xs">
-                  <span className="font-bold text-slate-400 uppercase text-[10px] tracking-wider">Filtrar por Turma:</span>
-                  <select
-                    value={selectedClassFilter}
-                    onChange={(e) => setSelectedClassFilter(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-bold text-slate-700 text-xs focus:outline-none focus:border-[#016a86]"
-                  >
-                    <option value="Todas">Todas as Turmas ({classes.length})</option>
-                    {classes.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.type} ({c.code}) - {c.weekday}
-                      </option>
-                    ))}
-                  </select>
+                {/* Condition and Class Filters Row */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-400 uppercase text-[10px] tracking-wider">Condição:</span>
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                      {(["Todos", "Pagante", "Isento"] as const).map(cond => (
+                        <button
+                          key={cond}
+                          type="button"
+                          onClick={() => setPaymentConditionFilter(cond)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1 ${
+                            paymentConditionFilter === cond
+                              ? "bg-white text-[#016a86] shadow-xs"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          {cond === "Todos" ? "Todos" : cond === "Pagante" ? (
+                            <>
+                              <DollarSign size={12} /> Pagantes
+                            </>
+                          ) : (
+                            <>
+                              <Award size={12} /> Isentos
+                            </>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Class Select Filter */}
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-400 uppercase text-[10px] tracking-wider">Turma:</span>
+                    <select
+                      value={selectedClassFilter}
+                      onChange={(e) => setSelectedClassFilter(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-bold text-slate-700 text-xs focus:outline-none focus:border-[#016a86]"
+                    >
+                      <option value="Todas">Todas as Turmas ({classes.length})</option>
+                      {classes.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.type} ({c.code}) - {c.weekday}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 

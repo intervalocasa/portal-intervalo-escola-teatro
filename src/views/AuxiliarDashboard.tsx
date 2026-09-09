@@ -12,7 +12,8 @@ import {
   Calendar, 
   LogOut,
   Sparkles,
-  FolderArchive
+  FolderArchive,
+  Wallet
 } from "lucide-react";
 import { Logo, Avatar } from "../components/CommonComponents";
 import { AnnouncementPanel } from "../components/AnnouncementPanel";
@@ -106,6 +107,22 @@ export const AuxiliarDashboard = ({
               <div>
                 <div className="font-bold text-lg leading-none">Aula Experimental</div>
                 <div className="text-xs text-amber-100/80 mt-1">Agendamentos e comprovantes</div>
+              </div>
+            </motion.button>
+
+            {/* Gestão Financeira */}
+            <motion.button
+              onClick={() => setView("financial_management")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full p-6 bg-gradient-to-r from-[#016a86] to-[#004e63] rounded-2xl flex items-center gap-5 text-white shadow-xl shadow-teal-900/10 transition-all text-left group"
+            >
+              <div className="bg-white/20 p-3 rounded-xl group-hover:scale-110 transition-transform">
+                <Wallet size={24} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-none">Gestão Financeira</div>
+                <div className="text-xs text-teal-100/80 mt-1">Mensalidades, pagantes, isentos e relatórios</div>
               </div>
             </motion.button>
 

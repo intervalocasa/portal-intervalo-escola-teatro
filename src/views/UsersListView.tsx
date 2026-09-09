@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { UserCircle, ChevronDown, ArrowLeft, AlertTriangle, Trash2, CheckCircle, X, Loader2 } from "lucide-react";
-import { User, UserRole } from "../types";
+import { UserCircle, ChevronDown, ArrowLeft, AlertTriangle, Trash2, CheckCircle, X, Loader2, DollarSign, Award } from "lucide-react";
+import { User, UserRole, Class } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { getUserDisplayName, getUserSecondaryName, isStudentInactive, isStudentDesmatriculado } from "../lib/userUtils";
 import { db } from "../lib/firebase";
@@ -14,6 +14,8 @@ import { doc, deleteDoc } from "firebase/firestore";
 
 interface UsersListViewProps {
   users: User[];
+  classes?: Class[];
+  currentUserRole?: string;
   filter: "Todos" | "Desmatriculados" | UserRole;
   setFilter: (filter: "Todos" | "Desmatriculados" | UserRole) => void;
   filteredUsers: User[];
@@ -24,6 +26,8 @@ interface UsersListViewProps {
 
 export const UsersListView = ({
   users,
+  classes = [],
+  currentUserRole,
   filter,
   setFilter,
   filteredUsers,
@@ -33,6 +37,71 @@ export const UsersListView = ({
 }: UsersListViewProps) => {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [studentPaymentFilter, setStudentPaymentFilter] = useState<"Todos" | "Pagante" | "Isento">("Todos");
+
+  // Helper to determine student payment status across active classes
+  const getStudentPaymentSummary = (student: User) => {
+    if (student.role !== "Aluno") return null;
+    if (isStudentInactive(student) || isStudentDesmatriculado(student)) {
+      return { status: "desmatriculado", label: "Desmatriculado" };
+    }
+    
+    if (!classes || classes.length === 0) return null;
+
+    const studentId = student.id;
+    const migratedFrom = student.migratedFrom;
+    
+    const activeClasses = classes.filter(c => {
+      if (c.isActive === false || !c.studentIds) return false;
+      const isEnrolled = c.studentIds.includes(studentId) || Boolean(migratedFrom && c.studentIds.includes(migratedFrom));
+      if (!isEnrolled) return false;
+      const status = c.studentEnrollmentStatuses?.[studentId] || (migratedFrom ? c.studentEnrollmentStatuses?.[migratedFrom] : undefined);
+      if (status) {
+        const sLower = String(status).trim().toLowerCase();
+        if (["inativo", "trancado", "desmatriculado", "cancelado", "removido"].includes(sLower)) return false;
+      }
+      return true;
+    });
+
+    if (activeClasses.length === 0) {
+      return { status: "sem_turma", label: "Sem turma" };
+    }
+
+    let hasPaying = false;
+    let hasExempt = false;
+
+    activeClasses.forEach(c => {
+      const pType = c.studentPaymentTypes?.[studentId] || (migratedFrom ? c.studentPaymentTypes?.[migratedFrom] : undefined) || "Pagante";
+      if (pType === "Isento") {
+        hasExempt = true;
+      } else {
+        hasPaying = true;
+      }
+    });
+
+    if (hasExempt && !hasPaying) {
+      return { status: "isento", label: "Isento" };
+    }
+    if (hasPaying && !hasExempt) {
+      return { status: "pagante", label: "Pagante" };
+    }
+    return { status: "misto", label: "Misto" };
+  };
+
+  const displayedUsers = useMemo(() => {
+    if (studentPaymentFilter === "Todos") return filteredUsers;
+    return filteredUsers.filter(u => {
+      if (u.role !== "Aluno") return false;
+      const summary = getStudentPaymentSummary(u);
+      if (studentPaymentFilter === "Isento") {
+        return summary?.status === "isento" || summary?.status === "misto";
+      }
+      if (studentPaymentFilter === "Pagante") {
+        return summary?.status === "pagante" || summary?.status === "misto";
+      }
+      return true;
+    });
+  }, [filteredUsers, studentPaymentFilter, classes]);
 
   // Group duplicate users by lowercase email
   const getDuplicateGroups = () => {
@@ -134,7 +203,10 @@ export const UsersListView = ({
           {["Todos", "Aluno", "Desmatriculados", "Professor", "Gestor", "Diretor Pedagógico", "Diretor Pedagógico e Professor", "Auxiliar Administrativo"].map((type) => (
             <button
               key={type}
-              onClick={() => setFilter(type as any)}
+              onClick={() => {
+                setFilter(type as any);
+                setStudentPaymentFilter("Todos");
+              }}
               className={`px-6 py-3 rounded-full text-[11px] font-black uppercase tracking-wider transition-all ${
                 filter === type 
                 ? "bg-pro-teal text-white shadow-xl shadow-teal-900/20 scale-105" 
@@ -145,6 +217,46 @@ export const UsersListView = ({
             </button>
           ))}
         </div>
+
+        {/* Sub-filter: Alunos Pagantes / Isentos */}
+        {(filter === "Todos" || filter === "Aluno") && (
+          <div className="flex items-center justify-center gap-2 pb-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Condição dos Alunos:</span>
+            <button
+              type="button"
+              onClick={() => setStudentPaymentFilter("Todos")}
+              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                studentPaymentFilter === "Todos"
+                  ? "bg-slate-800 text-white shadow-sm"
+                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setStudentPaymentFilter("Pagante")}
+              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                studentPaymentFilter === "Pagante"
+                  ? "bg-pro-teal text-white shadow-md shadow-teal-900/10"
+                  : "bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200"
+              }`}
+            >
+              <DollarSign size={13} /> Pagantes
+            </button>
+            <button
+              type="button"
+              onClick={() => setStudentPaymentFilter("Isento")}
+              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                studentPaymentFilter === "Isento"
+                  ? "bg-amber-500 text-white shadow-md shadow-amber-900/10"
+                  : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200"
+              }`}
+            >
+              <Award size={13} /> Isentos
+            </button>
+          </div>
+        )}
 
         {/* Duplicates Notice Banner */}
         {duplicateGroups.length > 0 && (
@@ -176,9 +288,9 @@ export const UsersListView = ({
         {/* Users List */}
         <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar min-h-[400px]">
           <AnimatePresence mode="popLayout">
-            {filteredUsers.length > 0 ? (
+            {displayedUsers.length > 0 ? (
               <div className="divide-y divide-slate-100">
-                {filteredUsers.map((u) => (
+                {displayedUsers.map((u) => (
                   <motion.button
                     key={u.id}
                     layout
@@ -200,12 +312,44 @@ export const UsersListView = ({
                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{getUserSecondaryName(u) ? `Nome social: ${getUserSecondaryName(u)}${u.pronouns ? ` • (${u.pronouns})` : ''}` : (u.pronouns ? `(${u.pronouns})` : "...")}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {u.role === "Aluno" && (isStudentInactive(u) || isStudentDesmatriculado(u)) && (
-                        <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-200">
-                          Desmatriculado
-                        </span>
-                      )}
+                    <div className="flex items-center gap-2.5">
+                      {u.role === "Aluno" && (() => {
+                        const summary = getStudentPaymentSummary(u);
+                        if (!summary) return null;
+                        if (summary.status === "desmatriculado") {
+                          return (
+                            <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-200">
+                              Desmatriculado
+                            </span>
+                          );
+                        }
+                        if (summary.status === "isento") {
+                          return (
+                            <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 shadow-xs">
+                              <Award size={11} /> Isento
+                            </span>
+                          );
+                        }
+                        if (summary.status === "pagante") {
+                          return (
+                            <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1 shadow-xs">
+                              <DollarSign size={11} /> Pagante
+                            </span>
+                          );
+                        }
+                        if (summary.status === "misto") {
+                          return (
+                            <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                              Misto
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-400">
+                            Sem turma
+                          </span>
+                        );
+                      })()}
                       <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{u.role}</span>
                       <ChevronDown size={16} className="text-slate-300 -rotate-90" />
                     </div>

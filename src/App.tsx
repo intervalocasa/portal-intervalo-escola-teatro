@@ -2854,6 +2854,8 @@ export default function App() {
         ) : view === "users_list" ? (
           <UsersListView 
             users={users}
+            classes={classes}
+            currentUserRole={role}
             filteredUsers={filteredUsers}
             filter={filter}
             setFilter={setFilter}
@@ -3279,7 +3281,7 @@ export default function App() {
                   />
                 </div>
 
-                {role === "Gestor" && (
+                {(role === "Gestor" || role === "Auxiliar Administrativo") && (
                   <>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status da Matrícula</label>

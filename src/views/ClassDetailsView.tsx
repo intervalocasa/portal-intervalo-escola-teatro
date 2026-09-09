@@ -98,7 +98,7 @@ export const ClassDetailsView = ({
 
   const targetClass = classes.find(c => c.id === selectedClassId);
   const isGestorRole = role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo";
-  const isGestorOnly = role === "Gestor" || currentUser?.role === "Gestor";
+  const isGestorOnly = role === "Gestor" || currentUser?.role === "Gestor" || role === "Auxiliar Administrativo" || currentUser?.role === "Auxiliar Administrativo";
   const isStudent = role === "Aluno" || currentUser?.role === "Aluno";
 
   const formatDateBR = (dateStr?: string) => {
