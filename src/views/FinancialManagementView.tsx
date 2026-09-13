@@ -220,7 +220,7 @@ export const FinancialManagementView = ({
   currentUser,
   setView
 }: FinancialManagementViewProps) => {
-  const [activeTab, setActiveTab] = useState<"matriculas" | "pagamentos">("matriculas");
+  const [activeTab, setActiveTab] = useState<"inicio" | "matriculas" | "pagamentos">("inicio");
   
   // Matrículas States
   const [statusFilter, setStatusFilter] = useState<"Todas" | "Ativas" | "Desmatriculados">("Todas");
@@ -964,7 +964,53 @@ export const FinancialManagementView = ({
       <div className="p-6 md:p-12 flex-1 md:overflow-y-auto bg-slate-50/50 flex flex-col min-h-screen">
         <div className="max-w-6xl mx-auto w-full space-y-8 flex-1">
           
-          {/* Header Bar */}
+          {activeTab === "inicio" && (
+            <div className="flex-1 flex flex-col items-center justify-center h-full animate-fadeIn">
+              <div className="text-center mb-10 max-w-lg">
+                <div className="flex justify-center mb-6">
+                  <div className="w-20 h-20 bg-pro-teal/10 text-pro-teal rounded-[24px] flex items-center justify-center">
+                    <Wallet size={40} />
+                  </div>
+                </div>
+                <h2 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight mb-4">
+                  Gestão Estratégica e Financeira
+                </h2>
+                <p className="text-sm md:text-base text-slate-500 font-medium">
+                  Bem-vindo ao módulo financeiro. Escolha uma das opções abaixo para acessar e gerenciar matrículas ou pagamentos e mensalidades.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-3xl">
+                <button
+                  onClick={() => setActiveTab("matriculas")}
+                  className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg hover:border-pro-teal/30 transition-all group flex flex-col items-center text-center"
+                >
+                  <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                    <Users size={32} />
+                  </div>
+                  <h3 className="text-xl font-black text-slate-800 mb-2">Gestão de Matrículas</h3>
+                  <p className="text-sm text-slate-500 font-medium">
+                    Acompanhe e exporte relatórios de todos os alunos matriculados nas turmas da escola.
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("pagamentos")}
+                  className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg hover:border-pro-teal/30 transition-all group flex flex-col items-center text-center"
+                >
+                  <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                    <CreditCard size={32} />
+                  </div>
+                  <h3 className="text-xl font-black text-slate-800 mb-2">Gestão de Pagamentos</h3>
+                  <p className="text-sm text-slate-500 font-medium">
+                    Controle o fluxo de recebimentos, mensalidades e status financeiro dos alunos.
+                  </p>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab !== "inicio" && (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6">
             <div>
               <div className="flex items-center gap-2 text-xs font-black text-pro-teal uppercase tracking-wider mb-1">
@@ -1002,6 +1048,7 @@ export const FinancialManagementView = ({
               )}
             </div>
           </div>
+          )}
 
           {/* TAB 1: GESTÃO DE MATRÍCULAS */}
           {activeTab === "matriculas" && (
