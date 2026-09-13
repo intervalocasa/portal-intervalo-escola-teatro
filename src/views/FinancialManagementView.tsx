@@ -669,7 +669,7 @@ export const FinancialManagementView = ({
       const expId = editingExpense ? editingExpense.id : `exp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const expRef = doc(db, "despesas", expId);
       
-      const payload: ExpenseRecord = {
+      const payload: any = {
         id: expId,
         description: expenseFormData.description || "Despesa",
         category: expenseFormData.category || "Outros",
@@ -678,13 +678,19 @@ export const FinancialManagementView = ({
         year: expenseYear,
         dueDate: expenseFormData.dueDate || new Date().toISOString().split('T')[0],
         status: expenseFormData.status || "Pendente",
-        paymentMethod: expenseFormData.paymentMethod,
-        notes: expenseFormData.notes,
-        paidAt: expenseFormData.status === "Pago" ? (expenseFormData.paidAt || new Date().toISOString().split('T')[0]) : undefined
+        paymentMethod: expenseFormData.paymentMethod || null,
+        notes: expenseFormData.notes || null,
+        paidAt: expenseFormData.status === "Pago" ? (expenseFormData.paidAt || new Date().toISOString().split('T')[0]) : null
       };
 
+      // Firestore rejects undefined values unless explicitly configured to ignore them
+      // We remove them or replace them with null
+      const cleanPayload = Object.fromEntries(
+        Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null)
+      );
+
       await setDoc(expRef, {
-        ...payload,
+        ...cleanPayload,
         updatedAt: serverTimestamp()
       });
       
