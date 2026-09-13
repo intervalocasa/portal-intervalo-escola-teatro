@@ -27,7 +27,9 @@ import {
   UserCheck,
   UserX,
   Award,
-  Edit3
+  Edit3,
+  PlusCircle,
+  Trash2
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -208,6 +210,20 @@ export interface PaymentRecord {
   studentCustomMonthlyFee?: number;
 }
 
+export interface ExpenseRecord {
+  id: string;
+  description: string;
+  category: string;
+  amount: number;
+  month: number;
+  year: number;
+  dueDate: string; // YYYY-MM-DD
+  status: "Pago" | "Pendente" | "Atrasado";
+  paymentMethod?: "PIX" | "Cartão" | "Boleto" | "Dinheiro" | "Transferência";
+  paidAt?: string;
+  notes?: string;
+}
+
 const MONTHS_PT = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
@@ -220,7 +236,7 @@ export const FinancialManagementView = ({
   currentUser,
   setView
 }: FinancialManagementViewProps) => {
-  const [activeTab, setActiveTab] = useState<"inicio" | "matriculas" | "pagamentos">("inicio");
+  const [activeTab, setActiveTab] = useState<"inicio" | "matriculas" | "pagamentos" | "despesas">("inicio");
   
   // Matrículas States
   const [statusFilter, setStatusFilter] = useState<"Todas" | "Ativas" | "Desmatriculados">("Todas");
@@ -240,6 +256,16 @@ export const FinancialManagementView = ({
   const [tempAmountValue, setTempAmountValue] = useState<string>("");
   const [fixAmountForFuture, setFixAmountForFuture] = useState<boolean>(true);
 
+  // Despesas States
+  const [dbExpenses, setDbExpenses] = useState<Record<string, ExpenseRecord>>({});
+  const [expenseSearch, setExpenseSearch] = useState("");
+  const [expenseStatusFilter, setExpenseStatusFilter] = useState<"Todos" | "Pago" | "Pendente" | "Atrasado">("Todos");
+  const [expenseMonth, setExpenseMonth] = useState<number>(new Date().getMonth());
+  const [expenseYear, setExpenseYear] = useState<number>(new Date().getFullYear());
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<ExpenseRecord | null>(null);
+  const [expenseFormData, setExpenseFormData] = useState<Partial<ExpenseRecord>>({});
+
   // Subscribe to payments in Firestore
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "pagamentos"), (snapshot) => {
@@ -250,6 +276,20 @@ export const FinancialManagementView = ({
       setDbPayments(dataMap);
     }, (error) => {
       console.warn("Firestore pagamentos read error or offline:", error);
+    });
+    return () => unsub();
+  }, []);
+
+  // Subscribe to expenses in Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "despesas"), (snapshot) => {
+      const dataMap: Record<string, ExpenseRecord> = {};
+      snapshot.docs.forEach(docSnap => {
+        dataMap[docSnap.id] = { id: docSnap.id, ...docSnap.data() } as ExpenseRecord;
+      });
+      setDbExpenses(dataMap);
+    }, (error) => {
+      console.warn("Firestore despesas read error or offline:", error);
     });
     return () => unsub();
   }, []);
@@ -595,6 +635,83 @@ export const FinancialManagementView = ({
     } finally {
       setIsUpdatingPayment(null);
     }
+  };
+
+  // Computed Expenses for current filter
+  const filteredExpenses = useMemo(() => {
+    let list = Object.values(dbExpenses).filter(exp => 
+      exp.month === expenseMonth && exp.year === expenseYear
+    );
+
+    if (expenseStatusFilter !== "Todos") {
+      list = list.filter(exp => exp.status === expenseStatusFilter);
+    }
+
+    if (expenseSearch.trim()) {
+      const q = expenseSearch.toLowerCase();
+      list = list.filter(exp => 
+        exp.description.toLowerCase().includes(q) || 
+        exp.category.toLowerCase().includes(q)
+      );
+    }
+
+    // Sort by due date asc
+    return list.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  }, [dbExpenses, expenseMonth, expenseYear, expenseStatusFilter, expenseSearch]);
+
+  const totalDespesas = useMemo(() => {
+    return filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+  }, [filteredExpenses]);
+
+  const handleSaveExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const expId = editingExpense ? editingExpense.id : `exp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const expRef = doc(db, "despesas", expId);
+      
+      const payload: ExpenseRecord = {
+        id: expId,
+        description: expenseFormData.description || "Despesa",
+        category: expenseFormData.category || "Outros",
+        amount: Number(expenseFormData.amount) || 0,
+        month: expenseMonth,
+        year: expenseYear,
+        dueDate: expenseFormData.dueDate || new Date().toISOString().split('T')[0],
+        status: expenseFormData.status || "Pendente",
+        paymentMethod: expenseFormData.paymentMethod,
+        notes: expenseFormData.notes,
+        paidAt: expenseFormData.status === "Pago" ? (expenseFormData.paidAt || new Date().toISOString().split('T')[0]) : undefined
+      };
+
+      await setDoc(expRef, {
+        ...payload,
+        updatedAt: serverTimestamp()
+      });
+      
+      setShowExpenseModal(false);
+      setEditingExpense(null);
+      setExpenseFormData({});
+    } catch (err) {
+      console.error("Erro ao salvar despesa:", err);
+      alert("Erro ao salvar despesa.");
+    }
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    if (!window.confirm("Deseja realmente excluir esta despesa?")) return;
+    try {
+      const { deleteDoc } = await import("firebase/firestore");
+      await deleteDoc(doc(db, "despesas", id));
+    } catch (err) {
+      console.error("Erro ao excluir despesa:", err);
+      alert("Erro ao excluir despesa.");
+    }
+  };
+
+  const handleEditExpense = (expense: ExpenseRecord) => {
+    setEditingExpense(expense);
+    setExpenseFormData(expense);
+    setShowExpenseModal(true);
   };
 
   // Restore standard course fee calculation for a student
@@ -953,6 +1070,18 @@ export const FinancialManagementView = ({
             <CreditCard size={18} />
             Gestão de Receita
           </button>
+
+          <button
+            onClick={() => setActiveTab("despesas")}
+            className={`w-full py-3.5 px-4 rounded-xl font-bold text-xs md:text-sm flex items-center justify-center gap-3 transition-all ${
+              activeTab === "despesas"
+                ? "bg-white text-[#016a86] shadow-lg shadow-black/10 font-black scale-[1.02]"
+                : "text-white/80 hover:text-white hover:bg-white/10"
+            }`}
+          >
+            <TrendingUp size={18} className="transform rotate-180" />
+            Gestão de Despesas
+          </button>
         </div>
 
         <div className="text-[10px] text-teal-100/60 font-bold uppercase tracking-widest pt-4 border-t border-white/10 w-full">
@@ -980,7 +1109,7 @@ export const FinancialManagementView = ({
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-3xl">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-5xl">
                 <button
                   onClick={() => setActiveTab("matriculas")}
                   className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg hover:border-pro-teal/30 transition-all group flex flex-col items-center text-center"
@@ -1006,6 +1135,19 @@ export const FinancialManagementView = ({
                     Controle o fluxo de recebimentos, mensalidades e status financeiro dos alunos.
                   </p>
                 </button>
+
+                <button
+                  onClick={() => setActiveTab("despesas")}
+                  className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg hover:border-rose-500/30 transition-all group flex flex-col items-center text-center"
+                >
+                  <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                    <TrendingUp size={32} className="transform rotate-180" />
+                  </div>
+                  <h3 className="text-xl font-black text-slate-800 mb-2">Gestão de Despesas</h3>
+                  <p className="text-sm text-slate-500 font-medium">
+                    Registre e acompanhe os gastos, pagamentos a fornecedores e despesas da escola.
+                  </p>
+                </button>
               </div>
             </div>
           )}
@@ -1018,12 +1160,15 @@ export const FinancialManagementView = ({
                 <span>Gestão Estratégica & Financeira</span>
               </div>
               <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">
-                {activeTab === "matriculas" ? "Gestão de Matrículas" : "Gestão de Receita"}
+                {activeTab === "matriculas" ? "Gestão de Matrículas" : 
+                 activeTab === "pagamentos" ? "Gestão de Receita" : "Gestão de Despesas"}
               </h2>
               <p className="text-xs md:text-sm text-slate-500 font-medium mt-1">
                 {activeTab === "matriculas" 
                   ? "Acompanhe e exporte relatórios de todos os alunos matriculados nas turmas da escola."
-                  : "Controle o fluxo de recebimentos, mensalidades e status financeiro dos alunos."}
+                  : activeTab === "pagamentos"
+                  ? "Controle o fluxo de recebimentos, mensalidades e status financeiro dos alunos."
+                  : "Registre e acompanhe os gastos e pagamentos a fornecedores da escola."}
               </p>
             </div>
 
@@ -1037,13 +1182,21 @@ export const FinancialManagementView = ({
                   <Download size={18} />
                   <span>Baixar Lista em PDF</span>
                 </button>
-              ) : (
+              ) : activeTab === "pagamentos" ? (
                 <button
                   onClick={handleGeneratePaymentPDF}
                   className="w-full md:w-auto px-6 py-3.5 bg-[#016a86] hover:bg-[#005167] text-white font-bold text-xs md:text-sm rounded-2xl shadow-lg shadow-[#016a86]/20 flex items-center justify-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <FileText size={18} />
                   <span>Baixar Relatório PDF</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowExpenseModal(true)}
+                  className="w-full md:w-auto px-6 py-3.5 bg-[#016a86] hover:bg-[#005167] text-white font-bold text-xs md:text-sm rounded-2xl shadow-lg shadow-[#016a86]/20 flex items-center justify-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <PlusCircle size={18} />
+                  <span>Nova Despesa</span>
                 </button>
               )}
             </div>
@@ -1670,8 +1823,369 @@ export const FinancialManagementView = ({
             </div>
           )}
 
+          {/* TAB 3: GESTÃO DE DESPESAS */}
+          {activeTab === "despesas" && (
+            <div className="space-y-8 animate-fadeIn">
+              
+              {/* Metrics Cards Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span className="text-[9px] font-black uppercase tracking-wider">Total do Mês</span>
+                    <TrendingUp size={16} className="text-[#016a86] transform rotate-180" />
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-xl md:text-2xl font-black text-slate-800">
+                      R$ {totalDespesas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-[9px] font-bold text-slate-400 mt-0.5">Em {MONTHS_PT[expenseMonth]}</div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-emerald-600">
+                    <span className="text-[9px] font-black uppercase tracking-wider">Pagas</span>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-xl md:text-2xl font-black text-emerald-600">
+                      {filteredExpenses.filter(e => e.status === "Pago").length}
+                    </div>
+                    <div className="text-[9px] font-bold text-emerald-600/70 mt-0.5">Despesas pagas</div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-amber-100 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-amber-500">
+                    <span className="text-[9px] font-black uppercase tracking-wider">Pendentes</span>
+                    <Clock size={16} />
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-xl md:text-2xl font-black text-amber-500">
+                      {filteredExpenses.filter(e => e.status === "Pendente").length}
+                    </div>
+                    <div className="text-[9px] font-bold text-amber-500/70 mt-0.5">Aguardando pagamento</div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-rose-500">
+                    <span className="text-[9px] font-black uppercase tracking-wider">Atrasadas</span>
+                    <AlertCircle size={16} />
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-xl md:text-2xl font-black text-rose-500">
+                      {filteredExpenses.filter(e => e.status === "Atrasado").length}
+                    </div>
+                    <div className="text-[9px] font-bold text-rose-500/70 mt-0.5">Pagamento em atraso</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filters Bar */}
+              <div className="bg-white p-4 md:p-5 rounded-3xl border border-slate-200/60 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                      <select
+                        value={expenseMonth}
+                        onChange={(e) => setExpenseMonth(Number(e.target.value))}
+                        className="bg-transparent text-sm font-bold text-slate-700 py-1.5 px-3 rounded-lg focus:outline-none appearance-none cursor-pointer"
+                      >
+                        {MONTHS_PT.map((m, idx) => (
+                          <option key={m} value={idx}>{m}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={expenseYear}
+                        onChange={(e) => setExpenseYear(Number(e.target.value))}
+                        className="bg-transparent text-sm font-bold text-slate-700 py-1.5 px-3 rounded-lg focus:outline-none appearance-none cursor-pointer border-l border-slate-300 ml-1"
+                      >
+                        {[2024, 2025, 2026, 2027].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="hidden md:flex bg-slate-100 p-1 rounded-xl">
+                      {["Todos", "Pago", "Pendente", "Atrasado"].map(status => (
+                        <button
+                          key={status}
+                          onClick={() => setExpenseStatusFilter(status as any)}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${
+                            expenseStatusFilter === status
+                              ? "bg-white text-[#016a86] shadow-sm"
+                              : "text-slate-500 hover:text-slate-700"
+                          }`}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="relative flex-1 md:max-w-xs">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      placeholder="Buscar por descrição ou categoria..."
+                      value={expenseSearch}
+                      onChange={e => setExpenseSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#016a86]/20 focus:border-[#016a86] transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Expenses List */}
+              <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden flex flex-col">
+                <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                    <FileText size={16} className="text-pro-teal" />
+                    <span>Lista de Despesas ({MONTHS_PT[expenseMonth]} / {expenseYear})</span>
+                  </h3>
+                  <span className="text-xs font-bold text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-sm">
+                    {filteredExpenses.length} registros
+                  </span>
+                </div>
+
+                {filteredExpenses.length === 0 ? (
+                  <div className="p-12 text-center flex flex-col items-center justify-center bg-slate-50/30">
+                    <div className="w-16 h-16 bg-slate-100 text-slate-300 rounded-2xl flex items-center justify-center mb-4">
+                      <TrendingUp size={32} className="transform rotate-180" />
+                    </div>
+                    <h3 className="text-base font-black text-slate-800 mb-1">Nenhuma despesa encontrada</h3>
+                    <p className="text-slate-400 text-xs">Não existem registros de despesas para os filtros aplicados neste mês.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 flex-1 overflow-y-auto max-h-[600px] p-2">
+                    {filteredExpenses.map((expense) => (
+                      <div key={expense.id} className="p-4 hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl">
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                            expense.status === "Pago" ? "bg-emerald-100 text-emerald-600" :
+                            expense.status === "Atrasado" ? "bg-rose-100 text-rose-600" :
+                            "bg-amber-100 text-amber-600"
+                          }`}>
+                            {expense.status === "Pago" ? <CheckCircle2 size={20} /> :
+                             expense.status === "Atrasado" ? <AlertCircle size={20} /> : <Clock size={20} />}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-black text-slate-800 truncate">{expense.description}</h4>
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                                {expense.category}
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400">
+                                Venc: {expense.dueDate.split("-").reverse().join("/")}
+                              </span>
+                            </div>
+                            {expense.notes && (
+                              <p className="text-[10px] text-slate-400 mt-1 truncate">{expense.notes}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between md:justify-end gap-6 shrink-0 ml-14 md:ml-0">
+                          <div className="text-left md:text-right">
+                            <div className="text-sm font-black text-slate-800">
+                              R$ {expense.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </div>
+                            <div className={`text-[10px] font-bold mt-0.5 ${
+                              expense.status === "Pago" ? "text-emerald-600" :
+                              expense.status === "Atrasado" ? "text-rose-500" : "text-amber-500"
+                            }`}>
+                              {expense.status.toUpperCase()}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 border-l border-slate-200 pl-4">
+                            <button
+                              onClick={() => handleEditExpense(expense)}
+                              className="p-2 text-slate-400 hover:text-[#016a86] hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                              title="Editar despesa"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteExpense(expense.id)}
+                              className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                              title="Excluir despesa"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
+
+      {/* Modal Nova/Editar Despesa */}
+      <AnimatePresence>
+        {showExpenseModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowExpenseModal(false)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-pro-teal/10 text-pro-teal flex items-center justify-center">
+                    <TrendingUp size={20} className="transform rotate-180" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-slate-800">
+                      {editingExpense ? "Editar Despesa" : "Nova Despesa"}
+                    </h2>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">
+                      {MONTHS_PT[expenseMonth]} / {expenseYear}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowExpenseModal(false)}
+                  className="p-2 bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-full transition-colors border border-slate-200 shadow-sm cursor-pointer"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveExpense} className="p-6 space-y-5">
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Descrição</label>
+                  <input
+                    type="text"
+                    required
+                    value={expenseFormData.description || ""}
+                    onChange={e => setExpenseFormData({...expenseFormData, description: e.target.value})}
+                    placeholder="Ex: Aluguel, Conta de Luz..."
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-pro-teal focus:border-transparent transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Categoria</label>
+                    <input
+                      type="text"
+                      required
+                      value={expenseFormData.category || ""}
+                      onChange={e => setExpenseFormData({...expenseFormData, category: e.target.value})}
+                      placeholder="Ex: Operacional"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-pro-teal transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Valor (R$)</label>
+                    <input
+                      type="number"
+                      required
+                      step="0.01"
+                      min="0"
+                      value={expenseFormData.amount !== undefined ? expenseFormData.amount : ""}
+                      onChange={e => setExpenseFormData({...expenseFormData, amount: Number(e.target.value)})}
+                      placeholder="0,00"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-pro-teal transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Vencimento</label>
+                    <input
+                      type="date"
+                      required
+                      value={expenseFormData.dueDate || ""}
+                      onChange={e => setExpenseFormData({...expenseFormData, dueDate: e.target.value})}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-pro-teal transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Status</label>
+                    <select
+                      value={expenseFormData.status || "Pendente"}
+                      onChange={e => setExpenseFormData({...expenseFormData, status: e.target.value as any})}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-pro-teal transition-all cursor-pointer appearance-none"
+                    >
+                      <option value="Pendente">Pendente</option>
+                      <option value="Pago">Pago</option>
+                      <option value="Atrasado">Atrasado</option>
+                    </select>
+                  </div>
+                </div>
+
+                {expenseFormData.status === "Pago" && (
+                  <div className="grid grid-cols-2 gap-4 animate-fadeIn">
+                    <div>
+                      <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Data do Pgto</label>
+                      <input
+                        type="date"
+                        value={expenseFormData.paidAt || ""}
+                        onChange={e => setExpenseFormData({...expenseFormData, paidAt: e.target.value})}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-pro-teal transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Forma de Pgto</label>
+                      <select
+                        value={expenseFormData.paymentMethod || ""}
+                        onChange={e => setExpenseFormData({...expenseFormData, paymentMethod: e.target.value as any})}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-pro-teal transition-all cursor-pointer appearance-none"
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="PIX">PIX</option>
+                        <option value="Cartão">Cartão</option>
+                        <option value="Boleto">Boleto</option>
+                        <option value="Transferência">Transferência</option>
+                        <option value="Dinheiro">Dinheiro</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Observações</label>
+                  <textarea
+                    rows={2}
+                    value={expenseFormData.notes || ""}
+                    onChange={e => setExpenseFormData({...expenseFormData, notes: e.target.value})}
+                    placeholder="Notas ou observações..."
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-pro-teal transition-all resize-none"
+                  />
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowExpenseModal(false)}
+                    className="px-6 py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-[#016a86] text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-[#004e63] shadow-md shadow-[#016a86]/20 transition-all active:scale-95 cursor-pointer flex items-center gap-2"
+                  >
+                    <Check size={16} />
+                    Salvar Despesa
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
