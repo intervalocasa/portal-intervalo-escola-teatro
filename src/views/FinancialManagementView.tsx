@@ -691,9 +691,9 @@ export const FinancialManagementView = ({
       setShowExpenseModal(false);
       setEditingExpense(null);
       setExpenseFormData({});
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar despesa:", err);
-      alert("Erro ao salvar despesa.");
+      alert("Erro ao salvar despesa: " + (err.message || err.toString()));
     }
   };
 
@@ -702,9 +702,9 @@ export const FinancialManagementView = ({
     try {
       const { deleteDoc } = await import("firebase/firestore");
       await deleteDoc(doc(db, "despesas", id));
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao excluir despesa:", err);
-      alert("Erro ao excluir despesa.");
+      alert("Erro ao excluir despesa: " + (err.message || err.toString()));
     }
   };
 

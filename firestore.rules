@@ -143,6 +143,36 @@ service cloud.firestore {
       }
     }
 
+    match /pagamentos/{pagId} {
+      allow read: if isSignedIn();
+      allow write: if isGestor();
+    }
+
+    match /despesas/{despId} {
+      allow read: if isSignedIn();
+      allow write: if isGestor();
+    }
+
+    match /cursos/{cursoId} {
+      allow read: if true;
+      allow write: if isGestor();
+    }
+
+    match /stage_production_proposals/{proposalId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /experimental_classes/{expId} {
+      allow read: if isSignedIn();
+      allow write: if isGestor();
+    }
+
+    match /class_daily_diaries/{diaryId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
     match /system/{docId} {
       allow read: if true;
     }
