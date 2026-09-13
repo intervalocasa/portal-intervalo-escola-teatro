@@ -951,7 +951,7 @@ export const FinancialManagementView = ({
             }`}
           >
             <CreditCard size={18} />
-            Gestão de Pagamentos
+            Gestão de Receita
           </button>
         </div>
 
@@ -1001,7 +1001,7 @@ export const FinancialManagementView = ({
                   <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                     <CreditCard size={32} />
                   </div>
-                  <h3 className="text-xl font-black text-slate-800 mb-2">Gestão de Pagamentos</h3>
+                  <h3 className="text-xl font-black text-slate-800 mb-2">Gestão de Receita</h3>
                   <p className="text-sm text-slate-500 font-medium">
                     Controle o fluxo de recebimentos, mensalidades e status financeiro dos alunos.
                   </p>
@@ -1018,7 +1018,7 @@ export const FinancialManagementView = ({
                 <span>Gestão Estratégica & Financeira</span>
               </div>
               <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">
-                {activeTab === "matriculas" ? "Gestão de Matrículas" : "Gestão de Pagamentos & Mensalidades"}
+                {activeTab === "matriculas" ? "Gestão de Matrículas" : "Gestão de Receita"}
               </h2>
               <p className="text-xs md:text-sm text-slate-500 font-medium mt-1">
                 {activeTab === "matriculas" 
