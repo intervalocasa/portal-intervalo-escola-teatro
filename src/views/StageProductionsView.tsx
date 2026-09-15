@@ -73,6 +73,7 @@ import { StageProductionGuidelinesCard } from "../components/StageProductionGuid
 import { StageProductionDevolutivaCard } from "../components/StageProductionDevolutivaCard";
 import { StageProductionWorkflowActions } from "../components/StageProductionWorkflowActions";
 import { GestorStageFormModal } from "../components/GestorStageFormModal";
+import { generateStageCalendarPDF } from "../lib/stageCalendarPdfExporter";
 
 interface StageProductionsViewProps {
   currentUser: any;
@@ -452,6 +453,37 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
     setIsGestorModalOpen(true);
   };
 
+  const handleGenerateCalendarPDF = () => {
+    try {
+      if (!proposals || proposals.length === 0) {
+        if (showNotification) {
+          showNotification("Nenhuma apresentação ou formulário criado para gerar o calendário.", "Atenção", "warning");
+        }
+        generateStageCalendarPDF({
+          proposals: [],
+          classes,
+          users
+        });
+        return;
+      }
+
+      generateStageCalendarPDF({
+        proposals,
+        classes,
+        users
+      });
+
+      if (showNotification) {
+        showNotification("Calendário do processo de montagens gerado em PDF com sucesso!", "Sucesso", "success");
+      }
+    } catch (error: any) {
+      console.error("Erro ao gerar calendário em PDF:", error);
+      if (showNotification) {
+        showNotification("Erro ao gerar o calendário em PDF: " + (error?.message || "Erro inesperado"), "Erro", "error");
+      }
+    }
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrors({});
@@ -687,21 +719,49 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
             )}
 
             {selectedProposalToFill ? (
-              <button
-                onClick={() => setSelectedProposalToFill(null)}
-                className="px-5 py-2.5 rounded-xl bg-white text-slate-800 font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 hover:bg-slate-100 shadow-md"
-              >
-                <ArrowLeft size={16} />
-                Voltar às Apresentações
-              </button>
+              <div className="flex flex-wrap items-center gap-2.5">
+                {isGestor && (
+                  <button
+                    id="btn-gerar-calendario-inner"
+                    type="button"
+                    onClick={handleGenerateCalendarPDF}
+                    className="px-4 py-2.5 rounded-xl bg-white/95 text-purple-950 hover:bg-white font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-md active:scale-95 cursor-pointer border border-purple-200"
+                    title="Gerar PDF do calendário completo das montagens separado por turmas"
+                  >
+                    <Calendar size={16} className="text-purple-700" />
+                    Gerar calendário
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedProposalToFill(null)}
+                  className="px-5 py-2.5 rounded-xl bg-white text-slate-800 font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 hover:bg-slate-100 shadow-md"
+                >
+                  <ArrowLeft size={16} />
+                  Voltar às Apresentações
+                </button>
+              </div>
             ) : isGestor ? (
-              <button
-                onClick={handleCreateGestorForm}
-                className="px-5 py-2.5 rounded-xl bg-pro-yellow text-slate-900 font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 hover:bg-yellow-400 shadow-md active:scale-95"
-              >
-                <Plus size={16} />
-                Criar Formulário de Apresentação
-              </button>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  id="btn-gerar-calendario"
+                  type="button"
+                  onClick={handleGenerateCalendarPDF}
+                  className="px-4 py-2.5 rounded-xl bg-white text-purple-950 hover:bg-purple-50 font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-md active:scale-95 cursor-pointer border border-purple-200"
+                  title="Gerar PDF do calendário completo de todas as turmas"
+                >
+                  <Calendar size={16} className="text-purple-700" />
+                  Gerar calendário
+                </button>
+                <button
+                  id="btn-criar-formulario-apresentacao"
+                  type="button"
+                  onClick={handleCreateGestorForm}
+                  className="px-5 py-2.5 rounded-xl bg-pro-yellow text-slate-900 font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 hover:bg-yellow-400 shadow-md active:scale-95 cursor-pointer"
+                >
+                  <Plus size={16} />
+                  Criar Formulário de Apresentação
+                </button>
+              </div>
             ) : null}
           </div>
         </div>

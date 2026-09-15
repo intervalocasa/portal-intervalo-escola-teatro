@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Wallet, 
@@ -639,7 +639,7 @@ export const FinancialManagementView = ({
 
   // Computed Expenses for current filter
   const filteredExpenses = useMemo(() => {
-    let list = Object.values(dbExpenses).filter(exp => 
+    let list = (Object.values(dbExpenses) as ExpenseRecord[]).filter(exp => 
       exp.month === expenseMonth && exp.year === expenseYear
     );
 
