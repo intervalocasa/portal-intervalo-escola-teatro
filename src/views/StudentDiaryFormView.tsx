@@ -374,7 +374,7 @@ export const StudentDiaryFormView = ({
           <div className="space-y-6">
              <div className="flex items-center gap-4 border-l-4 border-pro-orange pl-6">
                 <div>
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Avalhação de Critérios Técnicos</h3>
+                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Avaliação de Critérios Técnicos</h3>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Atribua notas de 0 a 10 para cada competência</p>
                 </div>
              </div>
