@@ -215,7 +215,9 @@ export const UserDetailsView = ({
           <DetailItem label="Nome Social" value={user.socialName} />
           <DetailItem label="Pronomes" value={user.pronouns} />
           <DetailItem label="Nome Artístico" value={user.artisticName} />
-          {isGestor && <DetailItem label="Nome de Registro Civil (Apenas Gestão)" value={user.name} />}
+          {isGestor && (!user.socialName || user.socialName.trim().length === 0) && (
+            <DetailItem label="Nome de Registro Civil (Apenas Gestão)" value={user.name} />
+          )}
           <DetailItem label="Data de Nascimento" value={user.birthDate ? new Date(user.birthDate + 'T00:00:00').toLocaleDateString('pt-BR') : ""} />
           {isGestor && <DetailItem label="CPF (Login)" value={user.cpf} />}
           <DetailItem label="E-mail" value={user.email} />

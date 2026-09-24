@@ -458,7 +458,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                               const teacher = users.find(u => u.id === period.professorDiary.teacherId);
                                               setTeacherCommentModal({
                                                 text: period.professorDiary.criteriaObs[c.id],
-                                                teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
+                                                teacherName: period.professorDiary.teacherName || getUserDisplayName(teacher) || "Professor(a)",
                                                 teacherPhoto: teacher?.photo
                                               });
                                             }}
@@ -542,7 +542,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                             const teacher = users.find(u => u.id === period.professorDiary.teacherId);
                                             setTeacherCommentModal({
                                               text: period.professorDiary.criteriaObs[c.id],
-                                              teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
+                                              teacherName: period.professorDiary.teacherName || getUserDisplayName(teacher) || "Professor(a)",
                                               teacherPhoto: teacher?.photo
                                             });
                                           }}
@@ -617,7 +617,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                             const teacher = users.find(u => u.id === period.professorDiary.teacherId);
                                             setTeacherCommentModal({
                                               text: period.professorDiary.criteriaObs[c.id],
-                                              teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
+                                              teacherName: period.professorDiary.teacherName || getUserDisplayName(teacher) || "Professor(a)",
                                               teacherPhoto: teacher?.photo
                                             });
                                           }}
@@ -714,7 +714,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                           const teacher = users.find(u => u.id === period.professorDiary.teacherId);
                                           setTeacherCommentModal({
                                             text: period.professorDiary.criteriaObs[c.id],
-                                            teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
+                                            teacherName: period.professorDiary.teacherName || getUserDisplayName(teacher) || "Professor(a)",
                                             teacherPhoto: teacher?.photo
                                           });
                                         }}
@@ -782,7 +782,7 @@ export const EvolutionView: React.FC<EvolutionViewProps> = ({
                                     const teacher = users.find(u => u.id === teacherId);
                                     setTeacherCommentModal({
                                       text: period.professorDiary.generalPedagogicalObs,
-                                      teacherName: period.professorDiary.teacherName || teacher?.artisticName || teacher?.name || "Professor(a)",
+                                      teacherName: period.professorDiary.teacherName || getUserDisplayName(teacher) || "Professor(a)",
                                       teacherPhoto: teacher?.photo
                                     });
                                   }}

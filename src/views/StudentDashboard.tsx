@@ -20,6 +20,7 @@ import { AnnouncementPanel } from "../components/AnnouncementPanel";
 import { MyConquests } from "../components/MyConquests";
 import { FeedbackForm } from "../components/FeedbackForm";
 import { UserBadge } from "../types";
+import { getUserDisplayName } from "../lib/userUtils";
 
 interface StudentDashboardProps {
   currentUser: any;
@@ -77,7 +78,7 @@ export const StudentDashboard = ({
            <div className="w-16 h-16 rounded-full border-4 border-white/20 overflow-hidden bg-white/10 mb-2 shadow-xl flex items-center justify-center">
               <Avatar src={user?.photo} fallbackSize={40} />
            </div>
-           <span className="text-white font-bold text-sm tracking-tight">{user?.name || "Aluno"}</span>
+           <span className="text-white font-bold text-sm tracking-tight">{getUserDisplayName(user) || "Aluno"}</span>
         </div>
       </div>
 

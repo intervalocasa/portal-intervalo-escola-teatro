@@ -786,7 +786,7 @@ export const ClassDetailsView = ({
                         <p className="text-lg font-black text-slate-800 uppercase tracking-tight">
                           {(() => {
                             const student = users.find(u => u.id === enrollmentProcess.studentId);
-                            return student?.artisticName || student?.name;
+                            return getUserDisplayName(student) || "Aluno";
                           })()}
                         </p>
                       </div>
@@ -923,7 +923,7 @@ export const ClassDetailsView = ({
                       );
                     })()}
                     <p className="text-lg font-black text-slate-800 uppercase tracking-tight truncate">
-                      {selectedStudentForManagement.artisticName || selectedStudentForManagement.name}
+                      {getUserDisplayName(selectedStudentForManagement)}
                     </p>
                     <p className="text-xs text-slate-400 font-bold truncate">
                       {selectedStudentForManagement.email}

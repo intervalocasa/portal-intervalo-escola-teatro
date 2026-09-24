@@ -723,7 +723,7 @@ export const FinancialManagementView = ({
   // Restore standard course fee calculation for a student
   const handleRestoreCourseStandardFee = async (record: PaymentRecord) => {
     const studentDisplayName = record.studentSocialName && record.studentSocialName.trim().length > 0
-      ? `${record.studentName} (Nome Social: ${record.studentSocialName})`
+      ? `${record.studentSocialName} (Nome de Registro: ${record.studentName})`
       : record.studentName;
     if (!window.confirm(`Deseja remover o valor fixado de ${studentDisplayName} e restaurar o cálculo padrão do curso?`)) {
       return;
@@ -831,7 +831,7 @@ export const FinancialManagementView = ({
         const classLabel = `${item.classType} (${item.classCode})${item.classWeekday ? ' - ' + item.classWeekday : ''}`;
 
         const studentDisplayName = item.studentSocialName && item.studentSocialName.trim().length > 0
-          ? `${item.studentName} (Nome Social: ${item.studentSocialName})`
+          ? `${item.studentSocialName} (Nome de Registro: ${item.studentName})`
           : item.studentName;
 
         return [
@@ -957,7 +957,7 @@ export const FinancialManagementView = ({
 
       const tableRows = filteredPayments.map((item, index) => {
         const studentDisplayName = item.studentSocialName && item.studentSocialName.trim().length > 0
-          ? `${item.studentName} (Nome Social: ${item.studentSocialName})`
+          ? `${item.studentSocialName} (Nome de Registro: ${item.studentName})`
           : item.studentName;
 
         return [
@@ -1400,17 +1400,27 @@ export const FinancialManagementView = ({
                           </div>
 
                           <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="font-extrabold text-slate-800 text-sm md:text-base">
-                                {record.studentName}
-                              </h4>
-                              {record.studentSocialName && record.studentSocialName.trim().length > 0 && (
-                                <span className="inline-flex items-center gap-1 text-[11px] bg-teal-50 text-[#016a86] border border-teal-200/80 px-2 py-0.5 rounded-md font-bold">
-                                  <span className="text-slate-400 text-[9px] font-black uppercase tracking-wider">Nome Social:</span>
-                                  <span>{record.studentSocialName}</span>
-                                </span>
-                              )}
-                            </div>
+                            {record.studentSocialName && record.studentSocialName.trim().length > 0 ? (
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-black text-slate-800 text-sm md:text-base tracking-tight leading-tight">
+                                    {record.studentSocialName}
+                                  </h4>
+                                  <span className="text-[9px] font-black uppercase tracking-wider bg-teal-50 text-[#016a86] border border-teal-200/80 px-1.5 py-0.5 rounded">
+                                    Nome Social
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                                  Nome de Registro: <span className="text-slate-700 font-bold">{record.studentName}</span>
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col">
+                                <h4 className="font-extrabold text-slate-800 text-sm md:text-base">
+                                  {record.studentName}
+                                </h4>
+                              </div>
+                            )}
 
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 font-medium mt-1">
                               <span>CPF: <strong className="text-slate-700">{record.studentCpf}</strong></span>
@@ -1682,15 +1692,25 @@ export const FinancialManagementView = ({
                         className="p-4 md:p-5 hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
                       >
                         <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h4 className="font-extrabold text-slate-800 text-sm md:text-base">{item.studentName}</h4>
-                            {item.studentSocialName && item.studentSocialName.trim().length > 0 && (
-                              <span className="inline-flex items-center gap-1 text-[11px] bg-teal-50 text-[#016a86] border border-teal-200/80 px-2 py-0.5 rounded-md font-bold">
-                                <span className="text-slate-400 text-[9px] font-black uppercase tracking-wider">Nome Social:</span>
-                                <span>{item.studentSocialName}</span>
-                              </span>
-                            )}
-                          </div>
+                          {item.studentSocialName && item.studentSocialName.trim().length > 0 ? (
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-black text-slate-800 text-sm md:text-base tracking-tight leading-tight">
+                                  {item.studentSocialName}
+                                </h4>
+                                <span className="text-[9px] font-black uppercase tracking-wider bg-teal-50 text-[#016a86] border border-teal-200/80 px-1.5 py-0.5 rounded">
+                                  Nome Social
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                                Nome de Registro: <span className="text-slate-700 font-bold">{item.studentName}</span>
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col">
+                              <h4 className="font-extrabold text-slate-800 text-sm md:text-base">{item.studentName}</h4>
+                            </div>
+                          )}
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 font-medium mt-1">
                             <span>CPF: <strong className="text-slate-700">{item.studentCpf}</strong></span>
                             <span>Turma: <span className="text-[#016a86] font-bold">{item.className}</span></span>

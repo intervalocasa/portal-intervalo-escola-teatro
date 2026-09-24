@@ -438,7 +438,7 @@ export const UsersListView = ({
                               <Avatar src={group.keep.photo} fallbackSize={16} className="w-full h-full rounded-none" />
                             </div>
                             <div className="min-w-0">
-                              <p className="text-xs font-black text-slate-800 truncate">{group.keep.name}</p>
+                              <p className="text-xs font-black text-slate-800 truncate">{getUserDisplayName(group.keep)}</p>
                               <p className="text-[9px] font-bold text-slate-400 truncate">ID: {group.keep.id}</p>
                             </div>
                           </div>
@@ -455,7 +455,7 @@ export const UsersListView = ({
                                 <Avatar src={remUser.photo} fallbackSize={16} className="w-full h-full rounded-none" />
                               </div>
                               <div className="min-w-0">
-                                <p className="text-xs font-black text-slate-800 truncate">{remUser.name}</p>
+                                <p className="text-xs font-black text-slate-800 truncate">{getUserDisplayName(remUser)}</p>
                                 <p className="text-[9px] font-bold text-slate-400 truncate">ID: {remUser.id}</p>
                               </div>
                             </div>

@@ -135,16 +135,34 @@ export const RegisterEditUserView = ({
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Nome Social</label>
-              <span className="text-[9px] font-bold text-pro-teal bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">Exibido no sistema</span>
+              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                !isGestor && (role === "Aluno" || currentUser?.role === "Aluno")
+                  ? "text-amber-800 bg-amber-50 border-amber-200"
+                  : "text-pro-teal bg-teal-50 border-teal-100"
+              }`}>
+                {!isGestor && (role === "Aluno" || currentUser?.role === "Aluno")
+                  ? "🔒 Exclusivo da Gestão"
+                  : "Exibido no sistema"}
+              </span>
             </div>
             <input
               type="text"
               name="socialName"
+              disabled={!isGestor && (role === "Aluno" || currentUser?.role === "Aluno")}
               value={formData.socialName || ""}
               onChange={handleInputChange}
-              placeholder="Ex: Clara Silva"
-              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
+              placeholder={
+                !isGestor && (role === "Aluno" || currentUser?.role === "Aluno")
+                  ? (formData.socialName ? formData.socialName : "Nenhum nome social cadastrado")
+                  : "Ex: Clara Silva"
+              }
+              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
             />
+            {!isGestor && (role === "Aluno" || currentUser?.role === "Aluno") && (
+              <p className="text-[9px] text-amber-700 font-bold ml-1">
+                A inclusão ou alteração do Nome Social para alunos é realizada exclusivamente pela Gestão/Secretaria.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1">
@@ -175,21 +193,24 @@ export const RegisterEditUserView = ({
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome de Registro Civil (Documentação)</label>
-            <input
-              type="text"
-              name="name"
-              required
-              value={formData.name || ""}
-              onChange={handleInputChange}
-              placeholder="Ex: João Carlos da Silva"
-              className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
-            />
-            <p className="text-[9px] text-slate-400 font-bold ml-1">
-              {formData.socialName ? "🔒 Restrito à Gestão. Oculto para demais usuários." : "Exibido na ausência de Nome Social."}
-            </p>
-          </div>
+          {/* Nome de Registro Civil: Visible only if user does NOT have socialName, OR if Gestor is editing an existing user */}
+          {(!formData.socialName || (isGestor && view === "edit_user")) && (
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome de Registro Civil (Documentação)</label>
+              <input
+                type="text"
+                name="name"
+                required
+                value={formData.name || ""}
+                onChange={handleInputChange}
+                placeholder="Ex: João Carlos da Silva"
+                className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-800 transition-all focus:outline-none focus:border-pro-teal focus:bg-white"
+              />
+              <p className="text-[9px] text-slate-400 font-bold ml-1">
+                {formData.socialName ? "🔒 Restrito à Gestão. Oculto para demais usuários." : "Exibido na ausência de Nome Social."}
+              </p>
+            </div>
+          )}
 
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Artístico</label>

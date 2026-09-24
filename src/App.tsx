@@ -111,7 +111,7 @@ import { ClassDiaryView } from "./views/ClassDiaryView";
 import { StageProductionsView } from "./views/StageProductionsView";
 import { FormativeDocumentsView } from "./views/FormativeDocumentsView";
 import { getMonthlyDeadline } from "./lib/deadlineUtils";
-import { isDirectorOrGestor, isStaffOrAdmin, isProfessorOrTeacher, isStudentInactive, isStudentDesmatriculado } from "./lib/userUtils";
+import { isDirectorOrGestor, isStaffOrAdmin, isProfessorOrTeacher, isStudentInactive, isStudentDesmatriculado, getUserDisplayName } from "./lib/userUtils";
 import { propagateClassUpdate, syncAllClassNamesAcrossDatabase } from "./services/classSyncService";
 
 export default function App() {
@@ -794,7 +794,7 @@ export default function App() {
           uid: finalUid,
           id: finalUid,
           email: cleanEmail,
-          displayName: userData.name || userData.artisticName,
+          displayName: getUserDisplayName(userData) || userData.email,
           role: userData.role,
           ...userData,
           senha: firstPwdNew,
@@ -888,7 +888,7 @@ export default function App() {
         console.warn("Server reset-user-access endpoint warning:", srvErr);
       }
 
-      showNotification(`Acesso de ${targetUser?.name || 'usuário'} resetado com sucesso! O usuário já pode criar uma nova senha em "Não possuo senha".`, "Sucesso", "success");
+      showNotification(`Acesso de ${getUserDisplayName(targetUser) || 'usuário'} resetado com sucesso! O usuário já pode criar uma nova senha em "Não possuo senha".`, "Sucesso", "success");
       setGestorResettingUid(null);
       setGestorNewPwd("");
     } catch (err: any) {
@@ -940,7 +940,7 @@ export default function App() {
         console.warn("Server update-password endpoint warning:", srvErr);
       }
 
-      showNotification(`Senha alterada com sucesso para ${targetUser?.name || 'o usuário'}. O usuário já pode realizar o login com a nova senha.`, "Sucesso", "success");
+      showNotification(`Senha alterada com sucesso para ${getUserDisplayName(targetUser) || 'o usuário'}. O usuário já pode realizar o login com a nova senha.`, "Sucesso", "success");
       setGestorResettingUid(null);
       setGestorNewPwd("");
     } catch (err: any) {
@@ -1035,7 +1035,7 @@ export default function App() {
             uid: resolvedUserId || user?.uid || "user",
             id: resolvedUserId || user?.uid,
             email: userDocData.email || user?.email || storedUserEmail,
-            displayName: userDocData.name || userDocData.artisticName || user?.displayName,
+            displayName: getUserDisplayName(userDocData) || userDocData.email || user?.displayName,
             ...userDocData
           };
 
@@ -1690,7 +1690,7 @@ export default function App() {
 
       const diaryData = {
         studentId: selectedDiaryStudentId,
-        studentName: studentData.artisticName || studentData.name,
+        studentName: getUserDisplayName(studentData) || "Aluno",
         studentEmail: studentData.email || "",
         classId: selectedClassId,
         className: selectedClass.code,
@@ -2022,7 +2022,7 @@ export default function App() {
               uid: finalUid,
               id: finalUid,
               email: cleanEmail,
-              displayName: userData.name || userData.artisticName,
+              displayName: getUserDisplayName(userData) || userData.email,
               role: userData.role,
               ...userData,
               senha: cleanPassword,
@@ -2100,6 +2100,15 @@ export default function App() {
     setIsAppLoading(true);
     try {
       const { initialPassword, ...userDataRest } = formData;
+      const targetId = view === "edit_user" ? selectedUserId : currentUser?.uid;
+      const isStudentEditing = (!isDirectorOrGestor(role) && (role === "Aluno" || currentUser?.role === "Aluno" || view === "edit_self"));
+      const existingUserDoc = targetId ? users.find(u => u.id === targetId) : currentUser;
+
+      // Ensure students cannot add or change socialName
+      if (isStudentEditing) {
+        userDataRest.socialName = existingUserDoc?.socialName || "";
+      }
+
       const dataToSave = {
         ...userDataRest,
         role: (view === "register" || (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo"))) ? regType : (view === "edit_user" ? (users.find(u => u.id === selectedUserId)?.role || "Aluno") : role),
@@ -2141,7 +2150,6 @@ export default function App() {
         studentId = docRef.id;
         showNotification("Usuário cadastrado com sucesso!", "Sucesso");
       } else {
-        const targetId = view === "edit_user" ? selectedUserId : currentUser?.uid;
         if (targetId) {
           studentId = targetId;
           await updateDoc(doc(db, "usuarios", targetId), dataToSave);
@@ -2369,7 +2377,7 @@ export default function App() {
     try {
       showNotification("Analisando seu relato pedagógico...", "IA", "success");
       const pedagogicalAnalysis = await analyzePedagogicalFeedback(
-        studentData?.name || "Aluno",
+        getUserDisplayName(studentData) || "Aluno",
         selectedClass.code,
         assessmentForm.openAnswers,
         assessmentForm.notes
@@ -2384,7 +2392,7 @@ export default function App() {
 
       const evaluationData = {
         studentId,
-        studentName: studentData?.name || "Aluno",
+        studentName: getUserDisplayName(studentData) || "Aluno",
         studentEmail: studentData?.email || "",
         classId: assessmentForm.classId,
         classType: selectedClass.type,
@@ -3535,7 +3543,7 @@ export default function App() {
                 <div className="space-y-4">
                   <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest text-center">
                     Redefinindo senha para: <br/>
-                    <span className="text-pro-teal font-extrabold text-sm">{users.find(u => u.id === gestorResettingUid)?.name}</span>
+                    <span className="text-pro-teal font-extrabold text-sm">{getUserDisplayName(users.find(u => u.id === gestorResettingUid))}</span>
                   </p>
 
                   <div className="p-4 bg-teal-50/60 rounded-2xl border border-teal-100/60 space-y-2">

@@ -29,6 +29,7 @@ import {
 import { Logo, Avatar } from "../components/CommonComponents";
 import { AnnouncementPanel } from "../components/AnnouncementPanel";
 import { THEME } from "../theme";
+import { getUserDisplayName } from "../lib/userUtils";
 
 interface GestorDashboardProps {
   currentUser: any;
@@ -74,7 +75,7 @@ export const GestorDashboard = ({
            <div className="w-16 h-16 rounded-full border-4 border-white/20 overflow-hidden bg-white/10 mb-2 shadow-xl flex items-center justify-center">
               <Avatar src={user?.photo} fallbackSize={40} />
            </div>
-           <span className="text-white font-bold text-sm tracking-tight">{user?.name || user?.artisticName || "Gestor(a)"}</span>
+           <span className="text-white font-bold text-sm tracking-tight">{getUserDisplayName(user) || "Gestor(a)"}</span>
         </div>
       </div>
 

@@ -8,17 +8,17 @@ import { User, Class } from "../types";
 /**
  * Returns the primary display name for a user.
  * Priority:
- * 1. artisticName (if present)
- * 2. socialName (if present)
+ * 1. socialName (if present)
+ * 2. artisticName (if present)
  * 3. name (civil registration name)
  */
 export function getUserDisplayName(user: Partial<User> | null | undefined): string {
   if (!user) return "";
-  if (user.artisticName && user.artisticName.trim().length > 0) {
-    return user.artisticName.trim();
-  }
   if (user.socialName && user.socialName.trim().length > 0) {
     return user.socialName.trim();
+  }
+  if (user.artisticName && user.artisticName.trim().length > 0) {
+    return user.artisticName.trim();
   }
   return user.name?.trim() || "";
 }
@@ -47,32 +47,39 @@ export function getUserDisplayNameWithPronouns(user: Partial<User> | null | unde
 /**
  * Returns the secondary display name (subtitle under primary display name).
  * Rule:
- * - If user has BOTH artisticName and socialName, artisticName is displayed on top
- *   and socialName is displayed as the secondary name below.
- * - Under NO circumstances should civil name (user.name) be returned as a public secondary name.
+ * - If user has BOTH socialName and artisticName, socialName is displayed on top
+ *   and artisticName is displayed as the secondary name below.
+ * - Under NO circumstances should civil name (user.name) be returned as a secondary name
+ *   if the user has a socialName registered.
  */
 export function getUserSecondaryName(user: Partial<User> | null | undefined): string | undefined {
   if (!user) return undefined;
   if (
+    user.socialName &&
+    user.socialName.trim().length > 0 &&
     user.artisticName &&
     user.artisticName.trim().length > 0 &&
-    user.socialName &&
-    user.socialName.trim().length > 0
+    user.socialName.trim() !== user.artisticName.trim()
   ) {
-    return user.socialName.trim();
+    return `Nome Artístico: ${user.artisticName.trim()}`;
   }
   return undefined;
 }
 
 /**
- * Returns the civil/registration name ONLY if the viewer is a Gestor or the user themselves.
- * For all other users (teachers, students, public), the civil name is strictly hidden and never displayed.
+ * Returns the civil/registration name ONLY if the viewer is a Gestor or the user themselves,
+ * UNLESS the user has a socialName registered (in which case civil registration name is hidden everywhere
+ * outside the financial module).
  */
 export function getUserCivilNameIfAllowed(
   user: Partial<User> | null | undefined,
   viewerIsGestorOrSelf: boolean
 ): string | undefined {
   if (!user) return undefined;
+  // If user has socialName, registration name is strictly hidden everywhere except the financial module
+  if (user.socialName && user.socialName.trim().length > 0) {
+    return undefined;
+  }
   if (viewerIsGestorOrSelf) {
     return user.name;
   }

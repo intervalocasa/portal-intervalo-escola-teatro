@@ -20,6 +20,7 @@ import { db } from "../lib/firebase";
 import { UserBadge, Class, User } from "../types";
 import { Avatar } from "../components/CommonComponents";
 import { BADGES } from "../constants/badges";
+import { getUserDisplayName } from "../lib/userUtils";
 
 interface BadgesManagerViewProps {
   onBack: () => void;
@@ -262,7 +263,7 @@ export const BadgesManagerView: React.FC<BadgesManagerViewProps> = ({ onBack, cl
                       <div className="flex items-center gap-3 w-full lg:w-1/4 shrink-0 min-w-0">
                         <Avatar src={student?.photo} className="w-10 h-10 rounded-full" fallbackSize={16} />
                         <div className="min-w-0">
-                          <h4 className="text-slate-800 font-black uppercase text-[11px] leading-tight truncate">{student?.name || "Aluno(a)"}</h4>
+                          <h4 className="text-slate-800 font-black uppercase text-[11px] leading-tight truncate">{student ? getUserDisplayName(student) : "Aluno(a)"}</h4>
                           <p className="text-[9px] font-bold text-pro-teal uppercase tracking-tight truncate mt-0.5">{classItem?.type || "Turma Geral"}</p>
                         </div>
                       </div>
@@ -290,7 +291,7 @@ export const BadgesManagerView: React.FC<BadgesManagerViewProps> = ({ onBack, cl
                         </div>
                         <div className="min-w-0">
                           <span className="text-[8px] font-black text-slate-300 uppercase block tracking-widest">Atribuído por</span>
-                          <span className="text-[10px] font-bold text-slate-500 uppercase truncate block">{(awardedBy as any).name}</span>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase truncate block">{getUserDisplayName(awardedBy as any) || (awardedBy as any).name}</span>
                         </div>
                       </div>
                       

@@ -19,6 +19,7 @@ import {
 import { THEME } from "../theme";
 import { Logo, Avatar } from "../components/CommonComponents";
 import { AnnouncementPanel } from "../components/AnnouncementPanel";
+import { getUserDisplayName } from "../lib/userUtils";
 
 interface ProfessorDashboardProps {
   currentUser: any;
@@ -70,14 +71,14 @@ export const ProfessorDashboard = ({
            <div className="w-16 h-16 rounded-full border-4 border-white/20 overflow-hidden bg-white/10 mb-2 shadow-xl flex items-center justify-center">
               <Avatar src={user?.photo} fallbackSize={40} />
            </div>
-           <span className="text-white font-bold text-sm tracking-tight">{user?.artisticName || user?.name || "Professor"}</span>
+           <span className="text-white font-bold text-sm tracking-tight">{getUserDisplayName(user) || "Professor"}</span>
         </div>
       </div>
 
       <div className="p-8 md:p-16 flex-1 md:overflow-y-auto bg-slate-50/30 flex flex-col">
         <div className="max-w-6xl mx-auto w-full space-y-8 flex-1">
           <div className="mb-0 hidden md:block border-b border-slate-100 pb-8">
-            <h2 className="text-4xl font-black text-slate-800 tracking-tight">Bem-vindo(a), {user?.artisticName || "Prof."}</h2>
+            <h2 className="text-4xl font-black text-slate-800 tracking-tight">Bem-vindo(a), {getUserDisplayName(user) || "Prof."}</h2>
             <p className="text-slate-400 font-bold mt-2">Pronto para inspirar seus alunos hoje?</p>
           </div>
 
