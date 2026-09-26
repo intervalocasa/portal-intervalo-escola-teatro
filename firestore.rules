@@ -12,7 +12,9 @@ service cloud.firestore {
     }
     
     function getUserRole() {
-      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role;
+      return exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role
+        : '';
     }
     
     function isGestor() {
@@ -20,6 +22,7 @@ service cloud.firestore {
         getUserRole() == 'Gestor' || 
         getUserRole() == 'Diretor Pedagógico' || 
         getUserRole() == 'Diretor Pedagógico e Professor' || 
+        getUserRole() == 'Auxiliar Administrativo' ||
         request.auth.token.email == 'intervalocasa@gmail.com' ||
         request.auth.token.email == 'contato@intervalocasa.com'
       );
@@ -145,17 +148,17 @@ service cloud.firestore {
 
     match /pagamentos/{pagId} {
       allow read: if isSignedIn();
-      allow write: if isGestor();
+      allow write: if isSignedIn();
     }
 
     match /despesas/{despId} {
       allow read: if isSignedIn();
-      allow write: if isGestor();
+      allow write: if isSignedIn();
     }
 
     match /cursos/{cursoId} {
       allow read: if true;
-      allow write: if isGestor();
+      allow write: if isSignedIn();
     }
 
     match /stage_production_proposals/{proposalId} {
@@ -165,7 +168,7 @@ service cloud.firestore {
 
     match /experimental_classes/{expId} {
       allow read: if isSignedIn();
-      allow write: if isGestor();
+      allow write: if isSignedIn();
     }
 
     match /class_daily_diaries/{diaryId} {

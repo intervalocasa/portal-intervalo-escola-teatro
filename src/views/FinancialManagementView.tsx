@@ -632,11 +632,11 @@ export const FinancialManagementView = ({
 
       // 2. Se fixForFuture estiver marcado, fixa como nova mensalidade no perfil do aluno
       if (fixForFuture) {
-        const userRef = doc(db, "users", record.studentId);
-        await updateDoc(userRef, {
+        const userRef = doc(db, "usuarios", record.studentId);
+        await setDoc(userRef, {
           customMonthlyFee: validAmount,
           updatedAt: serverTimestamp()
-        });
+        }, { merge: true });
       }
 
       setEditingAmountId(null);
@@ -741,11 +741,11 @@ export const FinancialManagementView = ({
     }
     try {
       setIsUpdatingPayment(record.id);
-      const userRef = doc(db, "users", record.studentId);
-      await updateDoc(userRef, {
+      const userRef = doc(db, "usuarios", record.studentId);
+      await setDoc(userRef, {
         customMonthlyFee: null,
         updatedAt: serverTimestamp()
-      });
+      }, { merge: true });
 
       const studentObj = users.find(u => u.id === record.studentId);
       const { totalAmount } = calculateStudentMonthlyFee(
@@ -1760,7 +1760,7 @@ export const FinancialManagementView = ({
                                     placeholder="0,00"
                                   />
                                   <button
-                                    onClick={() => handleSaveCustomAmount(item, Number(tempAmountValue), fixAmountForFuture)}
+                                    onClick={() => handleSaveCustomAmount(item, Number(String(tempAmountValue).replace(",", ".")), fixAmountForFuture)}
                                     disabled={isUpdatingPayment === item.id}
                                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                                     title="Salvar valor"
