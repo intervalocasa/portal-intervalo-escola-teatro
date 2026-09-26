@@ -117,12 +117,15 @@ export const UserDetailsView = ({
                  if (!window.confirm(`Deseja realmente ${isDesmat ? "rematricular" : "desmatricular"} este aluno?`)) return;
                  try {
                    const userRef = doc(db, "usuarios", user.id);
+                   const todayIso = new Date().toISOString().split("T")[0];
                    if (isDesmat) {
                      await updateDoc(userRef, {
                        desmatriculado: false,
                        inactive: false,
                        status: "ativo",
-                       enrollmentStatus: "Ativo"
+                       enrollmentStatus: "Ativo",
+                       unenrollmentDate: "",
+                       dataDesmatricula: ""
                      });
                      alert("Aluno rematriculado com sucesso!");
                    } else {
@@ -130,7 +133,9 @@ export const UserDetailsView = ({
                        desmatriculado: true,
                        inactive: true,
                        status: "desmatriculado",
-                       enrollmentStatus: "Desmatriculado"
+                       enrollmentStatus: "Desmatriculado",
+                       unenrollmentDate: todayIso,
+                       dataDesmatricula: todayIso
                      });
                      alert("Aluno desmatriculado com sucesso!");
                    }
@@ -160,6 +165,7 @@ export const UserDetailsView = ({
                  email: user.email,
                  role: user.role,
                  cpf: user.cpf,
+                 rg: user.rg || "",
                  phone: user.phone || "",
                  address: user.address || "",
                  bank: user.bank || "",
@@ -220,6 +226,7 @@ export const UserDetailsView = ({
           )}
           <DetailItem label="Data de Nascimento" value={user.birthDate ? new Date(user.birthDate + 'T00:00:00').toLocaleDateString('pt-BR') : ""} />
           {isGestor && <DetailItem label="CPF (Login)" value={user.cpf} />}
+          {isGestor && <DetailItem label="RG" value={user.rg} />}
           <DetailItem label="E-mail" value={user.email} />
           <DetailItem label="Telefone" value={user.phone} />
           <DetailItem label="Endereço" value={user.address} fullWidth />

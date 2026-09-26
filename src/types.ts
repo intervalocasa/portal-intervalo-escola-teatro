@@ -104,6 +104,7 @@ export interface User {
   email: string;
   role: UserRole;
   cpf: string;
+  rg?: string;
   phone?: string;
   address?: string;
   bank?: string;
@@ -120,6 +121,9 @@ export interface User {
   desmatriculado?: boolean;
   statusMatricula?: "Matriculado" | "Desmatriculado" | "Trancado";
   customMonthlyFee?: number;
+  unenrollmentDate?: string;
+  dataDesmatricula?: string;
+  desmatriculadoEm?: string;
 }
 
 export interface Class {
@@ -134,6 +138,7 @@ export interface Class {
   teacherIds: string[];
   studentIds: string[];
   enrollmentDates?: Record<string, string>;
+  unenrollmentDates?: Record<string, string>;
   studentPaymentTypes?: Record<string, "Pagante" | "Isento">;
   studentEnrollmentStatuses?: Record<string, "Ativo" | "Trancado" | "Desmatriculado" | "Inativo">;
   year: string;

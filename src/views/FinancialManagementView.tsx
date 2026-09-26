@@ -172,6 +172,7 @@ export interface EnrollmentRecord {
   studentName: string;
   studentSocialName?: string;
   studentCpf: string;
+  studentRg?: string;
   studentEmail: string;
   studentPhone?: string;
   studentPhoto?: string;
@@ -185,6 +186,7 @@ export interface EnrollmentRecord {
   isClassActive: boolean;
   
   enrollmentDate: string; // YYYY-MM-DD
+  unenrollmentDate?: string; // YYYY-MM-DD
   paymentType: "Pagante" | "Isento";
   isEnrollmentActive: boolean;
   statusLabel: "Ativa" | "Desmatriculado";
@@ -324,6 +326,10 @@ export const FinancialManagementView = ({
                         (student.createdAt?.toDate ? student.createdAt.toDate().toISOString().split('T')[0] : "") || 
                         "Data N/D";
 
+        const unenrollDateStr = !isEnrollmentActive
+          ? (c.unenrollmentDates?.[sId] || (student as any).unenrollmentDate || (student as any).dataDesmatricula || (student as any).desmatriculadoEm || (student.updatedAt?.toDate ? student.updatedAt.toDate().toISOString().split('T')[0] : "") || "")
+          : "";
+
         const paymentType = c.studentPaymentTypes?.[sId] || "Pagante";
 
         records.push({
@@ -332,6 +338,7 @@ export const FinancialManagementView = ({
           studentName: student.name,
           studentSocialName: student.socialName,
           studentCpf: student.cpf || "Não informado",
+          studentRg: (student as any).rg || (student as any).identidade || (student as any).rgNumber || "-",
           studentEmail: student.email || "",
           studentPhone: student.phone || "Não informado",
           studentPhoto: student.photo,
@@ -343,6 +350,7 @@ export const FinancialManagementView = ({
           classTime: c.time || "",
           isClassActive,
           enrollmentDate: dateStr,
+          unenrollmentDate: unenrollDateStr,
           paymentType,
           isEnrollmentActive,
           statusLabel: isEnrollmentActive ? "Ativa" : "Desmatriculado"
@@ -354,12 +362,14 @@ export const FinancialManagementView = ({
     const enrolledStudentIds = new Set(records.map(r => r.studentId));
     studentUsers.forEach(student => {
       if (isStudentUserInactive(student) && !enrolledStudentIds.has(student.id)) {
+        const unenrollDateStr = (student as any).unenrollmentDate || (student as any).dataDesmatricula || (student as any).desmatriculadoEm || (student.updatedAt?.toDate ? student.updatedAt.toDate().toISOString().split('T')[0] : "") || "";
         records.push({
           id: `desmat_${student.id}`,
           studentId: student.id,
           studentName: student.name,
           studentSocialName: student.socialName,
           studentCpf: student.cpf || "Não informado",
+          studentRg: (student as any).rg || (student as any).identidade || (student as any).rgNumber || "-",
           studentEmail: student.email || "",
           studentPhone: student.phone || "Não informado",
           studentPhoto: student.photo,
@@ -371,6 +381,7 @@ export const FinancialManagementView = ({
           classTime: "",
           isClassActive: false,
           enrollmentDate: (student.createdAt?.toDate ? student.createdAt.toDate().toISOString().split('T')[0] : "") || "Data N/D",
+          unenrollmentDate: unenrollDateStr,
           paymentType: "Pagante",
           isEnrollmentActive: false,
           statusLabel: "Desmatriculado"
@@ -764,7 +775,7 @@ export const FinancialManagementView = ({
   const handleGenerateEnrollmentPDF = () => {
     try {
       const docPDF = new jsPDF({
-        orientation: "portrait",
+        orientation: "landscape",
         unit: "mm",
         format: "a4"
       });
@@ -779,128 +790,136 @@ export const FinancialManagementView = ({
 
       // Header Banner
       docPDF.setFillColor(primaryTeal[0], primaryTeal[1], primaryTeal[2]);
-      docPDF.rect(0, 0, pageWidth, 32, "F");
+      docPDF.rect(0, 0, pageWidth, 28, "F");
 
       // Header Title
       docPDF.setTextColor(255, 255, 255);
       docPDF.setFont("helvetica", "bold");
-      docPDF.setFontSize(16);
-      docPDF.text("INTERVALO ESCOLA DE TEATRO", 14, 15);
+      docPDF.setFontSize(15);
+      docPDF.text("INTERVALO ESCOLA DE TEATRO", 14, 13);
 
       docPDF.setFont("helvetica", "normal");
-      docPDF.setFontSize(9);
-      docPDF.text("DEPARTAMENTO DE GESTÃO FINANCEIRA E PEDAGÓGICA", 14, 22);
+      docPDF.setFontSize(8.5);
+      docPDF.text("DEPARTAMENTO DE GESTÃO DE MATRÍCULAS E REGISTROS ESCOLARES", 14, 20);
       
       const now = new Date();
       const dateFormatted = now.toLocaleDateString("pt-BR") + " às " + now.toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' });
       docPDF.setFontSize(8);
-      docPDF.text(`Emissão: ${dateFormatted}`, pageWidth - 14, 22, { align: "right" });
+      docPDF.text(`Emissão: ${dateFormatted}`, pageWidth - 14, 20, { align: "right" });
 
       // Document Subheader
       docPDF.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
       docPDF.setFont("helvetica", "bold");
-      docPDF.setFontSize(13);
-      docPDF.text("RELATÓRIO OFICIAL DE MATRÍCULAS", 14, 42);
+      docPDF.setFontSize(12);
+      docPDF.text("RELATÓRIO OFICIAL DE ALUNOS E MATRÍCULAS", 14, 36);
 
       // Info Box / Metrics
       docPDF.setFillColor(lightSlate[0], lightSlate[1], lightSlate[2]);
-      docPDF.roundedRect(14, 46, pageWidth - 28, 20, 2, 2, "F");
+      docPDF.roundedRect(14, 40, pageWidth - 28, 14, 2, 2, "F");
 
-      docPDF.setFontSize(8);
+      docPDF.setFontSize(7.5);
       docPDF.setFont("helvetica", "bold");
       docPDF.setTextColor(primaryTeal[0], primaryTeal[1], primaryTeal[2]);
-      docPDF.text("RESUMO DE REGISTROS", 18, 52);
+      docPDF.text("RESUMO DE REGISTROS", 18, 45.5);
 
       docPDF.setFont("helvetica", "normal");
       docPDF.setTextColor(71, 85, 105);
-      docPDF.text(`Filtro de Status: ${statusFilter.toUpperCase()}`, 18, 58);
-      docPDF.text(`Total Exibido: ${filteredEnrollments.length}`, 80, 58);
-      docPDF.text(`Matrículas Ativas: ${matriculasAtivas}`, 130, 58);
-      docPDF.text(`Desmatriculados: ${matriculasDesmatriculadas}`, 175, 58, { align: "right" });
+      docPDF.text(`Filtro: ${statusFilter.toUpperCase()}`, 18, 50.5);
+      docPDF.text(`Total de Registros: ${filteredEnrollments.length}`, 80, 50.5);
+      docPDF.text(`Matrículas Ativas: ${matriculasAtivas}`, 155, 50.5);
+      docPDF.text(`Desmatriculados: ${matriculasDesmatriculadas}`, pageWidth - 18, 50.5, { align: "right" });
+
+      const formatDateBr = (dateStr?: string | null): string => {
+        if (!dateStr || typeof dateStr !== "string") return "";
+        const cleanStr = dateStr.trim();
+        if (!cleanStr || cleanStr === "Data N/D" || cleanStr === "-" || cleanStr === "Sem Turma") return cleanStr === "Data N/D" ? "Data N/D" : "";
+        if (cleanStr.includes("-")) {
+          const parts = cleanStr.split("T")[0].split("-");
+          if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+          }
+        }
+        return cleanStr;
+      };
 
       // Table Data Preparation
       const tableRows = filteredEnrollments.map((item, index) => {
-        let dateFormatted = item.enrollmentDate;
-        if (dateFormatted && dateFormatted.includes("-")) {
-          const parts = dateFormatted.split("-");
-          if (parts.length === 3) {
-            dateFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
-          }
-        }
+        const dateMatriculaFormatted = formatDateBr(item.enrollmentDate) || "-";
+        
+        // Se o aluno não tiver sido desmatriculado, na coluna de data de desmatrícula deixe a célula em branco.
+        const dateDesmatriculaFormatted = item.isEnrollmentActive 
+          ? "" 
+          : (formatDateBr(item.unenrollmentDate) || "");
 
-        const classLabel = `${item.classType} (${item.classCode})${item.classWeekday ? ' - ' + item.classWeekday : ''}`;
+        const classLabel = item.classId === "sem_turma" 
+          ? "Sem Turma" 
+          : `${item.classType} (${item.classCode})${item.classWeekday ? ' - ' + item.classWeekday : ''}`;
 
         const studentDisplayName = item.studentSocialName && item.studentSocialName.trim().length > 0
-          ? `${item.studentSocialName} (Nome de Registro: ${item.studentName})`
+          ? `${item.studentSocialName} (${item.studentName})`
           : item.studentName;
 
         return [
           String(index + 1),
           studentDisplayName,
-          item.studentCpf,
+          item.studentPhone || "-",
+          item.studentCpf || "-",
+          item.studentRg || "-",
           classLabel,
-          dateFormatted,
-          item.statusLabel.toUpperCase()
+          dateMatriculaFormatted,
+          dateDesmatriculaFormatted
         ];
       });
 
       // Render AutoTable
       autoTable(docPDF, {
-        startY: 72,
-        head: [["#", "Nome do Aluno", "CPF", "Turma", "Data Matrícula", "Status"]],
+        startY: 58,
+        head: [["#", "Nome do Aluno", "Telefone", "CPF", "RG", "Turma", "Data de Matrícula", "Data de Desmatrícula"]],
         body: tableRows,
         theme: "striped",
         headStyles: {
           fillColor: [1, 106, 134],
           textColor: [255, 255, 255],
           fontStyle: "bold",
-          fontSize: 8.5,
-          halign: "left"
+          fontSize: 8,
+          halign: "center"
         },
         bodyStyles: {
-          fontSize: 8,
+          fontSize: 7.5,
           textColor: [30, 41, 59]
         },
         alternateRowStyles: {
           fillColor: [248, 250, 252]
         },
         columnStyles: {
-          0: { cellWidth: 10, halign: "center" },
-          1: { cellWidth: 55 },
-          2: { cellWidth: 32 },
-          3: { cellWidth: 48 },
-          4: { cellWidth: 22, halign: "center" },
-          5: { cellWidth: 15, halign: "center", fontStyle: "bold" }
-        },
-        didParseCell: (data) => {
-          if (data.section === "body" && data.column.index === 5) {
-            if (data.cell.raw === "ATIVA") {
-              data.cell.styles.textColor = [16, 122, 87]; // Emerald green
-            } else {
-              data.cell.styles.textColor = [225, 29, 72]; // Rose red
-            }
-          }
+          0: { cellWidth: 9, halign: "center" },
+          1: { cellWidth: 55, halign: "left" },
+          2: { cellWidth: 30, halign: "center" },
+          3: { cellWidth: 30, halign: "center" },
+          4: { cellWidth: 26, halign: "center" },
+          5: { cellWidth: 47, halign: "left" },
+          6: { cellWidth: 36, halign: "center" },
+          7: { cellWidth: 36, halign: "center" }
         },
         didDrawPage: (data) => {
-          // Footer
           const pageCount = (docPDF as any).internal.getNumberOfPages();
           const currentPage = data.pageNumber;
 
           docPDF.setDrawColor(226, 232, 240);
-          docPDF.line(14, pageHeight - 14, pageWidth - 14, pageHeight - 14);
+          docPDF.line(14, pageHeight - 12, pageWidth - 14, pageHeight - 12);
 
           docPDF.setFontSize(7);
           docPDF.setFont("helvetica", "bold");
           docPDF.setTextColor(148, 163, 184);
-          docPDF.text("INTERVALO ESCOLA DE TEATRO • MÓDULO FINANCEIRO", 14, pageHeight - 9);
+          docPDF.text("INTERVALO ESCOLA DE TEATRO • RELATÓRIO OFICIAL DE MATRÍCULAS", 14, pageHeight - 7);
 
-          docPDF.text(`Página ${currentPage} de ${pageCount}`, pageWidth - 14, pageHeight - 9, { align: "right" });
+          docPDF.text(`Página ${currentPage} de ${pageCount}`, pageWidth - 14, pageHeight - 7, { align: "right" });
         },
-        margin: { top: 35, bottom: 20, left: 14, right: 14 }
+        margin: { top: 32, bottom: 16, left: 14, right: 14 }
       });
 
       // Save PDF
-      docPDF.save(`Lista_Matriculas_Intervalo_${statusFilter.toLowerCase()}_${now.toISOString().split("T")[0]}.pdf`);
+      docPDF.save(`Relatorio_Alunos_Matriculas_Intervalo_${statusFilter.toLowerCase()}_${now.toISOString().split("T")[0]}.pdf`);
     } catch (err) {
       console.error("Erro ao gerar PDF:", err);
       alert("Erro ao gerar arquivo PDF das matrículas.");
@@ -1183,10 +1202,11 @@ export const FinancialManagementView = ({
               {activeTab === "matriculas" ? (
                 <button
                   onClick={handleGenerateEnrollmentPDF}
-                  className="w-full md:w-auto px-6 py-3.5 bg-[#016a86] hover:bg-[#005167] text-white font-bold text-xs md:text-sm rounded-2xl shadow-lg shadow-[#016a86]/20 flex items-center justify-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  title="Gerar e baixar relatório completo de alunos em formato A4"
+                  className="w-full md:w-auto px-6 py-3.5 bg-[#016a86] hover:bg-[#005167] text-white font-bold text-xs md:text-sm rounded-2xl shadow-lg shadow-[#016a86]/20 flex items-center justify-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                 >
-                  <Download size={18} />
-                  <span>Baixar Lista em PDF</span>
+                  <FileText size={18} />
+                  <span>Gerar Relatório de Alunos</span>
                 </button>
               ) : activeTab === "pagamentos" ? (
                 <button
@@ -1481,10 +1501,12 @@ export const FinancialManagementView = ({
                               onClick={async () => {
                                 try {
                                   const newStatus = record.isEnrollmentActive ? "Desmatriculado" : "Ativo";
+                                  const todayIso = new Date().toISOString().split("T")[0];
                                   if (record.classId && record.classId !== "sem_turma") {
                                     const classRef = doc(db, "classes", record.classId);
                                     await updateDoc(classRef, {
-                                      [`studentEnrollmentStatuses.${record.studentId}`]: newStatus
+                                      [`studentEnrollmentStatuses.${record.studentId}`]: newStatus,
+                                      [`unenrollmentDates.${record.studentId}`]: record.isEnrollmentActive ? todayIso : ""
                                     });
                                   }
                                   const userRef = doc(db, "usuarios", record.studentId);
@@ -1493,14 +1515,18 @@ export const FinancialManagementView = ({
                                       desmatriculado: true,
                                       inactive: true,
                                       status: "desmatriculado",
-                                      enrollmentStatus: "Desmatriculado"
+                                      enrollmentStatus: "Desmatriculado",
+                                      unenrollmentDate: todayIso,
+                                      dataDesmatricula: todayIso
                                     });
                                   } else {
                                     await updateDoc(userRef, {
                                       desmatriculado: false,
                                       inactive: false,
                                       status: "ativo",
-                                      enrollmentStatus: "Ativo"
+                                      enrollmentStatus: "Ativo",
+                                      unenrollmentDate: "",
+                                      dataDesmatricula: ""
                                     });
                                   }
                                 } catch (err) {

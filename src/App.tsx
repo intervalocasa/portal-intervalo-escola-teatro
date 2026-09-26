@@ -1839,6 +1839,7 @@ export default function App() {
     phone: "",
     address: "",
     cpf: "",
+    rg: "",
     bank: "",
     bankAgency: "",
     bankAccount: "",
