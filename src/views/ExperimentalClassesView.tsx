@@ -29,6 +29,7 @@ import {
   CheckCircle,
   UserCheck,
   UserX,
+  UserMinus,
   HelpCircle,
   XCircle,
   ClipboardCheck,
@@ -199,7 +200,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   
   // Specific Tabs Filter
   const [tabFilter, setTabFilter] = useState<
-    "TODOS" | "AGENDADOS" | "MATRICULADO" | "AGUARDANDO_RESPOSTA" | "NAO_MATRICULOU" | "NAO_COMPARECEU"
+    "TODOS" | "AGENDADOS" | "MATRICULADO" | "AGUARDANDO_RESPOSTA" | "NAO_MATRICULOU" | "NAO_COMPARECEU" | "DESISTIU"
   >("TODOS");
 
   // Attendance Pre-Confirmation Filter
@@ -230,7 +231,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   // Post-Booking Triage Modal State
   const [triageBooking, setTriageBooking] = useState<ExperimentalClassBooking | null>(null);
   const [triageAttended, setTriageAttended] = useState<boolean | null>(null);
-  const [triageOutcome, setTriageOutcome] = useState<"MATRICULADO" | "AGUARDANDO_RESPOSTA" | "NAO_MATRICULOU" | null>(null);
+  const [triageOutcome, setTriageOutcome] = useState<"MATRICULADO" | "AGUARDANDO_RESPOSTA" | "NAO_MATRICULOU" | "DESISTIU" | null>(null);
   const [triageNotesInput, setTriageNotesInput] = useState("");
 
   // Form State
@@ -456,7 +457,10 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   // Open Triage Modal
   const openTriageModal = (booking: ExperimentalClassBooking) => {
     setTriageBooking(booking);
-    if (booking.triageStatus === "NAO_COMPARECEU" || booking.attended === false) {
+    if (booking.triageStatus === "DESISTIU") {
+      setTriageAttended(false);
+      setTriageOutcome("DESISTIU");
+    } else if (booking.triageStatus === "NAO_COMPARECEU" || (booking.attended === false && !booking.triageStatus)) {
       setTriageAttended(false);
       setTriageOutcome(null);
     } else if (booking.triageStatus) {
@@ -480,19 +484,32 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
     e.preventDefault();
     if (!triageBooking) return;
 
-    if (triageAttended === null) {
-      showNotification?.("Selecione se o aluno compareceu ou não à aula experimental.", "Campo Obrigatório", "error");
+    if (triageAttended === null && triageOutcome !== "DESISTIU") {
+      showNotification?.("Selecione a situação do agendamento (compareceu, falta ou desistência).", "Campo Obrigatório", "error");
       return;
     }
 
-    if (triageAttended === true && !triageOutcome) {
+    if (triageAttended === true && (!triageOutcome || triageOutcome === "DESISTIU")) {
       showNotification?.("Selecione o desfecho da matrícula para o aluno que compareceu.", "Campo Obrigatório", "error");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const finalStatus: ExperimentalTriageStatus = triageAttended ? triageOutcome! : "NAO_COMPARECEU";
+      let finalStatus: ExperimentalTriageStatus;
+      let finalAttended: boolean = false;
+
+      if (triageOutcome === "DESISTIU") {
+        finalStatus = "DESISTIU";
+        finalAttended = false;
+      } else if (triageAttended === true) {
+        finalStatus = triageOutcome as ExperimentalTriageStatus;
+        finalAttended = true;
+      } else {
+        finalStatus = "NAO_COMPARECEU";
+        finalAttended = false;
+      }
+
       const triagerName = loggedUser?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "Usuário do Sistema";
       let triagerRole = "Gestor / Auxiliar";
       if (loggedUser?.role) {
@@ -502,7 +519,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       }
 
       await updateDoc(doc(db, "experimental_classes", triageBooking.id), {
-        attended: triageAttended,
+        attended: finalAttended,
         triageStatus: finalStatus,
         triageNotes: triageNotesInput.trim() || null,
         triagedAt: serverTimestamp(),
@@ -516,7 +533,8 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         MATRICULADO: "Triagem concluída: Aluno matriculado com sucesso!",
         AGUARDANDO_RESPOSTA: "Triagem registrada: Aguardando resposta do aluno.",
         NAO_MATRICULOU: "Triagem registrada: Aluno decidiu não se matricular.",
-        NAO_COMPARECEU: "Triagem registrada: Falta/Não comparecimento registrado."
+        NAO_COMPARECEU: "Triagem registrada: Falta/Não comparecimento registrado.",
+        DESISTIU: "Triagem registrada: Desistência da aula experimental registrada com sucesso."
       };
 
       showNotification?.(messageMap[finalStatus] || "Triagem salva com sucesso!", "Sucesso", "success");
@@ -790,13 +808,15 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
 
   // Attendance and Revenue Helpers (R$ 25 per attended student)
   const isBookingAttended = (b: ExperimentalClassBooking): boolean => {
+    if (b.triageStatus === "DESISTIU") return false;
     if (b.attended === true) return true;
     if (b.triageStatus && b.triageStatus !== "NAO_COMPARECEU" && b.attended !== false) return true;
     return false;
   };
 
   const isBookingAbsent = (b: ExperimentalClassBooking): boolean => {
-    if (b.triageStatus === "NAO_COMPARECEU" || b.attended === false) return true;
+    if (b.triageStatus === "DESISTIU") return false;
+    if (b.triageStatus === "NAO_COMPARECEU" || (b.attended === false && !b.triageStatus)) return true;
     return false;
   };
 
@@ -862,7 +882,8 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const matriculadosCount = scopedBookingsForTabs.filter(b => b.triageStatus === "MATRICULADO").length;
   const aguardandoCount = scopedBookingsForTabs.filter(b => b.triageStatus === "AGUARDANDO_RESPOSTA").length;
   const naoMatriculadosCount = scopedBookingsForTabs.filter(b => b.triageStatus === "NAO_MATRICULOU").length;
-  const naoCompareceuCount = scopedBookingsForTabs.filter(b => b.triageStatus === "NAO_COMPARECEU" || b.attended === false).length;
+  const naoCompareceuCount = scopedBookingsForTabs.filter(b => b.triageStatus === "NAO_COMPARECEU" || (b.attended === false && b.triageStatus !== "DESISTIU")).length;
+  const desistentesCount = scopedBookingsForTabs.filter(b => b.triageStatus === "DESISTIU").length;
 
   const confirmedCount = scopedBookingsForTabs.filter(b => b.status === "AGENDAMENTO_CONFIRMADO").length;
   const pendingCount = scopedBookingsForTabs.filter(b => b.status === "PAGAMENTO_PENDENTE").length;
@@ -1075,7 +1096,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       } else if (tabFilter === "NAO_MATRICULOU") {
         matchTab = b.triageStatus === "NAO_MATRICULOU";
       } else if (tabFilter === "NAO_COMPARECEU") {
-        matchTab = b.triageStatus === "NAO_COMPARECEU" || b.attended === false;
+        matchTab = b.triageStatus === "NAO_COMPARECEU" || (b.attended === false && b.triageStatus !== "DESISTIU");
+      } else if (tabFilter === "DESISTIU") {
+        matchTab = b.triageStatus === "DESISTIU";
       }
 
       let matchCreator = true;
@@ -1243,7 +1266,7 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
       </div>
 
       {/* Metrics Cards Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
         {/* Total */}
         <div 
           onClick={() => setTabFilter("TODOS")}
@@ -1370,6 +1393,23 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           <p className="text-2xl font-black text-rose-600 mt-2">{naoCompareceuCount}</p>
           <span className="text-[10px] text-rose-600/80 font-medium block mt-0.5">Não compareceu</span>
         </div>
+
+        {/* Desistentes */}
+        <div 
+          onClick={() => setTabFilter("DESISTIU")}
+          className={`cursor-pointer bg-white p-4 rounded-2xl border transition-all hover:shadow-md ${
+            tabFilter === "DESISTIU" ? "border-amber-600 ring-2 ring-amber-600/20 shadow-sm bg-amber-50/10" : "border-slate-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-black uppercase tracking-widest text-amber-700">Desistentes</span>
+            <div className="p-2 bg-amber-50 text-amber-700 rounded-xl">
+              <UserMinus size={16} />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-amber-700 mt-2">{desistentesCount}</p>
+          <span className="text-[10px] text-amber-700/80 font-medium block mt-0.5">Desistiram da aula</span>
+        </div>
       </div>
 
       {/* SPECIFIC TABS NAV BAR */}
@@ -1480,6 +1520,24 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               tabFilter === "NAO_COMPARECEU" ? "bg-white/20 text-white" : "bg-rose-100 text-rose-800"
             }`}>
               {naoCompareceuCount}
+            </span>
+          </button>
+
+          {/* Aba Desistentes */}
+          <button
+            onClick={() => setTabFilter("DESISTIU")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+              tabFilter === "DESISTIU"
+                ? "bg-amber-600 text-white shadow-xs shadow-amber-600/20"
+                : "text-slate-600 hover:bg-amber-50/70 hover:text-amber-700"
+            }`}
+          >
+            <UserMinus size={14} />
+            <span>Desistentes</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              tabFilter === "DESISTIU" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-800"
+            }`}>
+              {desistentesCount}
             </span>
           </button>
         </div>
@@ -1746,7 +1804,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     tabFilter === "AGENDADOS" ? "A Realizar" :
                     tabFilter === "MATRICULADO" ? "Matriculados" :
                     tabFilter === "AGUARDANDO_RESPOSTA" ? "Em Decisão" :
-                    tabFilter === "NAO_MATRICULOU" ? "Não Matriculou" : "Não Compareceu"
+                    tabFilter === "NAO_MATRICULOU" ? "Não Matriculou" :
+                    tabFilter === "NAO_COMPARECEU" ? "Não Compareceu" :
+                    "Desistentes"
                   }
                   <button type="button" onClick={() => setTabFilter("TODOS")} className="hover:text-amber-950 ml-0.5 cursor-pointer">
                     <X size={12} />
@@ -2054,6 +2114,23 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                             Editar Triagem
                           </button>
                         </div>
+                      ) : b.triageStatus === "DESISTIU" ? (
+                        <div className="space-y-1.5">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs">
+                            <UserMinus size={13} className="text-amber-600" /> Desistiu da Aula
+                          </span>
+                          {b.triageNotes && (
+                            <p className="text-[10px] text-slate-500 italic line-clamp-1 max-w-[200px]" title={b.triageNotes}>
+                              "{b.triageNotes}"
+                            </p>
+                          )}
+                          <button
+                            onClick={() => openTriageModal(b)}
+                            className="text-[10px] font-bold text-amber-700 hover:text-amber-900 underline block"
+                          >
+                            Editar Triagem
+                          </button>
+                        </div>
                       ) : b.triageStatus === "NAO_COMPARECEU" || b.attended === false ? (
                         <div className="space-y-1.5">
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-800 border border-rose-300">
@@ -2348,6 +2425,10 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
                     ) : b.triageStatus === "NAO_MATRICULOU" ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-slate-200 text-slate-700">
                         <XCircle size={12} /> Decidiu Não se Matricular
+                      </span>
+                    ) : b.triageStatus === "DESISTIU" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">
+                        <UserMinus size={12} /> Desistiu da Aula
                       </span>
                     ) : b.triageStatus === "NAO_COMPARECEU" || b.attended === false ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-rose-100 text-rose-800">
@@ -3312,39 +3393,78 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
               </div>
 
               <form onSubmit={handleSaveTriage} className="space-y-6">
-                {/* 1. Presença do Aluno */}
+                {/* 1. Presença ou Situação do Aluno */}
                 <div className="space-y-2">
                   <label className="text-xs font-black uppercase tracking-wider text-slate-700 block">
-                    1. O aluno compareceu à aula experimental? *
+                    1. Qual é a situação do aluno / aula experimental? *
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <button
                       type="button"
-                      onClick={() => setTriageAttended(true)}
-                      className={`p-4 rounded-2xl border-2 font-black text-xs uppercase flex items-center justify-center gap-2 transition-all ${
+                      onClick={() => {
+                        setTriageAttended(true);
+                        if (triageOutcome === "DESISTIU") setTriageOutcome(null);
+                      }}
+                      className={`p-3.5 rounded-2xl border-2 font-black text-xs uppercase flex flex-col items-center justify-center gap-1.5 transition-all text-center ${
                         triageAttended === true
                           ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm"
                           : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                       }`}
                     >
-                      <UserCheck size={18} className={triageAttended === true ? "text-emerald-600" : "text-slate-400"} />
-                      <span>Sim, Compareceu</span>
+                      <UserCheck size={20} className={triageAttended === true ? "text-emerald-600" : "text-slate-400"} />
+                      <span>Compareceu</span>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setTriageAttended(false)}
-                      className={`p-4 rounded-2xl border-2 font-black text-xs uppercase flex items-center justify-center gap-2 transition-all ${
-                        triageAttended === false
+                      onClick={() => {
+                        setTriageAttended(false);
+                        setTriageOutcome(null);
+                      }}
+                      className={`p-3.5 rounded-2xl border-2 font-black text-xs uppercase flex flex-col items-center justify-center gap-1.5 transition-all text-center ${
+                        triageAttended === false && triageOutcome !== "DESISTIU"
                           ? "border-rose-600 bg-rose-50 text-rose-800 shadow-sm"
                           : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                       }`}
                     >
-                      <UserX size={18} className={triageAttended === false ? "text-rose-600" : "text-slate-400"} />
+                      <UserX size={20} className={triageAttended === false && triageOutcome !== "DESISTIU" ? "text-rose-600" : "text-slate-400"} />
                       <span>Não Compareceu (Falta)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTriageAttended(false);
+                        setTriageOutcome("DESISTIU");
+                      }}
+                      className={`p-3.5 rounded-2xl border-2 font-black text-xs uppercase flex flex-col items-center justify-center gap-1.5 transition-all text-center ${
+                        triageOutcome === "DESISTIU"
+                          ? "border-amber-600 bg-amber-50 text-amber-800 shadow-sm"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                      }`}
+                    >
+                      <UserMinus size={20} className={triageOutcome === "DESISTIU" ? "text-amber-600" : "text-slate-400"} />
+                      <span>Desistiu da Aula</span>
                     </button>
                   </div>
                 </div>
+
+                {/* Aviso quando selecionado Desistência */}
+                {triageOutcome === "DESISTIU" && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5"
+                  >
+                    <UserMinus size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="font-bold">Desistência da aula experimental:</strong>
+                      <p className="text-[11px] text-amber-800 mt-0.5 font-medium">
+                        Ao salvar esta triagem, o aluno será movido para o <strong>funil de desistentes</strong> e não aparecerá mais na lista da turma como aluno experimental.
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
 
                 {/* 2. Decisão de Matrícula (Se compareceu) */}
                 {triageAttended === true && (

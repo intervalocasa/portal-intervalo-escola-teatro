@@ -252,7 +252,8 @@ export type ExperimentalTriageStatus =
   | "MATRICULADO" 
   | "AGUARDANDO_RESPOSTA" 
   | "NAO_MATRICULOU" 
-  | "NAO_COMPARECEU";
+  | "NAO_COMPARECEU"
+  | "DESISTIU";
 
 export type ExperimentalAttendanceConfirmation = 
   | "CONFIRMOU_VESPERA" 

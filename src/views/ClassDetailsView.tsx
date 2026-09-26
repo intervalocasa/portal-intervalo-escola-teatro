@@ -165,11 +165,11 @@ export const ClassDetailsView = ({
         return false;
       }
 
-      // If triage is completed, the experimental class has already occurred
+      // If triage is completed or student canceled/desistiu, the booking should not appear in the class list
       if (
-        b.triageStatus === "COMPARECEU" ||
-        b.triageStatus === "NAO_COMPARECEU" ||
-        b.triageStatus === "MATRICULOU"
+        b.triageStatus ||
+        b.attended === false ||
+        b.attended === true
       ) {
         return false;
       }
