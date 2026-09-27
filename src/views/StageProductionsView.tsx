@@ -74,6 +74,7 @@ import { StageProductionDevolutivaCard } from "../components/StageProductionDevo
 import { StageProductionWorkflowActions } from "../components/StageProductionWorkflowActions";
 import { GestorStageFormModal } from "../components/GestorStageFormModal";
 import { generateStageCalendarPDF } from "../lib/stageCalendarPdfExporter";
+import { generateStageFichaPDF } from "../lib/stageFichaPdfExporter";
 
 interface StageProductionsViewProps {
   currentUser: any;
@@ -666,7 +667,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
   return (
     <div className="w-full min-h-screen bg-[#f8fafc] text-slate-800 pb-24">
       {/* Header institucional */}
-      <div className="bg-gradient-to-r from-[#016a86] to-[#004e63] text-white py-10 px-6 md:px-12 shadow-lg relative overflow-hidden">
+      <div className={`bg-gradient-to-r from-[#016a86] to-[#004e63] text-white py-10 px-6 md:px-12 shadow-lg relative overflow-hidden ${selectedProposalForFicha ? "print:hidden" : ""}`}>
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl pointer-events-none" />
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
@@ -767,7 +768,7 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8">
+      <div className={`max-w-6xl mx-auto px-4 md:px-8 mt-8 ${selectedProposalForFicha ? "print:hidden" : ""}`}>
         {selectedProposalToFill ? (
           /* FORMULÁRIO DE PREENCHIMENTO PELO PROFESSOR */
           <motion.div 
@@ -1518,12 +1519,9 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                           </button>
 
                           <button
-                            onClick={() => {
-                              setSelectedProposalForFicha(proposal);
-                              setTimeout(() => window.print(), 300);
-                            }}
-                            className="px-3.5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
-                            title="Imprimir"
+                            onClick={() => generateStageFichaPDF(proposal)}
+                            className="px-3.5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-pro-teal hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer"
+                            title="Imprimir / Baixar Ficha de Inscrição (PDF A4)"
                           >
                             <Printer size={15} />
                           </button>
@@ -1749,12 +1747,12 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
       {/* MODAL: FICHA DE INSCRIÇÃO & ANDAMENTO DAS ETAPAS */}
       <AnimatePresence>
         {selectedProposalForFicha && (
-          <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:fixed print:inset-0">
+          <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:static print:p-0 print:bg-white print:overflow-visible">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-[32px] max-w-4xl w-full max-h-[92vh] overflow-y-auto p-6 md:p-10 shadow-2xl border border-white space-y-8 print:max-h-none print:shadow-none print:border-none print:p-0"
+              className="bg-white rounded-[32px] max-w-4xl w-full max-h-[92vh] overflow-y-auto p-6 md:p-10 shadow-2xl border border-white space-y-8 print:max-h-none print:overflow-visible print:shadow-none print:border-none print:p-0"
             >
               {/* Header da Ficha */}
               <div className="flex items-start justify-between border-b-2 border-slate-900 pb-6">
@@ -1806,12 +1804,12 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                   )}
 
                   <button
-                    onClick={() => window.print()}
-                    className="p-3 bg-slate-100 hover:bg-pro-teal hover:text-white text-slate-700 rounded-xl font-bold text-xs transition-all flex items-center gap-2"
-                    title="Imprimir Ficha Oficial"
+                    onClick={() => generateStageFichaPDF(selectedProposalForFicha)}
+                    className="p-3 bg-pro-teal hover:bg-[#005167] text-white rounded-xl font-bold text-xs transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+                    title="Gerar e Imprimir Ficha Oficial em PDF (A4)"
                   >
                     <Printer size={16} />
-                    <span className="hidden sm:inline">Imprimir Ficha</span>
+                    <span className="hidden sm:inline">Imprimir Ficha (PDF)</span>
                   </button>
                   <button
                     onClick={() => setSelectedProposalForFicha(null)}
@@ -1842,18 +1840,20 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
               />
 
               {/* Ações e Formulários das Etapas 3 a 10 (Direção de Arte, Compras, Entregas, Apresentação) */}
-              <StageProductionWorkflowActions
-                proposal={selectedProposalForFicha}
-                currentUser={currentUser}
-                isGestor={isGestor}
-                isProfessor={isProfessor}
-                showNotification={showNotification}
-                onRequestEditForRectification={() => {
-                  const toEdit = selectedProposalForFicha;
-                  setSelectedProposalForFicha(null);
-                  handleOpenFillForm(toEdit);
-                }}
-              />
+              <div className="print:hidden">
+                <StageProductionWorkflowActions
+                  proposal={selectedProposalForFicha}
+                  currentUser={currentUser}
+                  isGestor={isGestor}
+                  isProfessor={isProfessor}
+                  showNotification={showNotification}
+                  onRequestEditForRectification={() => {
+                    const toEdit = selectedProposalForFicha;
+                    setSelectedProposalForFicha(null);
+                    handleOpenFillForm(toEdit);
+                  }}
+                />
+              </div>
 
               {/* Bloco 1: Proponente e Identificação */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1962,7 +1962,17 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
                     Histórico de Atualização das Etapas
                   </h4>
                   <div className="space-y-2">
-                    {selectedProposalForFicha.statusHistory.map((hist, hIdx) => (
+                    {selectedProposalForFicha.statusHistory
+                      .filter((hist, idx, arr) => {
+                        if (idx === 0) return true;
+                        const prev = arr[idx - 1];
+                        return !(
+                          prev.status === hist.status &&
+                          (prev.notes || "").trim() === (hist.notes || "").trim() &&
+                          (prev.updatedByName || "") === (hist.updatedByName || "")
+                        );
+                      })
+                      .map((hist, hIdx) => (
                       <div key={hIdx} className="p-3 bg-white border border-slate-200 rounded-xl text-xs space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="font-black text-slate-800">{hist.statusLabel}</span>
@@ -2518,7 +2528,9 @@ interface DisplayItemsTableProps {
 }
 
 const DisplayItemsTable: React.FC<DisplayItemsTableProps> = ({ title, items, notes }) => {
-  if (!items || items.length === 0) {
+  const validItems = (items || []).filter(i => i && i.item && i.item.trim().length > 0);
+
+  if (validItems.length === 0) {
     if (title.includes("Iluminação")) {
       return (
         <div className="border border-amber-200/80 rounded-2xl p-4 bg-amber-50/60 text-amber-900 text-xs flex items-center gap-3">
@@ -2527,18 +2539,22 @@ const DisplayItemsTable: React.FC<DisplayItemsTableProps> = ({ title, items, not
         </div>
       );
     }
-    return null;
+    return (
+      <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/60 text-slate-500 text-xs italic">
+        <strong>{title}:</strong> Nenhum item registrado nesta categoria.
+      </div>
+    );
   }
 
   return (
     <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
       <div className="bg-slate-100/80 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
         <h5 className="text-xs font-black uppercase tracking-wider text-slate-800">{title}</h5>
-        <span className="text-[10px] font-bold text-slate-500">{items.length} item(ns)</span>
+        <span className="text-[10px] font-bold text-slate-500">{validItems.length} item(ns)</span>
       </div>
 
       <div className="divide-y divide-slate-100">
-        {items.map((item, idx) => (
+        {validItems.map((item, idx) => (
           <div key={idx} className="p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="space-y-1 flex-1">
               <div className="flex items-center gap-2">
