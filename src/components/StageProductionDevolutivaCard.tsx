@@ -43,8 +43,8 @@ export const StageProductionDevolutivaCard: React.FC<StageProductionDevolutivaCa
   showNotification,
   onRequestEditForRectification
 }) => {
-  const isGestor = propIsGestor ?? (userRole === "Gestor" || userRole === "Admin" || userRole === "Administrador");
-  const isDiretorPedagogico = propIsDiretorPedagogico ?? (isGestor || userRole === "Direção Pedagógica" || userRole === "Coordenador");
+  const isGestor = propIsGestor ?? (userRole === "Gestor" || userRole === "Diretor Pedagógico" || userRole === "Diretor Pedagógico e Professor" || userRole === "Admin" || userRole === "Administrador");
+  const isDiretorPedagogico = propIsDiretorPedagogico ?? (isGestor || userRole === "Diretor Pedagógico" || userRole === "Diretor Pedagógico e Professor" || userRole === "Direção Pedagógica" || userRole === "Coordenador");
   const isProfessor = propIsProfessor ?? (userRole === "Professor" || userRole === "Professor/Diretor");
   // Pedagogical review local form state
   const [pedagogicalStatus, setPedagogicalStatus] = useState<EvaluationStatus>(

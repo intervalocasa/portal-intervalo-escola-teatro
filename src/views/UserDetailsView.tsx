@@ -66,7 +66,12 @@ export const UserDetailsView = ({
   const [managingBadgeId, setManagingBadgeId] = useState<string | null>(null);
 
   if (!user) return null;
-  const isGestorOnly = currentUserRole === "Gestor" || currentUserRole === "Auxiliar Administrativo";
+  const isGestorOnly =
+    isGestor ||
+    currentUserRole === "Gestor" ||
+    currentUserRole === "Diretor Pedagógico" ||
+    currentUserRole === "Diretor Pedagógico e Professor" ||
+    currentUserRole === "Auxiliar Administrativo";
 
   return (
     <motion.div

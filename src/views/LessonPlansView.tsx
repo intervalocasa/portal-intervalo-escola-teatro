@@ -80,6 +80,8 @@ export const LessonPlansView = ({
     userRole === "Auxiliar Administrativo" ||
     currentUser?.role === "Gestor" || 
     currentUser?.role === "Diretor Pedagógico" ||
+    currentUser?.role === "Diretor Pedagógico e Professor" ||
+    currentUser?.role === "Auxiliar Administrativo" ||
     currentUser?.email === "intervalocasa@gmail.com";
 
   // State - Default to history tab for gestor/diretor pedagogico so they immediately see submitted plans

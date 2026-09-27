@@ -187,15 +187,21 @@ export const StageProductionsView: React.FC<StageProductionsViewProps> = ({
   // Base Permissions: Gestor, Diretor Pedagógico, or Professor
   const isGestorUser = 
     userRole === "Gestor" || 
+    userRole === "Diretor Pedagógico" ||
+    userRole === "Diretor Pedagógico e Professor" ||
     userRole === "Auxiliar Administrativo" ||
     userProfile?.role === "Gestor" ||
+    userProfile?.role === "Diretor Pedagógico" ||
+    userProfile?.role === "Diretor Pedagógico e Professor" ||
     userProfile?.role === "Auxiliar Administrativo";
 
   const isDiretorPedagogicoUser = 
     userRole === "Diretor Pedagógico" || 
     userRole === "Diretor Pedagógico e Professor" ||
+    userRole === "Gestor" ||
     userProfile?.role === "Diretor Pedagógico" ||
-    userProfile?.role === "Diretor Pedagógico e Professor";
+    userProfile?.role === "Diretor Pedagógico e Professor" ||
+    userProfile?.role === "Gestor";
 
   const isProfessorUser = 
     userRole === "Professor" || 

@@ -646,7 +646,7 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       deduplicateClassesAndFixReferences();
-      if (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") {
+      if (isDirectorOrGestor(role) || role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") {
         healDatabaseAndRelations();
       }
     }
@@ -1290,7 +1290,7 @@ export default function App() {
 
   // Sincronização e verificação de consistência de nomes de turmas em segundo plano (1x por sessão para gestores)
   useEffect(() => {
-    if (currentUser && (role === "Gestor" || role === "Diretor Pedagógico") && classes.length > 0) {
+    if (currentUser && (isDirectorOrGestor(role) || role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor") && classes.length > 0) {
       const hasSynced = sessionStorage.getItem("intervalo_classes_synced_session");
       if (!hasSynced) {
         sessionStorage.setItem("intervalo_classes_synced_session", "true");
@@ -2890,7 +2890,7 @@ export default function App() {
             onRemoveBadge={handleRemoveBadge}
             selectedUserBadges={selectedUserBadges}
             currentUserRole={role || undefined}
-            isGestor={role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo"}
+            isGestor={isDirectorOrGestor(role) || role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo"}
             setSelectedClassId={setSelectedClassId}
             setSelectedEnrollmentDates={setSelectedEnrollmentDates}
             setEditEnrollmentInfo={setEditEnrollmentInfo}
@@ -2959,7 +2959,7 @@ export default function App() {
             setSelectedUserClasses={setSelectedUserClasses}
             handleRegisterSubmit={handleRegisterSubmit}
             setView={setView}
-            isGestor={role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo"}
+            isGestor={isDirectorOrGestor(role) || role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo"}
             regType={regType}
             setRegType={setRegType}
             role={role}
@@ -2968,7 +2968,7 @@ export default function App() {
             currentUser={currentUser}
             selectedUserId={selectedUserId}
             setShowPasswordModal={(show) => {
-              if (view === "edit_user" && (role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo") && selectedUserId !== currentUser?.uid) {
+              if (view === "edit_user" && (isDirectorOrGestor(role) || role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo") && selectedUserId !== currentUser?.uid) {
                 setGestorResettingUid(selectedUserId);
               } else {
                 setShowPasswordModal(show);
@@ -3072,7 +3072,7 @@ export default function App() {
             <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
               <AgendaEventos 
                 currentUser={users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || null}
-                isGestor={role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor"}
+                isGestor={isDirectorOrGestor(role) || role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor"}
               />
             </div>
           </div>
@@ -3290,7 +3290,7 @@ export default function App() {
                   />
                 </div>
 
-                {(role === "Gestor" || role === "Auxiliar Administrativo") && (
+                {(isDirectorOrGestor(role) || role === "Gestor" || role === "Diretor Pedagógico" || role === "Diretor Pedagógico e Professor" || role === "Auxiliar Administrativo") && (
                   <>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status da Matrícula</label>
