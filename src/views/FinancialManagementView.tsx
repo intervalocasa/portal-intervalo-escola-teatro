@@ -175,6 +175,7 @@ export interface EnrollmentRecord {
   studentRg?: string;
   studentEmail: string;
   studentPhone?: string;
+  studentAddress?: string;
   studentPhoto?: string;
   isStudentInactive: boolean;
   
@@ -341,6 +342,7 @@ export const FinancialManagementView = ({
           studentRg: (student as any).rg || (student as any).identidade || (student as any).rgNumber || "-",
           studentEmail: student.email || "",
           studentPhone: student.phone || "Não informado",
+          studentAddress: (student.address || (student as any).endereco || "").trim() || "-",
           studentPhoto: student.photo,
           isStudentInactive,
           classId: c.id,
@@ -372,6 +374,7 @@ export const FinancialManagementView = ({
           studentRg: (student as any).rg || (student as any).identidade || (student as any).rgNumber || "-",
           studentEmail: student.email || "",
           studentPhone: student.phone || "Não informado",
+          studentAddress: (student.address || (student as any).endereco || "").trim() || "-",
           studentPhoto: student.photo,
           isStudentInactive: true,
           classId: "sem_turma",
@@ -865,6 +868,7 @@ export const FinancialManagementView = ({
           item.studentPhone || "-",
           item.studentCpf || "-",
           item.studentRg || "-",
+          item.studentAddress || "-",
           classLabel,
           dateMatriculaFormatted,
           dateDesmatriculaFormatted
@@ -874,32 +878,34 @@ export const FinancialManagementView = ({
       // Render AutoTable
       autoTable(docPDF, {
         startY: 58,
-        head: [["#", "Nome do Aluno", "Telefone", "CPF", "RG", "Turma", "Data de Matrícula", "Data de Desmatrícula"]],
+        head: [["#", "Nome do Aluno", "Telefone", "CPF", "RG", "Endereço", "Turma", "Data de Matrícula", "Data de Desmatrícula"]],
         body: tableRows,
         theme: "striped",
         headStyles: {
           fillColor: [1, 106, 134],
           textColor: [255, 255, 255],
           fontStyle: "bold",
-          fontSize: 8,
+          fontSize: 7.5,
           halign: "center"
         },
         bodyStyles: {
-          fontSize: 7.5,
-          textColor: [30, 41, 59]
+          fontSize: 7,
+          textColor: [30, 41, 59],
+          overflow: "linebreak"
         },
         alternateRowStyles: {
           fillColor: [248, 250, 252]
         },
         columnStyles: {
-          0: { cellWidth: 9, halign: "center" },
-          1: { cellWidth: 55, halign: "left" },
-          2: { cellWidth: 30, halign: "center" },
-          3: { cellWidth: 30, halign: "center" },
-          4: { cellWidth: 26, halign: "center" },
-          5: { cellWidth: 47, halign: "left" },
-          6: { cellWidth: 36, halign: "center" },
-          7: { cellWidth: 36, halign: "center" }
+          0: { cellWidth: 8, halign: "center" },
+          1: { cellWidth: 44, halign: "left" },
+          2: { cellWidth: 25, halign: "center" },
+          3: { cellWidth: 26, halign: "center" },
+          4: { cellWidth: 22, halign: "center" },
+          5: { cellWidth: 52, halign: "left" },
+          6: { cellWidth: 38, halign: "left" },
+          7: { cellWidth: 27, halign: "center" },
+          8: { cellWidth: 27, halign: "center" }
         },
         didDrawPage: (data) => {
           const pageCount = (docPDF as any).internal.getNumberOfPages();
@@ -1446,6 +1452,9 @@ export const FinancialManagementView = ({
                               <span>CPF: <strong className="text-slate-700">{record.studentCpf}</strong></span>
                               {record.studentEmail && <span>Email: <span className="text-slate-600">{record.studentEmail}</span></span>}
                               {record.studentPhone && <span>Tel: <span className="text-slate-600">{record.studentPhone}</span></span>}
+                              {record.studentAddress && record.studentAddress !== "-" && (
+                                <span>Endereço: <span className="text-slate-600">{record.studentAddress}</span></span>
+                              )}
                             </div>
                           </div>
                         </div>
