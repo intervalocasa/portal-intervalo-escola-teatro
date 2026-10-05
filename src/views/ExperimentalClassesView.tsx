@@ -47,7 +47,9 @@ import {
   FileSpreadsheet,
   Info,
   CalendarCheck,
-  CalendarClock
+  CalendarClock,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { 
   collection, 
@@ -196,7 +198,9 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const [classFilter, setClassFilter] = useState<string>("TODOS");
   const [creatorFilter, setCreatorFilter] = useState<string>("TODOS"); // "TODOS" | "MEUS" | id/name
   const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
-  const [revenueModalTab, setRevenueModalTab] = useState<"ACUMULADO" | "MES_VIGENTE">("ACUMULADO");
+  const [revenueModalTab, setRevenueModalTab] = useState<"POR_MES" | "HISTORICO_MENSAL" | "ACUMULADO">("POR_MES");
+  const [selectedRevenueMonth, setSelectedRevenueMonth] = useState<string>(() => getCurrentMonthKey());
+  const [revenueViewMonth, setRevenueViewMonth] = useState<string>(() => getCurrentMonthKey());
   
   // Specific Tabs Filter
   const [tabFilter, setTabFilter] = useState<
@@ -888,6 +892,152 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
   const confirmedCount = scopedBookingsForTabs.filter(b => b.status === "AGENDAMENTO_CONFIRMADO").length;
   const pendingCount = scopedBookingsForTabs.filter(b => b.status === "PAGAMENTO_PENDENTE").length;
 
+  // --- REVENUE & ATTENDANCE CALCULATIONS (MÊS A MÊS E ACUMULADO) ---
+  // REGRA ESTRITA: O faturamento contabiliza EXCLUSIVAMENTE agendamentos que compareceram na aula (R$ 25,00 por presença).
+  // Faltas, desistências e agendamentos pendentes geram R$ 0,00 de faturamento.
+
+  // 1. Dados do Mês Ativo de Visualização (Banner do topo e cards)
+  const activeRevenueMonthData = useMemo(() => {
+    const targetKey = revenueViewMonth || currentMonthKey;
+    const targetBookings = bookings.filter(b => getBookingMonthKey(b.date) === targetKey);
+    const attendedBookings = targetBookings.filter(isBookingAttended);
+    const absentBookings = targetBookings.filter(isBookingAbsent);
+    const pendingBookings = targetBookings.filter(isBookingPending);
+
+    const myTargetBookings = targetBookings.filter(b => 
+      isBookingCreatedByUser(b, currentUser?.uid || loggedUser?.id, loggedUser?.name, currentUser?.email)
+    );
+    const myAttended = myTargetBookings.filter(isBookingAttended);
+    const myAbsent = myTargetBookings.filter(isBookingAbsent);
+    const myPending = myTargetBookings.filter(isBookingPending);
+
+    return {
+      monthKey: targetKey,
+      monthLabel: getMonthYearLabel(targetKey),
+      isCurrentMonth: targetKey === currentMonthKey,
+      totalBookings: targetBookings.length,
+      attendedCount: attendedBookings.length,
+      absentCount: absentBookings.length,
+      pendingCount: pendingBookings.length,
+      totalRevenue: attendedBookings.length * 25,
+      myTotalBookings: myTargetBookings.length,
+      myAttendedCount: myAttended.length,
+      myAbsentCount: myAbsent.length,
+      myPendingCount: myPending.length,
+      myRevenue: myAttended.length * 25,
+      myProjectedRevenue: myPending.length * 25,
+    };
+  }, [revenueViewMonth, currentMonthKey, bookings, currentUser, loggedUser]);
+
+  // 2. Resumo Completo Mês a Mês (Histórico comparativo de todos os meses)
+  const monthlyRevenueSummary = useMemo(() => {
+    return availableMonths.map(m => {
+      const monthBookings = bookings.filter(b => getBookingMonthKey(b.date) === m.key);
+      const attended = monthBookings.filter(isBookingAttended);
+      const absent = monthBookings.filter(isBookingAbsent);
+      const pending = monthBookings.filter(isBookingPending);
+
+      const myBookings = monthBookings.filter(b =>
+        isBookingCreatedByUser(b, currentUser?.uid || loggedUser?.id, loggedUser?.name, currentUser?.email)
+      );
+      const myAttended = myBookings.filter(isBookingAttended);
+      const myAbsent = myBookings.filter(isBookingAbsent);
+      const myPending = myBookings.filter(isBookingPending);
+
+      return {
+        monthKey: m.key,
+        monthLabel: m.label,
+        isCurrent: m.key === currentMonthKey,
+        totalBookings: monthBookings.length,
+        attendedCount: attended.length,
+        absentCount: absent.length,
+        pendingCount: pending.length,
+        totalRevenue: attended.length * 25,
+        myTotalBookings: myBookings.length,
+        myAttendedCount: myAttended.length,
+        myAbsentCount: myAbsent.length,
+        myPendingCount: myPending.length,
+        myRevenue: myAttended.length * 25,
+      };
+    });
+  }, [availableMonths, bookings, currentMonthKey, currentUser, loggedUser]);
+
+  // 3. Dados do Mês Selecionado no Extrato (Modal)
+  const selectedMonthSummary = useMemo(() => {
+    const found = monthlyRevenueSummary.find(s => s.monthKey === selectedRevenueMonth);
+    if (found) return found;
+    return {
+      monthKey: selectedRevenueMonth,
+      monthLabel: getMonthYearLabel(selectedRevenueMonth),
+      isCurrent: selectedRevenueMonth === currentMonthKey,
+      totalBookings: 0,
+      attendedCount: 0,
+      absentCount: 0,
+      pendingCount: 0,
+      totalRevenue: 0,
+      myTotalBookings: 0,
+      myAttendedCount: 0,
+      myAbsentCount: 0,
+      myPendingCount: 0,
+      myRevenue: 0,
+    };
+  }, [monthlyRevenueSummary, selectedRevenueMonth, currentMonthKey]);
+
+  // 4. Detalhamento por Agendador no Mês Selecionado (Modal)
+  const selectedMonthCreatorStats = useMemo(() => {
+    const map = new Map<string, {
+      id: string;
+      name: string;
+      role: string;
+      totalBookings: number;
+      attendedBookings: number;
+      absentBookings: number;
+      pendingBookings: number;
+      revenue: number;
+      isCurrentUser: boolean;
+    }>();
+
+    const targetMonthBookings = bookings.filter(b => getBookingMonthKey(b.date) === selectedRevenueMonth);
+
+    targetMonthBookings.forEach(b => {
+      const isMe = isBookingCreatedByUser(b, currentUser?.uid || loggedUser?.id, loggedUser?.name, currentUser?.email);
+      const name = b.createdByName?.trim() || "Não Informado / Sistema";
+      const id = b.createdByUid || name.toLowerCase();
+      const role = b.createdByRole || (isMe ? loggedUser?.role || "Usuário" : "");
+
+      if (!map.has(id)) {
+        map.set(id, {
+          id,
+          name,
+          role,
+          totalBookings: 0,
+          attendedBookings: 0,
+          absentBookings: 0,
+          pendingBookings: 0,
+          revenue: 0,
+          isCurrentUser: isMe,
+        });
+      }
+
+      const item = map.get(id)!;
+      item.totalBookings += 1;
+
+      if (isBookingAttended(b)) {
+        item.attendedBookings += 1;
+        item.revenue += 25;
+      } else if (isBookingAbsent(b)) {
+        item.absentBookings += 1;
+      } else {
+        item.pendingBookings += 1;
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+      return b.attendedBookings - a.attendedBookings;
+    });
+  }, [bookings, selectedRevenueMonth, currentUser, loggedUser]);
+
   // --- CURRENT MONTH (MÊS VIGENTE) METRICS ---
   // A receita do topo é baseada exclusivamente nos comparecimentos do mês vigente e zera ao final de cada mês
   const currentMonthBookings = useMemo(() => {
@@ -1149,11 +1299,15 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
             type="button"
-            onClick={() => setIsRevenueModalOpen(true)}
-            className="flex items-center justify-center gap-2 px-5 py-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300/80 rounded-2xl font-black text-xs uppercase tracking-wider transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+            onClick={() => {
+              setSelectedRevenueMonth(revenueViewMonth);
+              setRevenueModalTab("POR_MES");
+              setIsRevenueModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-2 px-5 py-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300/80 rounded-2xl font-black text-xs uppercase tracking-wider transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-xs"
           >
             <DollarSign size={16} className="text-emerald-700" />
-            Extrato de Receita (R$ 25)
+            Extrato de Faturamento por Mês (R$ 25)
           </button>
 
           <button
@@ -1175,27 +1329,64 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
         <div className="relative z-10 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6">
           {/* Main User Revenue Block */}
           <div className="space-y-3 max-w-2xl">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-black uppercase tracking-wider">
-                <Coins size={13} className="text-emerald-400" />
-                Receita do Mês Vigente ({currentMonthName})
-              </span>
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-300">
-                <Info size={12} className="text-teal-400" />
-                R$ 25,00 por aluno que compareceu • Zera no fim de cada mês
-              </span>
+            <div className="flex items-center gap-2 flex-wrap justify-between">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-black uppercase tracking-wider">
+                  <Coins size={13} className="text-emerald-400" />
+                  {activeRevenueMonthData.isCurrentMonth
+                    ? `Faturamento do Mês Vigente (${activeRevenueMonthData.monthLabel})`
+                    : `Faturamento de ${activeRevenueMonthData.monthLabel}`}
+                </span>
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-300">
+                  <Info size={12} className="text-teal-400" />
+                  Contabilizando somente alunos que compareceram (R$ 25,00 cada)
+                </span>
+              </div>
+
+              {/* Month Selector inside Banner */}
+              <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl text-xs">
+                <Calendar size={13} className="text-teal-300" />
+                <span className="text-[11px] text-slate-300 font-bold hidden sm:inline">Consultar Mês:</span>
+                <select
+                  value={revenueViewMonth}
+                  onChange={(e) => {
+                    setRevenueViewMonth(e.target.value);
+                    setSelectedRevenueMonth(e.target.value);
+                  }}
+                  className="bg-slate-800 text-white font-bold text-xs rounded-lg px-2 py-1 border border-white/20 focus:outline-none focus:border-teal-400 cursor-pointer"
+                >
+                  {availableMonths.map((m) => (
+                    <option key={m.key} value={m.key} className="bg-slate-900 text-white">
+                      {m.label} {m.isCurrent ? "(Mês Vigente)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {revenueViewMonth !== currentMonthKey && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRevenueViewMonth(currentMonthKey);
+                      setSelectedRevenueMonth(currentMonthKey);
+                    }}
+                    className="text-[10px] font-black text-teal-300 hover:text-white px-2 py-1 rounded bg-teal-900/60 hover:bg-teal-800 transition-all cursor-pointer"
+                    title="Voltar para o mês vigente"
+                  >
+                    Mês Vigente
+                  </button>
+                )}
+              </div>
             </div>
 
             <div>
               <span className="text-xs font-bold text-slate-300 uppercase tracking-widest block">
-                Sua Receita no Mês Vigente ({loggedUser?.name || "Você"})
+                Sua Receita {activeRevenueMonthData.isCurrentMonth ? "no Mês Vigente" : `em ${activeRevenueMonthData.monthLabel}`} ({loggedUser?.name || "Você"})
               </span>
               <div className="flex items-baseline gap-3 mt-1 flex-wrap">
                 <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                  R$ {myCurrentMonthGeneratedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  R$ {activeRevenueMonthData.myRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-xs font-bold text-emerald-300 bg-emerald-950/80 px-2.5 py-1 rounded-lg border border-emerald-500/30">
-                  {myCurrentMonthAttendedCount} {myCurrentMonthAttendedCount === 1 ? "aluno compareceu este mês" : "alunos compareceram este mês"} (R$ 25 cada)
+                  {activeRevenueMonthData.myAttendedCount} {activeRevenueMonthData.myAttendedCount === 1 ? "aluno compareceu este mês" : "alunos compareceram este mês"} (R$ 25 cada)
                 </span>
               </div>
             </div>
@@ -1204,19 +1395,19 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap text-xs text-slate-300 font-semibold pt-1">
               <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl">
                 <Calendar size={13} className="text-teal-300" />
-                <span>{myCurrentMonthBookings.length} agendados no mês</span>
+                <span>{activeRevenueMonthData.myTotalBookings} agendados no mês</span>
               </div>
               <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl">
                 <CheckCircle size={13} className="text-emerald-400" />
-                <span>{myCurrentMonthAttendedCount} presenças este mês (R$ {myCurrentMonthGeneratedRevenue},00)</span>
+                <span>{activeRevenueMonthData.myAttendedCount} presenças confirmadas (R$ {activeRevenueMonthData.myRevenue},00)</span>
               </div>
               <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl" title="Aguardando realização da aula e triagem de presença">
                 <Clock size={13} className="text-amber-300" />
-                <span>{myCurrentMonthPendingCount} a realizar (R$ {myCurrentMonthProjectedRevenue},00 previstos)</span>
+                <span>{activeRevenueMonthData.myPendingCount} a realizar (R$ {activeRevenueMonthData.myProjectedRevenue},00 previstos)</span>
               </div>
               <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl" title="Alunos que faltaram não geram receita (R$ 0,00)">
                 <UserX size={13} className="text-rose-400" />
-                <span>{myCurrentMonthAbsentCount} faltas (R$ 0,00)</span>
+                <span>{activeRevenueMonthData.myAbsentCount} faltas (R$ 0,00)</span>
               </div>
             </div>
           </div>
@@ -1225,20 +1416,20 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           <div className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end justify-between gap-3 bg-white/5 p-4 rounded-2xl border border-white/10 shrink-0">
             <div className="text-left sm:text-right lg:text-right">
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                Total da Escola no Mês Vigente
+                Total da Escola em {activeRevenueMonthData.monthLabel}
               </span>
               <div className="text-xl font-black text-white mt-0.5">
-                R$ {totalCurrentMonthGeneratedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                R$ {activeRevenueMonthData.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <span className="text-[10px] font-medium text-slate-300 block">
-                {totalCurrentMonthAttendedCount} presenças confirmadas em {currentMonthName}
+                {activeRevenueMonthData.attendedCount} {activeRevenueMonthData.attendedCount === 1 ? "presença confirmada" : "presenças confirmadas"} em {activeRevenueMonthData.monthLabel}
               </span>
               <span className="text-[10px] font-bold text-teal-300 block mt-1">
-                Acumulado histórico: R$ {totalAccumulatedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Acumulado histórico total: R$ {totalAccumulatedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
               <button
                 type="button"
                 onClick={() => setCreatorFilter(creatorFilter === "MEUS" ? "TODOS" : "MEUS")}
@@ -1254,11 +1445,15 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
 
               <button
                 type="button"
-                onClick={() => setIsRevenueModalOpen(true)}
+                onClick={() => {
+                  setSelectedRevenueMonth(activeRevenueMonthData.monthKey);
+                  setRevenueModalTab("POR_MES");
+                  setIsRevenueModalOpen(true);
+                }}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-pro-teal hover:bg-teal-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-teal-900/40 cursor-pointer"
               >
                 <FileSpreadsheet size={14} />
-                Extrato com Receita Acumulada
+                Extrato Completo por Mês
               </button>
             </div>
           </div>
@@ -1286,24 +1481,31 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           </span>
         </div>
 
-        {/* Minha Receita Mês Vigente */}
+        {/* Minha Receita no Mês Selecionado */}
         <div 
-          onClick={() => setCreatorFilter(creatorFilter === "MEUS" ? "TODOS" : "MEUS")}
+          onClick={() => {
+            setSelectedRevenueMonth(activeRevenueMonthData.monthKey);
+            setRevenueModalTab("POR_MES");
+            setIsRevenueModalOpen(true);
+          }}
           className={`cursor-pointer bg-white p-4 rounded-2xl border transition-all hover:shadow-md ${
             creatorFilter === "MEUS" ? "border-emerald-600 ring-2 ring-emerald-600/20 shadow-sm bg-emerald-50/20" : "border-slate-100"
           }`}
+          title="Clique para abrir o extrato de faturamento deste mês"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Receita Mês Vigente</span>
+            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700">
+              {activeRevenueMonthData.isCurrentMonth ? "Receita Mês Vigente" : `Receita em ${activeRevenueMonthData.monthLabel.split(' ')[0]}`}
+            </span>
             <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
               <DollarSign size={16} />
             </div>
           </div>
           <p className="text-2xl font-black text-emerald-700 mt-2">
-            R$ {myCurrentMonthGeneratedRevenue}
+            R$ {activeRevenueMonthData.myRevenue.toFixed(2).replace('.', ',')}
           </p>
           <span className="text-[10px] text-emerald-700/80 font-bold block mt-0.5">
-            {myCurrentMonthAttendedCount} {myCurrentMonthAttendedCount === 1 ? "presença este mês" : "presenças este mês"}
+            {activeRevenueMonthData.myAttendedCount} {activeRevenueMonthData.myAttendedCount === 1 ? "presença confirmada" : "presenças confirmadas"}
           </span>
         </div>
 
@@ -3716,225 +3918,515 @@ export const ExperimentalClassesView: React.FC<ExperimentalClassesViewProps> = (
           </div>
         )}
 
-        {/* REVENUE BREAKDOWN MODAL (Extrato de Receita por Agendador) */}
+        {/* REVENUE BREAKDOWN MODAL (Extrato de Faturamento por Mês e Acumulado) */}
         {isRevenueModalOpen && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl border border-slate-100 relative space-y-6 max-h-[90vh] flex flex-col"
+              className="bg-white rounded-3xl p-5 sm:p-8 max-w-4xl w-full shadow-2xl border border-slate-100 relative space-y-5 max-h-[92vh] flex flex-col"
             >
               <button
                 type="button"
                 onClick={() => setIsRevenueModalOpen(false)}
-                className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+                className="absolute top-5 right-5 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-all cursor-pointer z-10"
               >
                 <X size={20} />
               </button>
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              {/* Modal Header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pr-8">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 bg-emerald-50 text-emerald-800 rounded-2xl">
+                  <div className="p-3 bg-emerald-50 text-emerald-800 rounded-2xl shrink-0">
                     <Coins size={24} />
                   </div>
                   <div>
-                    <h3 className="text-xl font-black text-slate-800">Extrato de Receita de Aulas Experimentais</h3>
-                    <p className="text-xs font-bold text-slate-400">
-                      Regra: <strong className="text-emerald-700">R$ 25,00</strong> por agendamento com presença confirmada na aula
+                    <h3 className="text-xl font-black text-slate-800">Extrato de Faturamento • Aulas Experimentais</h3>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">
+                      Contabilizando exclusivamente alunos que <strong className="text-emerald-700 font-black">compareceram na aula</strong> (R$ 25,00 por presença)
                     </p>
                   </div>
                 </div>
 
-                {/* Switcher: Acumulado vs Mês Vigente */}
-                <div className="flex items-center bg-slate-100 p-1 rounded-xl self-start sm:self-auto shrink-0">
+                {/* Tabs Switcher: Por Mês vs Histórico Mês a Mês vs Acumulado */}
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl self-start md:self-auto shrink-0 flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setRevenueModalTab("POR_MES")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                      revenueModalTab === "POR_MES"
+                        ? "bg-white text-emerald-950 shadow-xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <Calendar size={13} />
+                    Por Mês
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRevenueModalTab("HISTORICO_MENSAL")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                      revenueModalTab === "HISTORICO_MENSAL"
+                        ? "bg-white text-teal-950 shadow-xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <FileSpreadsheet size={13} />
+                    Histórico Mês a Mês
+                  </button>
                   <button
                     type="button"
                     onClick={() => setRevenueModalTab("ACUMULADO")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
                       revenueModalTab === "ACUMULADO"
                         ? "bg-white text-slate-900 shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    Receita Acumulada
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRevenueModalTab("MES_VIGENTE")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                      revenueModalTab === "MES_VIGENTE"
-                        ? "bg-white text-emerald-900 shadow-xs"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    Mês Vigente ({currentMonthName.split(" ")[0]})
+                    <Coins size={13} />
+                    Acumulado Geral
                   </button>
                 </div>
               </div>
 
-              {/* Summary Cards inside modal */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
-                <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200/80 rounded-2xl">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1">
-                      <DollarSign size={13} />
-                      {revenueModalTab === "ACUMULADO" ? "Minha Receita Acumulada (Total Histórico)" : `Minha Receita no Mês Vigente (${currentMonthName})`}
-                    </span>
-                    <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-full">
-                      Você ({loggedUser?.name || "Usuário"})
-                    </span>
-                  </div>
-                  <div className="text-2xl font-black text-emerald-950">
-                    R$ {revenueModalTab === "ACUMULADO" ? myAccumulatedRevenue.toFixed(2).replace(".", ",") : myCurrentMonthGeneratedRevenue.toFixed(2).replace(".", ",")}
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-emerald-800 font-bold mt-2 pt-2 border-t border-emerald-200/60 flex-wrap gap-1">
-                    <span>
-                      {revenueModalTab === "ACUMULADO" 
-                        ? `${myAttendedCount} presenças confirmadas no histórico` 
-                        : `${myCurrentMonthAttendedCount} presenças este mês (${currentMonthName})`}
-                    </span>
-                    {revenueModalTab === "ACUMULADO" ? (
-                      <span className="text-teal-800 font-semibold">
-                        Mês vigente: R$ {myCurrentMonthGeneratedRevenue.toFixed(2).replace(".", ",")}
+              {/* TAB 1: CONSULTA POR MÊS */}
+              {revenueModalTab === "POR_MES" && (
+                <div className="space-y-4 flex-1 overflow-y-auto pr-1">
+                  {/* Selector Bar */}
+                  <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                        <Calendar size={14} className="text-emerald-700" />
+                        Mês de Referência:
                       </span>
-                    ) : (
-                      <span className="text-slate-600 font-semibold">
-                        Acumulado: R$ {myAccumulatedRevenue.toFixed(2).replace(".", ",")}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1">
-                      <Coins size={13} />
-                      {revenueModalTab === "ACUMULADO" ? "Receita Total Acumulada da Escola" : `Receita da Escola no Mês Vigente (${currentMonthName})`}
-                    </span>
-                    <span className="text-[10px] font-black px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full">
-                      Geral
-                    </span>
-                  </div>
-                  <div className="text-2xl font-black text-slate-800">
-                    R$ {revenueModalTab === "ACUMULADO" ? totalAccumulatedRevenue.toFixed(2).replace(".", ",") : totalCurrentMonthGeneratedRevenue.toFixed(2).replace(".", ",")}
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-600 font-bold mt-2 pt-2 border-t border-slate-200 flex-wrap gap-1">
-                    <span>
-                      {revenueModalTab === "ACUMULADO"
-                        ? `${totalAttendedCount} presenças acumuladas na escola`
-                        : `${totalCurrentMonthAttendedCount} presenças na escola em ${currentMonthName}`}
-                    </span>
-                    <span className="text-slate-400 font-medium">
-                      {revenueModalTab === "ACUMULADO" ? `${bookings.length} agendamentos no total` : `${currentMonthBookings.length} agendamentos no mês`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Table / List of Creators */}
-              <div className="flex-1 overflow-y-auto pr-1">
-                <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
-                  <span>
-                    Detalhamento por Agendador • {revenueModalTab === "ACUMULADO" ? "Visão Acumulada Histórica" : `Visão do Mês Vigente (${currentMonthName})`} ({creatorRevenueStats.length})
-                  </span>
-                  <span>R$ 25 / presença</span>
-                </div>
-
-                {creatorRevenueStats.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 text-xs font-bold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    Nenhum agendamento registrado até o momento.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {creatorRevenueStats.map((stat, idx) => (
-                      <div
-                        key={stat.id || idx}
-                        className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                          stat.isCurrentUser
-                            ? "bg-emerald-50/60 border-emerald-300 ring-1 ring-emerald-200"
-                            : "bg-slate-50 border-slate-200/80 hover:bg-slate-100/70"
-                        }`}
+                      <select
+                        value={selectedRevenueMonth}
+                        onChange={(e) => setSelectedRevenueMonth(e.target.value)}
+                        className="bg-white border border-slate-300 text-slate-800 text-xs font-black rounded-xl px-3 py-1.5 focus:outline-none focus:border-pro-teal cursor-pointer shadow-2xs"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2.5 rounded-xl ${stat.isCurrentUser ? "bg-emerald-100 text-emerald-800 font-black" : "bg-white text-slate-600 border border-slate-200"}`}>
-                            <User size={18} />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-black text-slate-800 text-sm">{stat.name}</span>
-                              {stat.isCurrentUser && (
-                                <span className="text-[9px] font-black px-2 py-0.5 bg-emerald-600 text-white rounded-full uppercase tracking-wider">
-                                  Você
-                                </span>
-                              )}
-                              {stat.role && (
-                                <span className="text-[10px] text-slate-400 font-medium">({stat.role})</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2.5 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
-                              {revenueModalTab === "ACUMULADO" ? (
-                                <>
-                                  <span>Total Histórico: <strong>{stat.totalBookings}</strong> agendamentos</span>
+                        {availableMonths.map((m) => {
+                          const itemSummary = monthlyRevenueSummary.find((s) => s.monthKey === m.key);
+                          const presencas = itemSummary?.attendedCount || 0;
+                          const rev = itemSummary?.totalRevenue || 0;
+                          return (
+                            <option key={m.key} value={m.key}>
+                              {m.label} {m.isCurrent ? "(Mês Vigente)" : ""} — {presencas} {presencas === 1 ? "presença" : "presenças"} (R$ {rev.toFixed(2).replace(".", ",")})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      {selectedRevenueMonth !== currentMonthKey && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedRevenueMonth(currentMonthKey)}
+                          className="px-2.5 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                        >
+                          Ir para Mês Vigente
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Monthly Summary KPI Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* User Month Revenue */}
+                    <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                          <DollarSign size={13} />
+                          Sua Receita em {selectedMonthSummary.monthLabel}
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-full">
+                          Você ({loggedUser?.name || "Usuário"})
+                        </span>
+                      </div>
+                      <div className="text-2xl font-black text-emerald-950">
+                        R$ {selectedMonthSummary.myRevenue.toFixed(2).replace(".", ",")}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-emerald-800 font-bold mt-2 pt-2 border-t border-emerald-200/60 flex-wrap gap-1">
+                        <span>
+                          {selectedMonthSummary.myAttendedCount} {selectedMonthSummary.myAttendedCount === 1 ? "aluno compareceu" : "alunos compareceram"} (R$ 25 cada)
+                        </span>
+                        <span className="text-slate-600 font-medium">
+                          {selectedMonthSummary.myTotalBookings} agendados • {selectedMonthSummary.myAbsentCount} faltas • {selectedMonthSummary.myPendingCount} a realizar
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* School Month Revenue */}
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1">
+                          <Coins size={13} />
+                          Faturamento Total da Escola em {selectedMonthSummary.monthLabel}
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full">
+                          Geral da Escola
+                        </span>
+                      </div>
+                      <div className="text-2xl font-black text-slate-800">
+                        R$ {selectedMonthSummary.totalRevenue.toFixed(2).replace(".", ",")}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-600 font-bold mt-2 pt-2 border-t border-slate-200 flex-wrap gap-1">
+                        <span>
+                          {selectedMonthSummary.attendedCount} {selectedMonthSummary.attendedCount === 1 ? "presença confirmada" : "presenças confirmadas"} no mês
+                        </span>
+                        <span className="text-slate-400 font-medium">
+                          {selectedMonthSummary.totalBookings} agendados • {selectedMonthSummary.absentCount} faltas • {selectedMonthSummary.pendingCount} a realizar
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Informative Rule Notice */}
+                  <div className="p-3 bg-teal-50/70 border border-teal-200/80 rounded-xl text-teal-900 text-xs flex items-center gap-2">
+                    <Info size={15} className="text-teal-700 shrink-0" />
+                    <span>
+                      <strong>Critério de Contabilização:</strong> Somente alunos que <strong>compareceram na aula experimental</strong> geram faturamento (R$ 25,00 por presença). Agendamentos com falta (não compareceu), desistências ou aulas ainda pendentes geram R$ 0,00.
+                    </span>
+                  </div>
+
+                  {/* List of Creators for the Selected Month */}
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2.5 flex items-center justify-between">
+                      <span>
+                        Detalhamento por Agendador • {selectedMonthSummary.monthLabel} ({selectedMonthCreatorStats.length})
+                      </span>
+                      <span>R$ 25,00 / presença confirmada</span>
+                    </div>
+
+                    {selectedMonthCreatorStats.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400 text-xs font-bold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        Nenhum agendamento registrado para {selectedMonthSummary.monthLabel}.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedMonthCreatorStats.map((stat, idx) => (
+                          <div
+                            key={stat.id || idx}
+                            className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                              stat.isCurrentUser
+                                ? "bg-emerald-50/60 border-emerald-300 ring-1 ring-emerald-200"
+                                : "bg-slate-50 border-slate-200/80 hover:bg-slate-100/70"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2.5 rounded-xl ${stat.isCurrentUser ? "bg-emerald-100 text-emerald-800 font-black" : "bg-white text-slate-600 border border-slate-200"}`}>
+                                <User size={18} />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-black text-slate-800 text-sm">{stat.name}</span>
+                                  {stat.isCurrentUser && (
+                                    <span className="text-[9px] font-black px-2 py-0.5 bg-emerald-600 text-white rounded-full uppercase tracking-wider">
+                                      Você
+                                    </span>
+                                  )}
+                                  {stat.role && (
+                                    <span className="text-[10px] text-slate-400 font-medium">({stat.role})</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
+                                  <span>Agendados no Mês: <strong>{stat.totalBookings}</strong></span>
                                   <span>•</span>
                                   <span className="text-emerald-700 font-bold">Compareceram: <strong>{stat.attendedBookings}</strong></span>
-                                  <span>•</span>
-                                  <span className="text-teal-800 font-bold">Mês Vigente: <strong>{stat.currentMonthAttended}</strong> presenças (R$ {stat.currentMonthRevenue},00)</span>
                                   {stat.absentBookings > 0 && (
                                     <>
                                       <span>•</span>
-                                      <span className="text-rose-600">Faltas: {stat.absentBookings}</span>
+                                      <span className="text-rose-600 font-semibold">Faltas: {stat.absentBookings}</span>
                                     </>
                                   )}
-                                </>
-                              ) : (
-                                <>
-                                  <span>Agendados no Mês: <strong>{stat.currentMonthTotal}</strong></span>
-                                  <span>•</span>
-                                  <span className="text-emerald-700 font-bold">Presenças no Mês: <strong>{stat.currentMonthAttended}</strong></span>
-                                  <span>•</span>
-                                  <span className="text-slate-600 font-medium">Acumulado Histórico: <strong>{stat.attendedBookings}</strong> presenças (R$ {stat.earnedRevenue},00)</span>
-                                </>
-                              )}
+                                  {stat.pendingBookings > 0 && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-amber-600 font-semibold">A realizar: {stat.pendingBookings}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200/60 shrink-0">
+                              <div className="text-right">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block sm:inline mr-1">
+                                  Faturamento no Mês:
+                                </span>
+                                <span className="text-base font-black text-emerald-800">
+                                  R$ {stat.revenue.toFixed(2).replace(".", ",")}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-400">
+                                {stat.attendedBookings} {stat.attendedBookings === 1 ? "presença x R$ 25" : "presenças x R$ 25"}
+                              </span>
                             </div>
                           </div>
-                        </div>
-
-                        <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200/60 shrink-0">
-                          <div className="text-right">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block sm:inline mr-1">
-                              {revenueModalTab === "ACUMULADO" ? "Acumulado:" : "No Mês:"}
-                            </span>
-                            <span className="text-base font-black text-emerald-800">
-                              R$ {(revenueModalTab === "ACUMULADO" ? stat.earnedRevenue : stat.currentMonthRevenue).toFixed(2).replace(".", ",")}
-                            </span>
-                          </div>
-                          {revenueModalTab === "ACUMULADO" && stat.pendingRevenue > 0 && (
-                            <span className="text-[10px] font-bold text-slate-400">
-                              + R$ {stat.pendingRevenue.toFixed(2).replace(".", ",")} previstos
-                            </span>
-                          )}
-                          {revenueModalTab === "MES_VIGENTE" && (
-                            <span className="text-[10px] font-bold text-teal-700">
-                              Total acumulado: R$ {stat.earnedRevenue.toFixed(2).replace(".", ",")}
-                            </span>
-                          )}
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+
+              {/* TAB 2: HISTÓRICO MÊS A MÊS */}
+              {revenueModalTab === "HISTORICO_MENSAL" && (
+                <div className="space-y-4 flex-1 overflow-y-auto pr-1">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center justify-between flex-wrap gap-2">
+                    <span className="font-bold flex items-center gap-1.5">
+                      <FileSpreadsheet size={15} className="text-teal-700" />
+                      Visão comparativa de todos os meses registrados no sistema
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      Clique em "Consultar Mês" para abrir o extrato daquele período
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100/80 text-slate-700 font-black text-[10px] uppercase tracking-wider border-b border-slate-200">
+                          <th className="py-3 px-4">Mês de Referência</th>
+                          <th className="py-3 px-3 text-center">Agendados</th>
+                          <th className="py-3 px-3 text-center text-emerald-800">Compareceram</th>
+                          <th className="py-3 px-3 text-center text-rose-700">Faltas</th>
+                          <th className="py-3 px-3 text-center text-amber-700">A Realizar</th>
+                          <th className="py-3 px-4 text-right text-emerald-900">Faturamento Escola</th>
+                          <th className="py-3 px-4 text-right text-teal-900">Seu Faturamento</th>
+                          <th className="py-3 px-3 text-center">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {monthlyRevenueSummary.map((item) => (
+                          <tr 
+                            key={item.monthKey}
+                            className={`hover:bg-slate-50/80 transition-colors ${
+                              item.isCurrent ? "bg-emerald-50/30" : ""
+                            }`}
+                          >
+                            <td className="py-3 px-4 font-bold text-slate-800">
+                              <div className="flex items-center gap-2">
+                                <span>{item.monthLabel}</span>
+                                {item.isCurrent && (
+                                  <span className="text-[9px] font-black px-2 py-0.5 bg-emerald-600 text-white rounded-full uppercase tracking-wider">
+                                    Vigente
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-center font-bold text-slate-600">
+                              {item.totalBookings}
+                            </td>
+                            <td className="py-3 px-3 text-center font-black text-emerald-700 bg-emerald-50/40">
+                              {item.attendedCount}
+                            </td>
+                            <td className="py-3 px-3 text-center font-medium text-rose-600">
+                              {item.absentCount}
+                            </td>
+                            <td className="py-3 px-3 text-center font-medium text-amber-600">
+                              {item.pendingCount}
+                            </td>
+                            <td className="py-3 px-4 text-right font-black text-emerald-800">
+                              R$ {item.totalRevenue.toFixed(2).replace(".", ",")}
+                            </td>
+                            <td className="py-3 px-4 text-right font-black text-teal-800">
+                              R$ {item.myRevenue.toFixed(2).replace(".", ",")}
+                              <span className="block text-[10px] font-normal text-slate-400">
+                                ({item.myAttendedCount} presenças)
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedRevenueMonth(item.monthKey);
+                                  setRevenueModalTab("POR_MES");
+                                }}
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-900 text-slate-700 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                              >
+                                Consultar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-800">
+                          <td className="py-3.5 px-4 uppercase tracking-wider">
+                            Total Acumulado ({monthlyRevenueSummary.length} meses)
+                          </td>
+                          <td className="py-3.5 px-3 text-center">
+                            {bookings.length}
+                          </td>
+                          <td className="py-3.5 px-3 text-center text-emerald-300">
+                            {totalAttendedCount}
+                          </td>
+                          <td className="py-3.5 px-3 text-center text-rose-300">
+                            {totalAbsentCount}
+                          </td>
+                          <td className="py-3.5 px-3 text-center text-amber-300">
+                            {totalPendingAttendanceCount}
+                          </td>
+                          <td className="py-3.5 px-4 text-right text-emerald-300 text-sm">
+                            R$ {totalAccumulatedRevenue.toFixed(2).replace(".", ",")}
+                          </td>
+                          <td className="py-3.5 px-4 text-right text-teal-300 text-sm">
+                            R$ {myAccumulatedRevenue.toFixed(2).replace(".", ",")}
+                          </td>
+                          <td className="py-3.5 px-3 text-center text-[10px] text-slate-400">
+                            Histórico
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: ACUMULADO GERAL */}
+              {revenueModalTab === "ACUMULADO" && (
+                <div className="space-y-4 flex-1 overflow-y-auto pr-1">
+                  {/* Summary Cards inside modal */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
+                    <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200/80 rounded-2xl">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                          <DollarSign size={13} />
+                          Minha Receita Acumulada (Total Histórico)
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-full">
+                          Você ({loggedUser?.name || "Usuário"})
+                        </span>
+                      </div>
+                      <div className="text-2xl font-black text-emerald-950">
+                        R$ {myAccumulatedRevenue.toFixed(2).replace(".", ",")}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-emerald-800 font-bold mt-2 pt-2 border-t border-emerald-200/60 flex-wrap gap-1">
+                        <span>
+                          {myAttendedCount} presenças confirmadas no histórico geral
+                        </span>
+                        <span className="text-teal-800 font-semibold">
+                          Mês vigente: R$ {myCurrentMonthGeneratedRevenue.toFixed(2).replace(".", ",")}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1">
+                          <Coins size={13} />
+                          Receita Total Acumulada da Escola
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full">
+                          Geral da Escola
+                        </span>
+                      </div>
+                      <div className="text-2xl font-black text-slate-800">
+                        R$ {totalAccumulatedRevenue.toFixed(2).replace(".", ",")}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-600 font-bold mt-2 pt-2 border-t border-slate-200 flex-wrap gap-1">
+                        <span>
+                          {totalAttendedCount} presenças acumuladas na escola
+                        </span>
+                        <span className="text-slate-400 font-medium">
+                          {bookings.length} agendamentos no total histórico
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Table / List of Creators across all time */}
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+                      <span>
+                        Detalhamento Acumulado por Agendador • Visão Histórica Geral ({creatorRevenueStats.length})
+                      </span>
+                      <span>R$ 25,00 / presença confirmada</span>
+                    </div>
+
+                    {creatorRevenueStats.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400 text-xs font-bold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        Nenhum agendamento registrado até o momento.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {creatorRevenueStats.map((stat, idx) => (
+                          <div
+                            key={stat.id || idx}
+                            className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                              stat.isCurrentUser
+                                ? "bg-emerald-50/60 border-emerald-300 ring-1 ring-emerald-200"
+                                : "bg-slate-50 border-slate-200/80 hover:bg-slate-100/70"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2.5 rounded-xl ${stat.isCurrentUser ? "bg-emerald-100 text-emerald-800 font-black" : "bg-white text-slate-600 border border-slate-200"}`}>
+                                <User size={18} />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-black text-slate-800 text-sm">{stat.name}</span>
+                                  {stat.isCurrentUser && (
+                                    <span className="text-[9px] font-black px-2 py-0.5 bg-emerald-600 text-white rounded-full uppercase tracking-wider">
+                                      Você
+                                    </span>
+                                  )}
+                                  {stat.role && (
+                                    <span className="text-[10px] text-slate-400 font-medium">({stat.role})</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2.5 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
+                                  <span>Total Histórico: <strong>{stat.totalBookings}</strong> agendamentos</span>
+                                  <span>•</span>
+                                  <span className="text-emerald-700 font-bold">Compareceram: <strong>{stat.attendedBookings}</strong></span>
+                                  {stat.absentBookings > 0 && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-rose-600 font-semibold">Faltas: {stat.absentBookings}</span>
+                                    </>
+                                  )}
+                                  {stat.pendingBookings > 0 && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-amber-600 font-semibold">A realizar: {stat.pendingBookings}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200/60 shrink-0">
+                              <div className="text-right">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block sm:inline mr-1">
+                                  Total Acumulado:
+                                </span>
+                                <span className="text-base font-black text-emerald-800">
+                                  R$ {stat.earnedRevenue.toFixed(2).replace(".", ",")}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-400">
+                                {stat.attendedBookings} presenças confirmadas
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Footer */}
-              <div className="flex items-center justify-between pt-4 border-t border-slate-100 shrink-0">
+              <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-100 shrink-0 gap-3">
                 <p className="text-[11px] text-slate-400 font-medium">
-                  A receita do topo zera mensalmente. A receita acumulada de todos os meses permanece registrada aqui no extrato.
+                  O faturamento mensal é calculado estritamente pelas presenças confirmadas de cada mês (R$ 25,00 por aluno presente).
                 </p>
                 <button
                   type="button"
                   onClick={() => setIsRevenueModalOpen(false)}
-                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
                 >
                   Fechar Extrato
                 </button>
