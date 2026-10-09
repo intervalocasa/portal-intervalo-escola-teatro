@@ -487,43 +487,38 @@ export default function App() {
 
     async function testConnection() {
       try {
-        // Use a simpler getDoc with a shorter timeout if possible, 
-        // but getDocFromServer is more definitive for real connection
-        await getDocFromServer(doc(db, 'system', 'connection_test'));
+        await getDocFromServer(doc(db, 'test', 'connection'));
         setConnectionError(null);
       } catch (error: any) {
-        console.error("Firebase Connection Test Failed:", error);
-        
-        const isRetryable = error.message?.includes('internal') || 
-                          error.message?.includes('offline') || 
-                          error.code === 'unavailable' ||
-                          error.code === 'deadline-exceeded';
+        const isOffline = error instanceof Error && (
+          error.message?.includes('the client is offline') ||
+          error.message?.includes('offline') ||
+          (error as any).code === 'unavailable'
+        );
 
-        if (isRetryable && retryCount < maxRetries) {
-          retryCount++;
-          // Increase delay between retries
-          setTimeout(testConnection, 3000 * retryCount);
+        if (isOffline) {
+          if (retryCount < maxRetries) {
+            retryCount++;
+            setTimeout(testConnection, 3000 * retryCount);
+            return;
+          }
+          console.warn("Firebase offline or unreachable. Proceeding with offline capabilities.");
+          setConnectionError(null);
           return;
         }
 
-        const errMessage = error.message || "";
-        const errCode = error.code || "";
+        // When Firestore returns permission-denied or any non-offline status,
+        // it confirms the server is reachable and active.
+        const errMessage = error?.message || "";
+        const errCode = error?.code || "";
         const isPermissionError = errCode === 'permission-denied' || 
                                  errMessage.toLowerCase().includes('permission') ||
                                  errMessage.toLowerCase().includes('insufficient');
 
-        if (error.message?.includes('offline') || error.code === 'unavailable' || error.code === 'failed-precondition' || error.code === 'deadline-exceeded') {
-          console.warn("Firebase offline or unreachable. Proceeding with offline client-side database capabilities.");
-          setConnectionError(null);
-        } else if (isPermissionError) {
-          // Permissions are fine for connection verification - it means we reached the server
-          console.log("Firebase connection verified (permission denied on test path - this is OK)");
-          setConnectionError(null);
-        } else if (error.message?.includes('internal')) {
-          console.warn("Firebase is initializing. Proceeding with offline/cached capabilities.");
+        if (isPermissionError || error?.message?.includes('internal')) {
           setConnectionError(null);
         } else {
-          setConnectionError(`Erro de Configuração do Banco de Dados: ${error.message || error.code}`);
+          setConnectionError(`Erro de Configuração do Banco de Dados: ${errMessage || errCode}`);
         }
       }
     }
