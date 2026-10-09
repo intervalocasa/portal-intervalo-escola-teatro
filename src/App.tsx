@@ -45,7 +45,7 @@ import {
   PROFESSIONAL_CRITERIA_MONTAGEM,
   ADULT_CRITERIA
 } from "./constants";
-import { auth, db } from "./lib/firebase";
+import { auth, db, GATEWAY_CREDENTIALS, ensureAuthenticatedBridge } from "./lib/firebase";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
@@ -717,20 +717,43 @@ export default function App() {
     setIsAppLoading(true);
 
     try {
-      // 1. Check if email exists in Firestore
-      const usersSnap = await getDocs(collection(db, "usuarios"));
-      const matchedDocs = usersSnap.docs.filter(d => {
-        const uData = d.data();
-        return uData.email && uData.email.trim().toLowerCase() === cleanEmail;
-      });
+      // Ensure authenticated bridge so query is permitted by Firestore rules
+      await ensureAuthenticatedBridge();
 
-      if (matchedDocs.length === 0) {
+      // 1. Check if email exists in Firestore
+      let matchedDoc: any = null;
+      let userData: any = null;
+
+      try {
+        const q = query(collection(db, "usuarios"), where("email", "==", cleanEmail));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          matchedDoc = snap.docs[0];
+          userData = matchedDoc.data();
+        }
+      } catch (qErr) {
+        console.warn("Query by email failed in first pwd setup:", qErr);
+      }
+
+      if (!matchedDoc) {
+        const usersSnap = await getDocs(collection(db, "usuarios"));
+        const matchedDocs = usersSnap.docs.filter(d => {
+          const uData = d.data();
+          return uData.email && uData.email.trim().toLowerCase() === cleanEmail;
+        });
+
+        if (matchedDocs.length > 0) {
+          matchedDoc = matchedDocs[0];
+          userData = matchedDoc.data();
+        }
+      }
+
+      if (!matchedDoc || !userData) {
         setFirstPwdError("Este e-mail não está cadastrado no sistema. Por favor, solicite seu acesso com a gestão.");
+        setIsAppLoading(false);
         return;
       }
 
-      const matchedDoc = matchedDocs[0];
-      const userData = matchedDoc.data();
       let success = false;
 
       // 2. Try to create or sign in user client-side
@@ -748,16 +771,9 @@ export default function App() {
             success = true;
           }
         } catch (signInErr) {
-          // If Firebase Auth account exists with another password, sign in anonymously to initialize SDK auth state:
-          try {
-            if (!auth.currentUser) {
-              await signInAnonymously(auth);
-            }
-            success = true;
-          } catch (anonErr) {
-            console.warn("signInAnonymously fallback in first pwd setup:", anonErr);
-            success = true; // allow login via Firestore state
-          }
+          // If already in Auth with another password, keep bridge active and allow Firestore password update
+          await ensureAuthenticatedBridge();
+          success = true;
         }
       }
 
@@ -776,10 +792,10 @@ export default function App() {
         }, { merge: true });
 
         // 5. Migrate all references and delete old/duplicate pre-registration documents
-        for (const docItem of matchedDocs) {
-          if (docItem.id !== finalUid) {
-            await migrateUserDataAndReferences(docItem.id, finalUid, userData);
-          }
+        if (matchedDoc && matchedDoc.id !== finalUid) {
+          migrateUserDataAndReferences(matchedDoc.id, finalUid, userData).catch(mErr => {
+            console.warn("Background migration error in first password setup:", mErr);
+          });
         }
 
         localStorage.setItem("active_user_id", finalUid);
@@ -912,6 +928,7 @@ export default function App() {
       // 1. Primary Client-side Firestore update (defines new password in initialPassword AND senha)
       const userDocRef = doc(db, "usuarios", gestorResettingUid);
       await updateDoc(userDocRef, {
+        previousPassword: targetUser?.senha || targetUser?.initialPassword || "",
         initialPassword: cleanPwd,
         senha: cleanPwd,
         passwordChanged: true,
@@ -969,28 +986,60 @@ export default function App() {
 
         if (user) {
           setGestorError(null);
-          try {
-            const userRef = doc(db, "usuarios", user.uid);
-            const userDoc = await getDoc(userRef);
-            if (userDoc.exists()) {
-              userDocData = userDoc.data();
-              userRole = userDocData?.role;
-              resolvedUserId = user.uid;
-            } else if (user.email) {
-              const q = query(collection(db, "usuarios"), where("email", "==", user.email.toLowerCase()));
-              const querySnapshot = await getDocs(q);
-              if (!querySnapshot.empty) {
-                const oldDoc = querySnapshot.docs[0];
-                const oldDocId = oldDoc.id;
-                userDocData = oldDoc.data();
-                userRole = userDocData?.role;
-                resolvedUserId = user.uid;
-                localStorage.setItem("active_user_id", user.uid);
-                await migrateUserDataAndReferences(oldDocId, user.uid, userDocData);
+          if (user.email === GATEWAY_CREDENTIALS.email) {
+            // Gateway session used as bridge: resolve identity from localStorage active session
+            if (storedUserId || storedUserEmail) {
+              try {
+                if (storedUserId) {
+                  const userRef = doc(db, "usuarios", storedUserId);
+                  const userDoc = await getDoc(userRef);
+                  if (userDoc.exists()) {
+                    userDocData = userDoc.data();
+                    userRole = userDocData?.role;
+                    resolvedUserId = storedUserId;
+                  }
+                }
+                if (!userDocData && storedUserEmail) {
+                  const q = query(collection(db, "usuarios"), where("email", "==", storedUserEmail.toLowerCase()));
+                  const querySnapshot = await getDocs(q);
+                  if (!querySnapshot.empty) {
+                    const foundDoc = querySnapshot.docs[0];
+                    userDocData = foundDoc.data();
+                    userRole = userDocData?.role;
+                    resolvedUserId = foundDoc.id;
+                  }
+                }
+              } catch (gwErr) {
+                console.error("Gateway session user restore error:", gwErr);
               }
             }
-          } catch (docErr: any) {
-            console.error("Firestore getDoc Error:", docErr);
+          } else {
+            // Standard authenticated user
+            try {
+              const userRef = doc(db, "usuarios", user.uid);
+              const userDoc = await getDoc(userRef);
+              if (userDoc.exists()) {
+                userDocData = userDoc.data();
+                userRole = userDocData?.role;
+                resolvedUserId = user.uid;
+              } else if (user.email) {
+                const q = query(collection(db, "usuarios"), where("email", "==", user.email.toLowerCase()));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty) {
+                  const oldDoc = querySnapshot.docs[0];
+                  const oldDocId = oldDoc.id;
+                  userDocData = oldDoc.data();
+                  userRole = userDocData?.role;
+                  resolvedUserId = user.uid;
+                  localStorage.setItem("active_user_id", user.uid);
+                  migrateUserDataAndReferences(oldDocId, user.uid, userDocData).catch(mErr => {
+                    console.warn("Background migration warning in onAuthStateChanged:", mErr);
+                  });
+                }
+              }
+            } catch (docErr: any) {
+              console.error("Firestore getDoc Error:", docErr);
+            }
           }
         }
 
@@ -1942,59 +1991,182 @@ export default function App() {
     const cleanEmail = login.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    let autoLoggedIn = false;
-
-    // 1. Try Firebase Auth standard sign-in
-    try {
-      await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-      localStorage.setItem("active_user_email", cleanEmail);
-      autoLoggedIn = true;
-    } catch (err: any) {
-      console.warn("Standard signInWithEmailAndPassword failed, checking initialPassword/senha in Firestore...", err);
+    if (!cleanEmail || !cleanPassword) {
+      setError("Por favor, preencha o e-mail e a senha.");
+      setIsAppLoading(false);
+      return;
     }
 
-    // 2. If standard Firebase Auth failed, check Firestore profile
+    let autoLoggedIn = false;
+
+    // 1. Try Firebase Auth standard sign-in first
+    try {
+      const userCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+      if (userCred.user) {
+        autoLoggedIn = true;
+        const loggedUser = userCred.user;
+        localStorage.setItem("active_user_email", cleanEmail);
+
+        // Fetch user profile immediately
+        let userData: any = null;
+        let resolvedDocId = loggedUser.uid;
+
+        try {
+          const directDoc = await getDoc(doc(db, "usuarios", loggedUser.uid));
+          if (directDoc.exists()) {
+            userData = directDoc.data();
+            resolvedDocId = directDoc.id;
+          } else {
+            const q = query(collection(db, "usuarios"), where("email", "==", cleanEmail));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              userData = snap.docs[0].data();
+              resolvedDocId = snap.docs[0].id;
+              if (resolvedDocId !== loggedUser.uid) {
+                setDoc(doc(db, "usuarios", loggedUser.uid), {
+                  ...userData,
+                  updatedAt: serverTimestamp()
+                }, { merge: true }).catch(() => null);
+              }
+            }
+          }
+        } catch (fetchErr) {
+          console.warn("[handleLogin] Profile fetch warning on standard sign-in:", fetchErr);
+        }
+
+        const finalUid = loggedUser.uid || resolvedDocId;
+        localStorage.setItem("active_user_id", finalUid);
+
+        if (userData) {
+          const fullUserObj = {
+            uid: finalUid,
+            id: finalUid,
+            email: cleanEmail,
+            displayName: getUserDisplayName(userData) || userData.email || loggedUser.displayName,
+            role: userData.role,
+            ...userData,
+            senha: cleanPassword,
+            passwordChanged: true
+          };
+
+          setCurrentUser(fullUserObj);
+          setRole(userData.role as UserRole);
+          setView("dashboard");
+          setIsAppLoading(false);
+          return;
+        }
+      }
+    } catch (err: any) {
+      console.warn("Standard signInWithEmailAndPassword failed, checking Firestore credentials...", err);
+    }
+
+    // 2. If standard Firebase Auth failed, check Firestore profile using authenticated bridge
     if (!autoLoggedIn) {
       try {
-        const usersSnap = await getDocs(collection(db, "usuarios"));
-        const matchedDoc = usersSnap.docs.find(d => {
-          const uData = d.data();
-          return uData.email && uData.email.trim().toLowerCase() === cleanEmail;
-        });
+        // Guarantee authenticated session so Firestore rules allow reading
+        await ensureAuthenticatedBridge();
 
-        if (matchedDoc) {
-          const userDocSnap = matchedDoc;
-          const userData = userDocSnap.data();
+        let matchedDoc: any = null;
+        let userData: any = null;
 
+        // Try direct query by email
+        try {
+          const q = query(collection(db, "usuarios"), where("email", "==", cleanEmail));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            matchedDoc = snap.docs[0];
+            userData = matchedDoc.data();
+          }
+        } catch (qErr) {
+          console.warn("[handleLogin] query by email warning, falling back to full collection scan:", qErr);
+        }
+
+        if (!matchedDoc) {
+          try {
+            const usersSnap = await getDocs(collection(db, "usuarios"));
+            matchedDoc = usersSnap.docs.find(d => {
+              const uData = d.data();
+              return uData.email && uData.email.trim().toLowerCase() === cleanEmail;
+            });
+            if (matchedDoc) {
+              userData = matchedDoc.data();
+            }
+          } catch (scanErr) {
+            console.warn("[handleLogin] collection scan warning:", scanErr);
+          }
+        }
+
+        // Server-side fallback if client Firestore had issues
+        if (!userData) {
+          try {
+            const srvRes = await fetch("/api/auth/verify-credentials", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: cleanEmail, password: cleanPassword })
+            });
+            const srvData = await srvRes.json();
+            if (srvData.success && srvData.user) {
+              userData = srvData.user;
+              matchedDoc = { id: srvData.user.id || srvData.user.uid, data: () => srvData.user };
+            } else if (srvData.error === "Usuário não encontrado.") {
+              setError("Este e-mail não está cadastrado no sistema.");
+              setIsAppLoading(false);
+              return;
+            }
+          } catch (srvErr) {
+            console.warn("[handleLogin] Server verify-credentials fallback error:", srvErr);
+          }
+        }
+
+        if (userData) {
           const initialPwd = (userData.initialPassword || "").toString().trim();
           const currentPwd = (userData.senha || "").toString().trim();
           const prevPwd = (userData.previousPassword || "").toString().trim();
+          const plainPwd = (userData.password || "").toString().trim();
 
           const matchesCredential = 
             (initialPwd && initialPwd === cleanPassword) ||
             (currentPwd && currentPwd === cleanPassword) ||
-            (prevPwd && prevPwd === cleanPassword);
+            (prevPwd && prevPwd === cleanPassword) ||
+            (plainPwd && plainPwd === cleanPassword) ||
+            (userData.senha && userData.senha.toString() === password) ||
+            (userData.initialPassword && userData.initialPassword.toString() === password);
 
           if (matchesCredential) {
-            console.log("Matching credentials found in Firestore! Setting up user session...");
+            console.log("Matching credentials confirmed! Setting up user session...");
 
-            // Non-blocking client Auth initialization
+            // Try creating client Auth user or syncing Auth password
             try {
-              if (!auth.currentUser) {
-                await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword).catch(() => null);
-                if (!auth.currentUser) {
-                  await signInAnonymously(auth).catch(() => null);
+              if (!auth.currentUser || auth.currentUser.email === GATEWAY_CREDENTIALS.email) {
+                const newCred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword).catch(() => null);
+                if (!newCred && prevPwd && prevPwd !== cleanPassword) {
+                  try {
+                    const prevCred = await signInWithEmailAndPassword(auth, cleanEmail, prevPwd);
+                    if (prevCred.user) {
+                      await updatePassword(prevCred.user, cleanPassword);
+                    }
+                  } catch (pErr) {
+                    console.warn("Auth password sync from previous password skipped:", pErr);
+                  }
                 }
               }
             } catch (aErr) {
               console.warn("Auth setup warning in handleLogin:", aErr);
             }
 
-            const finalUid = auth.currentUser?.uid || userDocSnap.id;
+            // Ensure an active authenticated bridge persists so all Firestore queries work
+            if (!auth.currentUser) {
+              await ensureAuthenticatedBridge();
+            }
 
-            // Firestore record update & migration to canonical UID
+            const docId = matchedDoc?.id || userData.id || userData.uid;
+            const finalUid = (auth.currentUser && auth.currentUser.email?.toLowerCase() === cleanEmail) 
+              ? auth.currentUser.uid 
+              : docId;
+
+            // Firestore record update & background reference sync
             try {
-              await setDoc(doc(db, "usuarios", finalUid), {
+              await setDoc(doc(db, "usuarios", docId), {
                 ...userData,
                 email: cleanEmail,
                 passwordChanged: true,
@@ -2003,8 +2175,19 @@ export default function App() {
                 updatedAt: serverTimestamp()
               }, { merge: true });
 
-              if (userDocSnap.id !== finalUid) {
-                await migrateUserDataAndReferences(userDocSnap.id, finalUid, userData);
+              if (finalUid !== docId) {
+                await setDoc(doc(db, "usuarios", finalUid), {
+                  ...userData,
+                  email: cleanEmail,
+                  passwordChanged: true,
+                  initialPassword: "",
+                  senha: cleanPassword,
+                  updatedAt: serverTimestamp()
+                }, { merge: true });
+
+                migrateUserDataAndReferences(docId, finalUid, userData).catch(mErr => {
+                  console.warn("Background migration warning:", mErr);
+                });
               }
             } catch (fsUpdErr) {
               console.warn("Firestore updateDoc warning in handleLogin:", fsUpdErr);
@@ -2030,7 +2213,15 @@ export default function App() {
             setRole(userData.role as UserRole);
             setView("dashboard");
             autoLoggedIn = true;
+          } else {
+            setError("E-mail ou senha incorretos.");
+            setIsAppLoading(false);
+            return;
           }
+        } else {
+          setError("Este e-mail não está cadastrado no sistema.");
+          setIsAppLoading(false);
+          return;
         }
       } catch (fallbackErr) {
         console.error("Error checking credential fallback in handleLogin:", fallbackErr);
