@@ -29,7 +29,10 @@ import {
   Award,
   Edit3,
   PlusCircle,
-  Trash2
+  Trash2,
+  BarChart3,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -676,6 +679,73 @@ export const FinancialManagementView = ({
   const totalDespesas = useMemo(() => {
     return filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
   }, [filteredExpenses]);
+
+  // Annual expenses data for the bar chart
+  const annualExpensesData = useMemo(() => {
+    const allList = Object.values(dbExpenses) as ExpenseRecord[];
+    
+    return MONTHS_PT.map((monthName, monthIndex) => {
+      const monthExpenses = allList.filter(exp => {
+        let expMonth = -1;
+        let expYear = -1;
+        if (exp.month !== undefined && exp.month !== null && !isNaN(Number(exp.month))) {
+          expMonth = Number(exp.month);
+        } else if (exp.dueDate) {
+          const parts = String(exp.dueDate).split("-");
+          if (parts.length >= 2) expMonth = Number(parts[1]) - 1;
+        }
+
+        if (exp.year !== undefined && exp.year !== null && !isNaN(Number(exp.year))) {
+          expYear = Number(exp.year);
+        } else if (exp.dueDate) {
+          const parts = String(exp.dueDate).split("-");
+          if (parts.length >= 1) expYear = Number(parts[0]);
+        }
+
+        return expYear === expenseYear && expMonth === monthIndex;
+      });
+
+      const total = monthExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      const paid = monthExpenses.filter(e => e.status === "Pago").reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      const pending = monthExpenses.filter(e => e.status === "Pendente").reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      const delayed = monthExpenses.filter(e => e.status === "Atrasado").reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+      return {
+        monthIndex,
+        monthName,
+        shortName: monthName.slice(0, 3),
+        total,
+        paid,
+        pending,
+        delayed,
+        count: monthExpenses.length
+      };
+    });
+  }, [dbExpenses, expenseYear]);
+
+  const annualTotalDespesas = useMemo(() => {
+    return annualExpensesData.reduce((acc, curr) => acc + curr.total, 0);
+  }, [annualExpensesData]);
+
+  const maxMonthExpense = useMemo(() => {
+    const max = Math.max(...annualExpensesData.map(d => d.total), 0);
+    return max > 0 ? max : 1000;
+  }, [annualExpensesData]);
+
+  const peakMonth = useMemo(() => {
+    let highest = { monthName: "-", total: 0 };
+    annualExpensesData.forEach(d => {
+      if (d.total > highest.total) {
+        highest = { monthName: d.monthName, total: d.total };
+      }
+    });
+    return highest;
+  }, [annualExpensesData]);
+
+  const averageMonthlyExpense = useMemo(() => {
+    const activeMonths = annualExpensesData.filter(d => d.total > 0);
+    return activeMonths.length > 0 ? annualTotalDespesas / activeMonths.length : (annualTotalDespesas / 12);
+  }, [annualExpensesData, annualTotalDespesas]);
 
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1886,8 +1956,222 @@ export const FinancialManagementView = ({
 
           {/* TAB 3: GESTÃO DE DESPESAS */}
           {activeTab === "despesas" && (
-            <div className="space-y-8 animate-fadeIn">
+            <div className="space-y-6 md:space-y-8 animate-fadeIn">
               
+              {/* Gráfico de Barras Anual de Despesas */}
+              <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-5">
+                {/* Cabeçalho do Gráfico com Filtro de Ano e Indicadores */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-xs font-black text-[#016a86] uppercase tracking-wider mb-1">
+                      <BarChart3 size={16} />
+                      <span>Visão Anual das Despesas</span>
+                    </div>
+                    <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+                      <span>Despesas de {expenseYear}</span>
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+                        12 Meses
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">
+                      Total de despesas cadastradas mês a mês. Clique em qualquer barra para selecionar o mês.
+                    </p>
+                  </div>
+
+                  {/* Resumos e Seletor de Ano */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Indicadores Rápidos */}
+                    <div className="bg-slate-50 px-3.5 py-2 rounded-2xl border border-slate-200/80 flex items-center gap-3 text-xs">
+                      <div>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Total Anual</span>
+                        <span className="font-black text-slate-800">
+                          R$ {annualTotalDespesas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="w-px h-6 bg-slate-200"></div>
+                      <div>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Média Mensal</span>
+                        <span className="font-black text-slate-700">
+                          R$ {averageMonthlyExpense.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="w-px h-6 bg-slate-200"></div>
+                      <div>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Maior Mês</span>
+                        <span className="font-black text-[#016a86]">
+                          {peakMonth.total > 0 ? `${peakMonth.monthName.slice(0, 3)} (R$ ${peakMonth.total.toLocaleString("pt-BR", { maximumFractionDigits: 0 })})` : "—"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Controles de Navegação de Ano */}
+                    <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-xs">
+                      <button
+                        type="button"
+                        onClick={() => setExpenseYear(prev => prev - 1)}
+                        className="p-1.5 hover:bg-white text-slate-600 rounded-xl transition-all cursor-pointer shadow-xs"
+                        title="Ano anterior"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <select
+                        value={expenseYear}
+                        onChange={(e) => setExpenseYear(Number(e.target.value))}
+                        className="bg-transparent font-black text-xs md:text-sm text-slate-800 px-2 py-1 focus:outline-none cursor-pointer"
+                      >
+                        {[2023, 2024, 2025, 2026, 2027, 2028].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setExpenseYear(prev => prev + 1)}
+                        className="p-1.5 hover:bg-white text-slate-600 rounded-xl transition-all cursor-pointer shadow-xs"
+                        title="Próximo ano"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Área do Gráfico de Barras com 12 Meses */}
+                <div className="overflow-x-auto pb-2 -mx-2 px-2">
+                  <div className="min-w-[680px] pt-4">
+                    <div className="relative">
+                      {/* Linhas de Grade de Referência */}
+                      <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8 text-[10px] text-slate-400 font-bold select-none">
+                        <div className="border-b border-dashed border-slate-200/90 w-full flex items-center justify-between">
+                          <span className="bg-white/95 pr-2">R$ {maxMonthExpense.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}</span>
+                        </div>
+                        <div className="border-b border-dashed border-slate-200/60 w-full flex items-center justify-between">
+                          <span className="bg-white/95 pr-2">R$ {(maxMonthExpense / 2).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}</span>
+                        </div>
+                        <div className="border-b border-slate-200 w-full flex items-center justify-between">
+                          <span className="bg-white/95 pr-2">R$ 0</span>
+                        </div>
+                      </div>
+
+                      {/* Grade das 12 Barras */}
+                      <div className="relative z-10 grid grid-cols-12 gap-2 md:gap-3 items-end h-64 pt-6 pb-2">
+                        {annualExpensesData.map((item) => {
+                          const isSelected = expenseMonth === item.monthIndex;
+                          const heightPercent = maxMonthExpense > 0 
+                            ? Math.max(item.total > 0 ? (item.total / maxMonthExpense) * 100 : 0, 0)
+                            : 0;
+
+                          return (
+                            <div
+                              key={item.monthIndex}
+                              onClick={() => setExpenseMonth(item.monthIndex)}
+                              className="group flex flex-col items-center h-full justify-end cursor-pointer relative"
+                              title={`${item.monthName} de ${expenseYear}: R$ ${item.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} (${item.count} despesas)`}
+                            >
+                              {/* Rótulo de Valor Acima da Barra */}
+                              <div className="mb-2 text-center transition-transform group-hover:scale-105 pointer-events-none">
+                                {item.total > 0 ? (
+                                  <span className={`text-[10px] md:text-[11px] font-black block whitespace-nowrap px-1 py-0.5 rounded-md ${
+                                    isSelected 
+                                      ? "text-[#016a86] bg-[#016a86]/10" 
+                                      : "text-slate-700 bg-slate-50"
+                                  }`}>
+                                    {item.total >= 1000 
+                                      ? `R$ ${(item.total / 1000).toFixed(1).replace(".", ",")}k` 
+                                      : `R$ ${item.total.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-slate-300 block">
+                                    R$ 0
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Barra com Gradiente e Destaque */}
+                              <div 
+                                className={`w-full max-w-[44px] rounded-t-xl transition-all duration-300 relative flex flex-col justify-end overflow-hidden ${
+                                  isSelected 
+                                    ? "ring-2 ring-[#016a86] ring-offset-2 ring-offset-white shadow-md shadow-[#016a86]/20" 
+                                    : "hover:brightness-95"
+                                }`}
+                                style={{
+                                  height: item.total > 0 ? `${Math.max(heightPercent, 8)}%` : "6px",
+                                  minHeight: item.total > 0 ? "18px" : "6px"
+                                }}
+                              >
+                                <div 
+                                  className={`w-full h-full rounded-t-xl transition-all ${
+                                    isSelected
+                                      ? "bg-gradient-to-t from-[#016a86] via-[#0180a3] to-[#029bc4]"
+                                      : item.total > 0
+                                      ? "bg-gradient-to-t from-[#016a86]/85 to-[#016a86]/55 group-hover:from-[#016a86] group-hover:to-[#016a86]/80"
+                                      : "bg-slate-200 group-hover:bg-slate-300"
+                                  }`}
+                                />
+                              </div>
+
+                              {/* Nome do Mês Abaixo da Barra */}
+                              <div className="mt-2 text-center select-none">
+                                <span className={`text-[10px] md:text-xs font-black uppercase tracking-wider block transition-colors ${
+                                  isSelected
+                                    ? "text-[#016a86] font-black scale-105"
+                                    : "text-slate-500 group-hover:text-slate-800"
+                                }`}>
+                                  {item.shortName}
+                                </span>
+                                {isSelected ? (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#016a86] mx-auto mt-0.5 block shadow-xs"></span>
+                                ) : (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-transparent mx-auto mt-0.5 block"></span>
+                                )}
+                              </div>
+
+                              {/* Tooltip / Card de Detalhes ao Passar o Cursor */}
+                              <div className="absolute bottom-full mb-3 hidden group-hover:flex flex-col z-30 bg-slate-900 text-white p-3 rounded-2xl shadow-xl pointer-events-none min-w-[180px] text-left transform -translate-x-1/2 left-1/2 animate-fadeIn border border-slate-700/60">
+                                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-1.5">
+                                  <span className="font-black text-xs text-white">{item.monthName} / {expenseYear}</span>
+                                  {isSelected && (
+                                    <span className="text-[9px] font-bold text-teal-400 bg-teal-950/80 px-1.5 py-0.5 rounded border border-teal-800">
+                                      Mês Ativo
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="space-y-1.5 text-[11px]">
+                                  <div className="flex justify-between items-center text-slate-300">
+                                    <span>Total Despesas:</span>
+                                    <span className="font-black text-white">R$ {item.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-emerald-400">
+                                    <span>Pagas:</span>
+                                    <span className="font-bold">R$ {item.paid.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-amber-300">
+                                    <span>Pendentes:</span>
+                                    <span className="font-bold">R$ {item.pending.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  {item.delayed > 0 && (
+                                    <div className="flex justify-between items-center text-rose-400">
+                                      <span>Atrasadas:</span>
+                                      <span className="font-bold">R$ {item.delayed.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                  )}
+                                  <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-800 flex justify-between">
+                                    <span>Registros de despesa:</span>
+                                    <span className="font-bold text-slate-200">{item.count}</span>
+                                  </div>
+                                </div>
+                                <div className="text-[9px] text-teal-300 text-center mt-2 font-bold bg-white/10 rounded-lg py-1">
+                                  Clique para abrir este mês
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Metrics Cards Grid */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
