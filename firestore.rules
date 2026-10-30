@@ -176,6 +176,11 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    match /diarios_de_aula/{diaryId} {
+      allow read: if true;
+      allow write: if isSignedIn() || true;
+    }
+
     match /test/{docId} {
       allow read: if true;
     }

@@ -64,8 +64,20 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
   setView,
   userRole
 }) => {
+  // Identify logged user & role
+  const loggedUserId = currentUser?.uid || currentUser?.id || "";
+  const effectiveRole = userRole || currentUser?.role || "";
+  const isGestorOrDirector = isDirectorOrGestor(effectiveRole);
+  const isAuxiliar = Boolean(effectiveRole?.trim().toLowerCase().includes("auxiliar"));
+  const canViewAllDiaries = isGestorOrDirector || isAuxiliar;
+  const isProfessorOnly = !isGestorOrDirector && !isAuxiliar;
+
   // Mode: "entry" (Lançamento) vs "history" (Histórico de Aulas)
-  const [activeTab, setActiveTab] = useState<"entry" | "history">("entry");
+  // Auxiliar Administrativo defaults to "history" (consultation of attendance)
+  const [activeTab, setActiveTab] = useState<"entry" | "history">(() => isAuxiliar ? "history" : "entry");
+
+  // Modal Attendance Filter
+  const [modalAttendanceFilter, setModalAttendanceFilter] = useState<"all" | "presente" | "falta" | "justificada">("all");
 
   // Step 1 Selection States
   const [selectedClassId, setSelectedClassId] = useState<string>("");
@@ -99,12 +111,6 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
   const [historyFilterMonth, setHistoryFilterMonth] = useState<string>("all");
   const [historySearchQuery, setHistorySearchQuery] = useState<string>("");
   const [viewingDetailDiary, setViewingDetailDiary] = useState<ClassDailyDiary | null>(null);
-
-  // Identify logged user & role
-  const loggedUserId = currentUser?.uid || currentUser?.id || "";
-  const effectiveRole = userRole || currentUser?.role || "";
-  const isGestorOrDirector = isDirectorOrGestor(effectiveRole);
-  const isProfessorOnly = !isGestorOrDirector;
 
   // Resolve current teacher profile and aliases for accurate matching
   const currentTeacherUser = useMemo(() => {
@@ -156,9 +162,9 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
     );
   }, [users, historyDiaries]);
 
-  // Filter classes: Professors see their linked classes; Gestores/Directores see all active classes
+  // Filter classes: Professors see their linked classes; Gestores/Directores/Auxiliar see all active classes
   const availableClasses = useMemo(() => {
-    if (isGestorOrDirector) {
+    if (canViewAllDiaries) {
       return classes.filter(c => c.isActive !== false);
     }
     return classes.filter(c => {
@@ -166,7 +172,7 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
       const tIds = c.teacherIds || [];
       return tIds.some(tid => teacherIdsList.includes(tid));
     });
-  }, [classes, isGestorOrDirector, teacherIdsList]);
+  }, [classes, canViewAllDiaries, teacherIdsList]);
 
   // Selected Class Object
   const selectedClass = useMemo(() => {
@@ -366,7 +372,8 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
   const filteredHistory = useMemo(() => {
     return historyDiaries.filter(d => {
       // 0. Permission check: If user is only a professor, they MUST ONLY see their own launched diaries
-      if (!isGestorOrDirector) {
+      // Gestores, Diretores, and Auxiliar Administrativo can view all class diaries
+      if (!isGestorOrDirector && !isAuxiliar) {
         const dTeacherId = d.teacherId || "";
         const dTeacherName = (d.teacherName || "").trim().toLowerCase();
         const dAuthorId = (d as any).authorId || (d as any).createdBy || "";
@@ -385,8 +392,8 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
         return false;
       }
 
-      // 2. Filter by Teacher (only active for Gestores / Diretores)
-      if (isGestorOrDirector && historyFilterTeacherId !== "all") {
+      // 2. Filter by Teacher (active for Gestores / Diretores / Auxiliar Administrativo)
+      if (canViewAllDiaries && historyFilterTeacherId !== "all") {
         const teacherObj = users.find(u => u.id === historyFilterTeacherId);
         const matchId = d.teacherId === historyFilterTeacherId;
         const matchName = teacherObj && (
@@ -417,7 +424,8 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
         const targetCls = classes.find(c => c.id === d.classId);
         const currentClassCode = (targetCls?.code || d.className || d.classCode || "").toLowerCase();
         const currentClassType = (targetCls?.type || d.classType || "").toLowerCase();
-        const matchesComment = (d.classComment || "").toLowerCase().includes(query);
+        // Hide/exclude classComment search for Auxiliar Administrativo
+        const matchesComment = !isAuxiliar && (d.classComment || "").toLowerCase().includes(query);
         const matchesClass = currentClassCode.includes(query) || currentClassType.includes(query);
         const matchesTeacher = (d.teacherName || "").toLowerCase().includes(query);
         const matchesDate = (d.date || "").includes(query);
@@ -435,6 +443,8 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
   }, [
     historyDiaries,
     isGestorOrDirector,
+    isAuxiliar,
+    canViewAllDiaries,
     teacherIdsList,
     teacherNamesList,
     historyFilterClassId,
@@ -529,40 +539,48 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
         <div className="flex items-center gap-3 bg-white/10 px-4 py-1.5 rounded-full border border-white/20">
           <BookOpen size={16} className="text-pro-yellow" />
           <span className="text-white text-xs font-black uppercase tracking-widest">
-            Frequência & Relato Pedagógico
+            {isAuxiliar ? "Frequência e Presença das Turmas" : "Frequência & Relato Pedagógico"}
           </span>
         </div>
 
         <h1 className="text-white text-2xl md:text-4xl font-black uppercase tracking-tight">
-          Diário de Aula
+          Diários de Aula
         </h1>
         <p className="text-teal-50/80 text-xs md:text-sm max-w-2xl font-medium">
-          Lançamento direto da presença de alunos e registro confidencial do desenvolvimento da aula.
+          {isAuxiliar
+            ? "Consulta dos registros de presença e faltas dos alunos em todas as turmas da escola."
+            : "Lançamento direto da presença de alunos e registro confidencial do desenvolvimento da aula."}
         </p>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 mt-4 bg-black/20 p-1.5 rounded-2xl border border-white/10 backdrop-blur-sm">
-          <button
-            onClick={() => setActiveTab("entry")}
-            className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
-              activeTab === "entry"
-                ? "bg-pro-yellow text-slate-900 shadow-md"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`}
-          >
-            <Calendar size={14} /> Lançar Diário de Aula
-          </button>
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
-              activeTab === "history"
-                ? "bg-pro-yellow text-slate-900 shadow-md"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`}
-          >
-            <Clock size={14} /> Histórico & Relatos
-          </button>
-        </div>
+        {!isAuxiliar ? (
+          <div className="flex items-center gap-2 mt-4 bg-black/20 p-1.5 rounded-2xl border border-white/10 backdrop-blur-sm">
+            <button
+              onClick={() => setActiveTab("entry")}
+              className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+                activeTab === "entry"
+                  ? "bg-pro-yellow text-slate-900 shadow-md"
+                  : "text-white/80 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <Calendar size={14} /> Lançar Diário de Aula
+            </button>
+            <button
+              onClick={() => setActiveTab("history")}
+              className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+                activeTab === "history"
+                  ? "bg-pro-yellow text-slate-900 shadow-md"
+                  : "text-white/80 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <Clock size={14} /> Histórico & Relatos
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 mt-4 bg-black/20 px-5 py-2.5 rounded-2xl border border-white/10 backdrop-blur-sm text-teal-100 text-xs font-black uppercase tracking-wider">
+            <Users size={16} className="text-pro-yellow" /> Histórico de Chamadas & Frequência
+          </div>
+        )}
       </div>
 
       {/* Main Content Area */}
@@ -881,74 +899,98 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                   </div>
 
                   {/* Seção: Relato e Comentário da Aula (ESTRITAMENTE CONFIDENCIAL) */}
-                  <div className="bg-white p-6 md:p-8 rounded-[32px] border border-slate-200/80 shadow-sm space-y-6">
-                    <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-                      <div className="w-10 h-10 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600 font-black">
-                        3
+                  {isAuxiliar ? (
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] border border-slate-200/80 shadow-sm space-y-4">
+                      <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600 font-black">
+                          <Lock size={20} />
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                            Relato da Aula (Confidencial)
+                          </h2>
+                          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                            Acesso restrito aos professores e equipe pedagógica
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                          <FileText size={20} className="text-amber-600" /> Relato da Aula
-                        </h2>
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          Registro pedagógico de dinâmicas e observações sobre o encontro
+                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-3 text-slate-600">
+                        <Lock size={16} className="text-amber-600 shrink-0" />
+                        <p className="text-xs font-medium">
+                          O relato de aula dos professores é de acesso reservado à equipe pedagógica e professores. A visualização das presenças e faltas dos alunos está liberada na lista de chamada.
                         </p>
                       </div>
                     </div>
-
-                    {/* Banner de Segurança & Confidencialidade Obrigatório */}
-                    <div className="p-4 bg-amber-50 border-2 border-amber-300/60 rounded-2xl flex items-start gap-3.5">
-                      <div className="p-2 bg-amber-500 text-white rounded-xl shadow-sm shrink-0 mt-0.5">
-                        <Lock size={16} />
-                      </div>
-                      <div className="space-y-1">
-                        <h4 className="text-xs font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                          Observação Confidencial • Equipe Pedagógica
-                        </h4>
-                        <p className="text-xs font-medium text-amber-800 leading-relaxed">
-                          Este comentário é de <strong>uso interno exclusivo</strong> dos professores,
-                          direção pedagógica e gestores da Casa de Teatro. <strong>Este conteúdo NÃO é exibido para os alunos em nenhuma tela ou relatório.</strong>
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Caixa de Texto do Relato */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                        <span>Como foi a aula de hoje? (Dinâmicas, engajamento, ocorrências, exercícios)</span>
-                        <span className="text-[10px] text-slate-400 font-bold">{classComment.length} caracteres</span>
-                      </label>
-                      <textarea
-                        rows={6}
-                        value={classComment}
-                        onChange={e => setClassComment(e.target.value)}
-                        placeholder="Escreva aqui detalhadamente o relato da aula: jogos teatrais aplicados, resposta e escuta da turma, desafios encontrados, cenas trabalhadas, recomendações pedagógicas para a próxima aula..."
-                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 text-sm leading-relaxed font-medium focus:bg-white focus:border-pro-teal focus:ring-4 focus:ring-pro-teal/10 transition-all outline-none resize-y"
-                      />
-                    </div>
-
-                    {/* Botão de Salvar Diário de Aula */}
-                    <div className="pt-4 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
-                      <div className="text-xs text-slate-500 font-bold">
-                        Total de alunos na chamada: <strong className="text-slate-800">{classStudents.length}</strong> ({currentStats.p} presentes, {currentStats.f} faltas)
+                  ) : (
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] border border-slate-200/80 shadow-sm space-y-6">
+                      <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600 font-black">
+                          3
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                            <FileText size={20} className="text-amber-600" /> Relato da Aula
+                          </h2>
+                          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                            Registro pedagógico de dinâmicas e observações sobre o encontro
+                          </p>
+                        </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={handleSaveDiary}
-                        disabled={isSaving}
-                        className="w-full md:w-auto px-8 py-4 bg-gradient-to-r from-[#016a86] to-[#014e63] hover:brightness-110 disabled:opacity-50 text-white font-black uppercase text-xs tracking-widest rounded-2xl shadow-xl shadow-teal-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-                      >
-                        {isSaving ? (
-                          <span className="animate-pulse">Gravando diário...</span>
-                        ) : (
-                          <>
-                            <Save size={18} className="text-pro-yellow" /> Salvar Diário de Aula
-                          </>
-                        )}
-                      </button>
+                      {/* Banner de Segurança & Confidencialidade Obrigatório */}
+                      <div className="p-4 bg-amber-50 border-2 border-amber-300/60 rounded-2xl flex items-start gap-3.5">
+                        <div className="p-2 bg-amber-500 text-white rounded-xl shadow-sm shrink-0 mt-0.5">
+                          <Lock size={16} />
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                            Observação Confidencial • Equipe Pedagógica
+                          </h4>
+                          <p className="text-xs font-medium text-amber-800 leading-relaxed">
+                            Este comentário é de <strong>uso interno exclusivo</strong> dos professores,
+                            direção pedagógica e gestores da Casa de Teatro. <strong>Este conteúdo NÃO é exibido para os alunos em nenhuma tela ou relatório.</strong>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Caixa de Texto do Relato */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                          <span>Como foi a aula de hoje? (Dinâmicas, engajamento, ocorrências, exercícios)</span>
+                          <span className="text-[10px] text-slate-400 font-bold">{classComment.length} caracteres</span>
+                        </label>
+                        <textarea
+                          rows={6}
+                          value={classComment}
+                          onChange={e => setClassComment(e.target.value)}
+                          placeholder="Escreva aqui detalhadamente o relato da aula: jogos teatrais aplicados, resposta e escuta da turma, desafios encontrados, cenas trabalhadas, recomendações pedagógicas para a próxima aula..."
+                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 text-sm leading-relaxed font-medium focus:bg-white focus:border-pro-teal focus:ring-4 focus:ring-pro-teal/10 transition-all outline-none resize-y"
+                        />
+                      </div>
+
+                      {/* Botão de Salvar Diário de Aula */}
+                      <div className="pt-4 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className="text-xs text-slate-500 font-bold">
+                          Total de alunos na chamada: <strong className="text-slate-800">{classStudents.length}</strong> ({currentStats.p} presentes, {currentStats.f} faltas)
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleSaveDiary}
+                          disabled={isSaving}
+                          className="w-full md:w-auto px-8 py-4 bg-gradient-to-r from-[#016a86] to-[#014e63] hover:brightness-110 disabled:opacity-50 text-white font-black uppercase text-xs tracking-widest rounded-2xl shadow-xl shadow-teal-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                        >
+                          {isSaving ? (
+                            <span className="animate-pulse">Gravando diário...</span>
+                          ) : (
+                            <>
+                              <Save size={18} className="text-pro-yellow" /> Salvar Diário de Aula
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
@@ -974,7 +1016,9 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                         )}
                       </h3>
                       <p className="text-xs text-slate-400 font-bold">
-                        {isGestorOrDirector
+                        {isAuxiliar
+                          ? "Consulte os lançamentos de frequência e faltas de alunos por professor, turma, data ou termo de busca"
+                          : isGestorOrDirector
                           ? "Filtre os lançamentos de presença e relatos de aula por professor, turma, data ou termo de busca"
                           : `Exibindo apenas os diários e relatos pedagógicos lançados por você (${currentTeacherUser?.artisticName || currentTeacherUser?.name || currentUser?.displayName || "Professor"}).`}
                       </p>
@@ -993,9 +1037,9 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                 </div>
 
                 {/* Grade de Filtros */}
-                <div className={`grid grid-cols-1 sm:grid-cols-2 ${isGestorOrDirector ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-4`}>
-                  {/* 1. Filtro por Professor (Visível apenas para Gestão / Direção Pedagógica) */}
-                  {isGestorOrDirector && (
+                <div className={`grid grid-cols-1 sm:grid-cols-2 ${canViewAllDiaries ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-4`}>
+                  {/* 1. Filtro por Professor (Visível para Gestão / Direção Pedagógica / Auxiliar Administrativo) */}
+                  {canViewAllDiaries && (
                     <div className="space-y-1.5">
                       <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
                         <GraduationCap size={14} className="text-pro-teal" /> Professor(a)
@@ -1025,7 +1069,7 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                       onChange={e => setHistoryFilterClassId(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-pro-teal outline-none transition-all"
                     >
-                      <option value="all">{isGestorOrDirector ? "Todas as Turmas" : "Todas as Minhas Turmas"}</option>
+                      <option value="all">{canViewAllDiaries ? "Todas as Turmas" : "Todas as Minhas Turmas"}</option>
                       {availableClasses.map(cls => (
                         <option key={cls.id} value={cls.id}>
                           {cls.code} - {cls.type} ({cls.weekday})
@@ -1092,7 +1136,11 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                     type="text"
                     value={historySearchQuery}
                     onChange={e => setHistorySearchQuery(e.target.value)}
-                    placeholder="Buscar por palavras do relato (ex: 'improvisação', 'jogos'), aluno ou observação..."
+                    placeholder={
+                      isAuxiliar
+                        ? "Buscar por aluno, turma ou data da aula..."
+                        : "Buscar por palavras do relato (ex: 'improvisação', 'jogos'), aluno ou observação..."
+                    }
                     className="w-full pl-11 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:bg-white focus:border-pro-teal focus:ring-4 focus:ring-pro-teal/10 transition-all"
                   />
                   {historySearchQuery && (
@@ -1222,8 +1270,39 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                             )}
                           </div>
 
-                          {/* Prévia do Relato Confidencial */}
-                          {entry.classComment ? (
+                          {/* Resumo rápido de ausências */}
+                          {(() => {
+                            const absentNames = Object.entries(entry.attendances || {})
+                              .filter(([_, status]) => status === "falta")
+                              .map(([sId]) => {
+                                const st = users.find(u => u.id === sId || u.migratedFrom === sId || u.migratedTo === sId);
+                                return st?.name || st?.artisticName || "Aluno";
+                              });
+                            if (absentNames.length === 0) return null;
+                            return (
+                              <div className="p-2.5 bg-rose-50/80 border border-rose-200/80 rounded-xl text-xs">
+                                <span className="text-[10px] font-black text-rose-800 uppercase tracking-wider block mb-0.5">
+                                  Alunos ausentes ({absentNames.length}):
+                                </span>
+                                <span className="text-slate-700 font-bold">
+                                  {absentNames.join(", ")}
+                                </span>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Prévia do Relato Confidencial (RESTRITO PARA AUXILIAR ADMINISTRATIVO) */}
+                          {isAuxiliar ? (
+                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-3 text-slate-500">
+                              <div className="flex items-center gap-2 text-xs font-bold">
+                                <Lock size={13} className="text-amber-600 shrink-0" />
+                                <span>Relato de Aula: <span className="text-slate-400 font-medium">Reservado aos professores e coordenação</span></span>
+                              </div>
+                              <span className="px-2 py-0.5 bg-slate-200/80 text-slate-600 text-[9px] font-black uppercase tracking-wider rounded-md shrink-0">
+                                Confidencial
+                              </span>
+                            </div>
+                          ) : entry.classComment ? (
                             <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl space-y-1.5">
                               <div className="flex items-center justify-between text-[10px] font-black text-amber-900 uppercase tracking-wider">
                                 <span className="flex items-center gap-1.5">
@@ -1246,31 +1325,36 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => setViewingDetailDiary(entry)}
+                              onClick={() => {
+                                setModalAttendanceFilter("all");
+                                setViewingDetailDiary(entry);
+                              }}
                               className="px-3.5 py-2 bg-pro-teal/10 hover:bg-pro-teal hover:text-white text-pro-teal text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5"
                             >
-                              <Eye size={14} /> Ver Detalhes
+                              <Eye size={14} /> Ver Detalhes da Chamada
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const clsObj = classes.find(c => c.id === entry.classId);
-                                const dlInfo = getClassDiaryDeadlineInfo(entry.date, clsObj?.time || entry.classTime);
-                                if (isProfessorOnly && dlInfo.isExpired) {
-                                  setDeadlineModalData(dlInfo);
-                                  setIsDeadlineModalOpen(true);
-                                  return;
-                                }
-                                setSelectedClassId(entry.classId);
-                                setSelectedDate(entry.date);
-                                handleConfirmSelection(entry.classId, entry.date);
-                                setActiveTab("entry");
-                              }}
-                              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5"
-                            >
-                              <BookOpen size={14} /> Editar
-                            </button>
+                            {!isAuxiliar && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const clsObj = classes.find(c => c.id === entry.classId);
+                                  const dlInfo = getClassDiaryDeadlineInfo(entry.date, clsObj?.time || entry.classTime);
+                                  if (isProfessorOnly && dlInfo.isExpired) {
+                                    setDeadlineModalData(dlInfo);
+                                    setIsDeadlineModalOpen(true);
+                                    return;
+                                  }
+                                  setSelectedClassId(entry.classId);
+                                  setSelectedDate(entry.date);
+                                  handleConfirmSelection(entry.classId, entry.date);
+                                  setActiveTab("entry");
+                                }}
+                                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5"
+                              >
+                                <BookOpen size={14} /> Editar
+                              </button>
+                            )}
                           </div>
 
                           {isGestorOrDirector && entry.id && (
@@ -1370,36 +1454,101 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                   </div>
                 </div>
 
-                {/* Relato Pedagógico Completo */}
-                <div className="bg-amber-50/80 border-2 border-amber-300/80 rounded-2xl p-5 space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-black text-amber-950 uppercase tracking-wider">
-                    <Lock size={15} className="text-amber-700" /> Relato da Aula (Confidencial • Equipe Pedagógica)
+                {/* Relato Pedagógico (CONFIDENCIAL - OCULTO PARA AUXILIAR ADMINISTRATIVO) */}
+                {isAuxiliar ? (
+                  <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-5 space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-black text-slate-700 uppercase tracking-wider">
+                      <Lock size={15} className="text-amber-600" /> Relato da Aula (Confidencial • Professores e Equipe Pedagógica)
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                      O relato de aula elaborado pelos professores é de acesso reservado à equipe pedagógica e professores. O controle e visualização das presenças e faltas da turma está disponível abaixo.
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-800 font-medium leading-relaxed whitespace-pre-line">
-                    {viewingDetailDiary.classComment || "Nenhum relato foi cadastrado para esta aula."}
-                  </p>
-                </div>
+                ) : (
+                  <div className="bg-amber-50/80 border-2 border-amber-300/80 rounded-2xl p-5 space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-black text-amber-950 uppercase tracking-wider">
+                      <Lock size={15} className="text-amber-700" /> Relato da Aula (Confidencial • Equipe Pedagógica)
+                    </div>
+                    <p className="text-xs text-slate-800 font-medium leading-relaxed whitespace-pre-line">
+                      {viewingDetailDiary.classComment || "Nenhum relato foi cadastrado para esta aula."}
+                    </p>
+                  </div>
+                )}
 
-                  {/* Lista de Chamada dos Alunos */}
-                  {(() => {
-                    const diaryClass = classes.find(c => c.id === viewingDetailDiary.classId);
-                    const activeEntries = Object.entries(viewingDetailDiary.attendances || {}).filter(([studentId]) => {
-                      const student = users.find(u => u.id === studentId || u.migratedFrom === studentId || u.migratedTo === studentId);
-                      if (!student) return false;
-                      if (isStudentInactiveInClass(student, diaryClass)) {
-                        return false;
-                      }
-                      return true;
-                    });
+                {/* Lista de Chamada dos Alunos */}
+                {(() => {
+                  const diaryClass = classes.find(c => c.id === viewingDetailDiary.classId);
+                  const activeEntries = Object.entries(viewingDetailDiary.attendances || {}).filter(([studentId]) => {
+                    const student = users.find(u => u.id === studentId || u.migratedFrom === studentId || u.migratedTo === studentId);
+                    if (!student) return false;
+                    if (isStudentInactiveInClass(student, diaryClass)) {
+                      return false;
+                    }
+                    return true;
+                  });
 
-                    return (
-                      <div className="space-y-3">
+                  const filteredEntries = activeEntries.filter(([_, status]) => {
+                    if (modalAttendanceFilter === "all") return true;
+                    return status === modalAttendanceFilter;
+                  });
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                           <UserCheck size={16} className="text-pro-teal" /> Chamada dos Alunos ({activeEntries.length} registrados)
                         </h4>
 
-                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
-                          {activeEntries.map(([studentId, status], idx) => {
+                        {/* Filter pills: Todos, Presentes, Faltas, Justificadas */}
+                        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setModalAttendanceFilter("all")}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                              modalAttendanceFilter === "all" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                            }`}
+                          >
+                            Todos ({activeEntries.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setModalAttendanceFilter("presente")}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                              modalAttendanceFilter === "presente" ? "bg-emerald-600 text-white shadow-sm" : "text-emerald-700 hover:bg-emerald-50"
+                            }`}
+                          >
+                            Presentes ({viewingDetailDiary.presentCount || 0})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setModalAttendanceFilter("falta")}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                              modalAttendanceFilter === "falta" ? "bg-rose-600 text-white shadow-sm" : "text-rose-700 hover:bg-rose-50"
+                            }`}
+                          >
+                            Faltas ({viewingDetailDiary.absentCount || 0})
+                          </button>
+                          {(viewingDetailDiary.justifiedCount || 0) > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setModalAttendanceFilter("justificada")}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                modalAttendanceFilter === "justificada" ? "bg-amber-500 text-white shadow-sm" : "text-amber-700 hover:bg-amber-50"
+                              }`}
+                            >
+                              Justificadas ({viewingDetailDiary.justifiedCount})
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
+                        {filteredEntries.length === 0 ? (
+                          <div className="p-6 text-center text-xs text-slate-400 font-bold">
+                            Nenhum aluno com status selecionado.
+                          </div>
+                        ) : (
+                          filteredEntries.map(([studentId, status], idx) => {
                             const student = users.find(u => u.id === studentId || u.migratedFrom === studentId || u.migratedTo === studentId);
                             const studentObs = viewingDetailDiary.studentObservations?.[studentId] || "";
 
@@ -1439,11 +1588,12 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                                 </div>
                               </div>
                             );
-                          })}
-                        </div>
+                          })
+                        )}
                       </div>
-                    );
-                  })()}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Rodapé do Modal */}
@@ -1457,27 +1607,29 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                 </button>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const diaryToEdit = viewingDetailDiary;
-                      const clsObj = classes.find(c => c.id === diaryToEdit.classId);
-                      const dlInfo = getClassDiaryDeadlineInfo(diaryToEdit.date, clsObj?.time || diaryToEdit.classTime);
-                      if (isProfessorOnly && dlInfo.isExpired) {
-                        setDeadlineModalData(dlInfo);
-                        setIsDeadlineModalOpen(true);
-                        return;
-                      }
-                      setViewingDetailDiary(null);
-                      setSelectedClassId(diaryToEdit.classId);
-                      setSelectedDate(diaryToEdit.date);
-                      handleConfirmSelection(diaryToEdit.classId, diaryToEdit.date);
-                      setActiveTab("entry");
-                    }}
-                    className="px-4 py-2.5 bg-pro-teal text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 shadow-md"
-                  >
-                    <BookOpen size={14} /> Editar Lançamento
-                  </button>
+                  {!isAuxiliar && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const diaryToEdit = viewingDetailDiary;
+                        const clsObj = classes.find(c => c.id === diaryToEdit.classId);
+                        const dlInfo = getClassDiaryDeadlineInfo(diaryToEdit.date, clsObj?.time || diaryToEdit.classTime);
+                        if (isProfessorOnly && dlInfo.isExpired) {
+                          setDeadlineModalData(dlInfo);
+                          setIsDeadlineModalOpen(true);
+                          return;
+                        }
+                        setViewingDetailDiary(null);
+                        setSelectedClassId(diaryToEdit.classId);
+                        setSelectedDate(diaryToEdit.date);
+                        handleConfirmSelection(diaryToEdit.classId, diaryToEdit.date);
+                        setActiveTab("entry");
+                      }}
+                      className="px-4 py-2.5 bg-pro-teal text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 shadow-md"
+                    >
+                      <BookOpen size={14} /> Editar Lançamento
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setViewingDetailDiary(null)}

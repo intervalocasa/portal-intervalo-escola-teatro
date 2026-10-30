@@ -387,7 +387,14 @@ export const ClassDetailsView = ({
                       <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Estudantes do Elenco</h2>
                     </div>
                     {isGestorRole && (
-                      <div className="flex gap-3">
+                      <div className="flex flex-wrap gap-3">
+                        <button 
+                          onClick={() => setView("class_diary")}
+                          className="p-4 bg-pro-teal/10 hover:bg-pro-teal text-pro-teal hover:text-white rounded-2xl transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                          title="Consultar Diários de Aula e Frequência"
+                        >
+                          <UserCheck size={16} /> Diário de Aula
+                        </button>
                         <button 
                           onClick={() => setIsEnrollModalOpen(true)}
                           className="p-4 bg-pro-yellow text-pro-teal rounded-2xl hover:brightness-110 transition-all shadow-lg shadow-yellow-900/10 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
