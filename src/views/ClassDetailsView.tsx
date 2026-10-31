@@ -1016,9 +1016,24 @@ export const ClassDetailsView = ({
                           onClick={async () => {
                             if (!selectedClassId || !selectedStudentForManagement) return;
                             try {
+                              const todayIso = new Date().toISOString().split("T")[0];
                               await updateDoc(doc(db, "classes", selectedClassId), {
-                                [`studentEnrollmentStatuses.${selectedStudentForManagement.id}`]: "Desmatriculado"
+                                [`studentEnrollmentStatuses.${selectedStudentForManagement.id}`]: "Desmatriculado",
+                                [`unenrollmentDates.${selectedStudentForManagement.id}`]: todayIso
                               });
+                              try {
+                                await updateDoc(doc(db, "usuarios", selectedStudentForManagement.id), {
+                                  desmatriculado: true,
+                                  inactive: true,
+                                  status: "desmatriculado",
+                                  enrollmentStatus: "Desmatriculado",
+                                  unenrollmentDate: todayIso,
+                                  dataDesmatricula: todayIso,
+                                  desmatriculadoEm: todayIso
+                                });
+                              } catch (uErr) {
+                                console.warn("Erro ao atualizar data de desmatricula no usuario:", uErr);
+                              }
                               showNotification("Aluno desmatriculado com sucesso!", "Sucesso", "success");
                               setSelectedStudentForManagement(null);
                             } catch (err) {

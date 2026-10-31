@@ -74,6 +74,122 @@ export function isStudentUserInactive(student: User | any): boolean {
   return false;
 }
 
+export function extractUnenrollmentDate(
+  student: Partial<User> | any,
+  classObj?: Partial<Class> | any,
+  studentId?: string
+): string {
+  const sId = studentId || student?.id || "";
+
+  // 1. Check class-specific unenrollment date
+  const classUnenrollDate = classObj?.unenrollmentDates?.[sId] ||
+                            (student?.id && classObj?.unenrollmentDates?.[student.id]) ||
+                            (student?.migratedFrom && classObj?.unenrollmentDates?.[student.migratedFrom]);
+
+  const rawCandidate = classUnenrollDate ||
+                       student?.unenrollmentDate ||
+                       student?.dataDesmatricula ||
+                       student?.desmatriculadoEm ||
+                       student?.desmatriculaDate ||
+                       student?.inactivationDate ||
+                       student?.dataInativacao ||
+                       student?.inactivatedAt ||
+                       student?.updatedAt;
+
+  if (!rawCandidate) return "";
+
+  // If it's a Firestore Timestamp or object with toDate
+  if (typeof rawCandidate === "object" && typeof rawCandidate.toDate === "function") {
+    try {
+      const d = rawCandidate.toDate();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    } catch {}
+  }
+
+  // If it's a Firestore timestamp object with seconds
+  if (typeof rawCandidate === "object" && typeof rawCandidate.seconds === "number") {
+    try {
+      const d = new Date(rawCandidate.seconds * 1000);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    } catch {}
+  }
+
+  if (typeof rawCandidate === "string") {
+    const trimmed = rawCandidate.trim();
+    if (!trimmed) return "";
+    
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    }
+    
+    const brMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (brMatch) {
+      return `${brMatch[3]}-${brMatch[2].padStart(2, "0")}-${brMatch[1].padStart(2, "0")}`;
+    }
+
+    try {
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      }
+    } catch {}
+
+    return trimmed;
+  }
+
+  return "";
+}
+
+export function formatPtBrDate(dateVal?: any): string {
+  if (!dateVal || dateVal === "-" || dateVal === "N/D" || dateVal === "Data N/D") return "";
+  
+  if (typeof dateVal === "object" && typeof dateVal.toDate === "function") {
+    try {
+      const d = dateVal.toDate();
+      return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    } catch {}
+  }
+  
+  if (typeof dateVal === "object" && typeof dateVal.seconds === "number") {
+    try {
+      const d = new Date(dateVal.seconds * 1000);
+      return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    } catch {}
+  }
+  
+  const str = String(dateVal).trim();
+  if (!str) return "";
+
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  }
+  
+  const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (brMatch) {
+    return `${brMatch[1].padStart(2, "0")}/${brMatch[2].padStart(2, "0")}/${brMatch[3]}`;
+  }
+
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    }
+  } catch {}
+
+  return str;
+}
+
 export function getActiveClassesForStudent(student: User | any, classes: Class[]): Class[] {
   if (!student || isStudentUserInactive(student)) return [];
   
@@ -331,7 +447,7 @@ export const FinancialManagementView = ({
                         "Data N/D";
 
         const unenrollDateStr = !isEnrollmentActive
-          ? (c.unenrollmentDates?.[sId] || (student as any).unenrollmentDate || (student as any).dataDesmatricula || (student as any).desmatriculadoEm || (student.updatedAt?.toDate ? student.updatedAt.toDate().toISOString().split('T')[0] : "") || "")
+          ? extractUnenrollmentDate(student, c, sId)
           : "";
 
         const paymentType = c.studentPaymentTypes?.[sId] || "Pagante";
@@ -367,7 +483,7 @@ export const FinancialManagementView = ({
     const enrolledStudentIds = new Set(records.map(r => r.studentId));
     studentUsers.forEach(student => {
       if (isStudentUserInactive(student) && !enrolledStudentIds.has(student.id)) {
-        const unenrollDateStr = (student as any).unenrollmentDate || (student as any).dataDesmatricula || (student as any).desmatriculadoEm || (student.updatedAt?.toDate ? student.updatedAt.toDate().toISOString().split('T')[0] : "") || "";
+        const unenrollDateStr = extractUnenrollmentDate(student);
         records.push({
           id: `desmat_${student.id}`,
           studentId: student.id,
@@ -419,7 +535,9 @@ export const FinancialManagementView = ({
         const matchSocial = rec.studentSocialName?.toLowerCase().includes(term);
         const matchCpf = rec.studentCpf.toLowerCase().includes(term);
         const matchClass = rec.classType.toLowerCase().includes(term) || rec.classCode.toLowerCase().includes(term);
-        if (!matchName && !matchSocial && !matchCpf && !matchClass) return false;
+        const matchUnenroll = rec.unenrollmentDate ? formatPtBrDate(rec.unenrollmentDate).includes(term) : false;
+        const matchEnroll = rec.enrollmentDate ? formatPtBrDate(rec.enrollmentDate).includes(term) : false;
+        if (!matchName && !matchSocial && !matchCpf && !matchClass && !matchUnenroll && !matchEnroll) return false;
       }
 
       return true;
@@ -1526,11 +1644,24 @@ export const FinancialManagementView = ({
                                 <span>Endereço: <span className="text-slate-600">{record.studentAddress}</span></span>
                               )}
                             </div>
+
+                            {/* Data da Desmatrícula destacada no card do aluno */}
+                            {!record.isEnrollmentActive && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold shadow-2xs">
+                                  <UserX size={13} className="text-rose-500 shrink-0" />
+                                  <span>Desmatrícula efetivada no sistema em:</span>
+                                  <strong className="text-rose-800 font-black">
+                                    {formatPtBrDate(record.unenrollmentDate) || "Data anterior não registrada"}
+                                  </strong>
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
                         {/* Class and Enrollment Date Info */}
-                        <div className="flex items-center gap-6 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 justify-between md:justify-end">
+                        <div className="flex items-center gap-4 lg:gap-6 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 justify-between md:justify-end flex-wrap">
                           <div className="text-left md:text-right">
                             <div className="text-xs font-black text-slate-800">
                               {record.classType} <span className="text-[#016a86]">({record.classCode})</span>
@@ -1543,9 +1674,22 @@ export const FinancialManagementView = ({
                           <div className="text-center md:text-right">
                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Matrícula</div>
                             <div className="text-xs font-bold text-slate-700 mt-0.5">
-                              {record.enrollmentDate ? record.enrollmentDate.split('-').reverse().join('/') : "N/D"}
+                              {formatPtBrDate(record.enrollmentDate) || "N/D"}
                             </div>
                           </div>
+
+                          {/* Data de Desmatrícula destacada na coluna de datas */}
+                          {!record.isEnrollmentActive && (
+                            <div className="text-center md:text-right">
+                              <div className="text-[10px] font-black text-rose-600 uppercase tracking-wider flex items-center justify-center md:justify-end gap-1">
+                                <Calendar size={12} className="text-rose-500" />
+                                Desmatrícula
+                              </div>
+                              <div className="text-xs font-black text-rose-700 mt-0.5 bg-rose-50 border border-rose-200/80 px-2.5 py-0.5 rounded-md inline-block shadow-2xs">
+                                {formatPtBrDate(record.unenrollmentDate) || "Efetivada"}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Payment Condition Badge & Toggle */}
                           <div className="shrink-0 text-center">
@@ -1596,7 +1740,8 @@ export const FinancialManagementView = ({
                                       status: "desmatriculado",
                                       enrollmentStatus: "Desmatriculado",
                                       unenrollmentDate: todayIso,
-                                      dataDesmatricula: todayIso
+                                      dataDesmatricula: todayIso,
+                                      desmatriculadoEm: todayIso
                                     });
                                   } else {
                                     await updateDoc(userRef, {
@@ -1605,7 +1750,8 @@ export const FinancialManagementView = ({
                                       status: "ativo",
                                       enrollmentStatus: "Ativo",
                                       unenrollmentDate: "",
-                                      dataDesmatricula: ""
+                                      dataDesmatricula: "",
+                                      desmatriculadoEm: ""
                                     });
                                   }
                                 } catch (err) {

@@ -1382,12 +1382,34 @@ export default function App() {
       }
 
       const updatedStatuses = { ...(cls.studentEnrollmentStatuses || {}) };
+      const updatedUnenrollmentDates = { ...(cls.unenrollmentDates || {}) };
+      const todayIso = new Date().toISOString().split("T")[0];
+
       if (status) {
         updatedStatuses[studentId] = status;
+        if (status === "Desmatriculado" || status === "Inativo") {
+          if (!updatedUnenrollmentDates[studentId]) {
+            updatedUnenrollmentDates[studentId] = todayIso;
+          }
+          try {
+            await updateDoc(doc(db, "usuarios", studentId), {
+              desmatriculado: true,
+              inactive: true,
+              status: "desmatriculado",
+              enrollmentStatus: "Desmatriculado",
+              unenrollmentDate: updatedUnenrollmentDates[studentId],
+              dataDesmatricula: updatedUnenrollmentDates[studentId],
+              desmatriculadoEm: updatedUnenrollmentDates[studentId]
+            });
+          } catch (uErr) {
+            console.warn("Could not sync unenrollment date in usuarios:", uErr);
+          }
+        }
       }
       
       await updateDoc(doc(db, "classes", classId), {
         enrollmentDates: updatedEnrollmentDates,
+        unenrollmentDates: updatedUnenrollmentDates,
         studentPaymentTypes: updatedPaymentTypes,
         studentEnrollmentStatuses: updatedStatuses,
         updatedAt: serverTimestamp()
