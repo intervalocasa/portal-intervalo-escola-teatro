@@ -80,6 +80,7 @@ export const ClassDetailsView = ({
 
   // Experimental classes state
   const [experimentalBookings, setExperimentalBookings] = useState<ExperimentalClassBooking[]>([]);
+  const [selectedExperimentalBooking, setSelectedExperimentalBooking] = useState<ExperimentalClassBooking | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, "experimental_classes"), orderBy("date", "desc"));
@@ -459,7 +460,16 @@ export const ClassDetailsView = ({
                         {classExperimentalBookings.map((exp) => (
                           <div
                             key={exp.id}
-                            className="p-4 bg-white rounded-2xl border border-indigo-100 shadow-2xs hover:border-indigo-300 transition-all flex flex-col justify-between gap-3 relative overflow-hidden"
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedExperimentalBooking(exp)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setSelectedExperimentalBooking(exp);
+                              }
+                            }}
+                            className="p-4 bg-white rounded-2xl border border-indigo-100 shadow-2xs hover:border-indigo-400 hover:shadow-md transition-all flex flex-col gap-3 relative overflow-hidden cursor-pointer text-left group"
                           >
                             {/* Cabeçalho do Card: Nome Completo e Status de Confirmação */}
                             <div className="flex flex-col gap-3">
@@ -469,7 +479,7 @@ export const ClassDetailsView = ({
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-tight">
+                                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-tight group-hover:text-indigo-700 transition-colors">
                                       {exp.studentName}
                                     </h4>
                                     
@@ -530,26 +540,40 @@ export const ClassDetailsView = ({
 
                             {/* Detalhes de contato ou observação se houver */}
                             {(exp.studentPhone || exp.studentEmail || exp.notes) && (
-                              <div className="text-[11px] text-slate-500 bg-slate-50/80 p-2.5 rounded-xl border border-slate-100 space-y-1">
-                                <div className="flex items-center gap-3 flex-wrap">
-                                  {exp.studentPhone && (
-                                    <span className="flex items-center gap-1">
-                                      <Phone size={11} className="text-slate-400" /> {exp.studentPhone}
-                                    </span>
-                                  )}
-                                  {exp.studentEmail && (
-                                    <span className="flex items-center gap-1">
-                                      <Mail size={11} className="text-slate-400" /> {exp.studentEmail}
-                                    </span>
-                                  )}
-                                </div>
+                              <div className="flex-1 flex flex-col justify-between text-[11px] text-slate-500 bg-slate-50/80 p-3 rounded-xl border border-slate-100 space-y-2">
+                                {(exp.studentPhone || exp.studentEmail) && (
+                                  <div className="flex items-center gap-3 flex-wrap">
+                                    {exp.studentPhone && (
+                                      <span className="flex items-center gap-1">
+                                        <Phone size={11} className="text-slate-400 shrink-0" /> {exp.studentPhone}
+                                      </span>
+                                    )}
+                                    {exp.studentEmail && (
+                                      <span className="flex items-center gap-1 break-all">
+                                        <Mail size={11} className="text-slate-400 shrink-0" /> {exp.studentEmail}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                                 {exp.notes && (
-                                  <p className="text-[10px] text-slate-500 italic truncate">
-                                    Obs: {exp.notes}
-                                  </p>
+                                  <div className={(exp.studentPhone || exp.studentEmail) ? "pt-2 border-t border-slate-200/70" : ""}>
+                                    <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 mb-0.5 flex items-center gap-1">
+                                      <MessageSquare size={10} className="shrink-0" />
+                                      Observações Internas
+                                    </p>
+                                    <p className="text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-wrap break-words">
+                                      {exp.notes}
+                                    </p>
+                                  </div>
                                 )}
                               </div>
                             )}
+
+                            <div className="flex items-center justify-end pt-1">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-500 group-hover:text-indigo-700 transition-colors">
+                                Clique para ver o card completo →
+                              </span>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1162,6 +1186,204 @@ export const ClassDetailsView = ({
                     </button>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Experimental Class Booking Full Details Modal */}
+      <AnimatePresence>
+        {selectedExperimentalBooking && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedExperimentalBooking(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              className="relative w-full max-w-xl bg-white rounded-[36px] shadow-2xl overflow-hidden border border-white max-h-[90vh] flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="p-6 sm:p-7 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/90 via-sky-50/50 to-white flex items-start justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white font-black text-lg flex items-center justify-center shrink-0 shadow-sm">
+                    {selectedExperimentalBooking.studentName?.charAt(0)?.toUpperCase() || "A"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-0.5 flex items-center gap-1">
+                      <Sparkles size={11} /> Aula Experimental Agendada
+                    </p>
+                    <h3 className="text-lg sm:text-xl font-black text-slate-800 uppercase tracking-tight leading-snug break-words">
+                      {selectedExperimentalBooking.studentName}
+                    </h3>
+                    <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                      {selectedExperimentalBooking.course || targetClass?.type}
+                      {selectedExperimentalBooking.classGroup ? ` • ${selectedExperimentalBooking.classGroup}` : ""}
+                      {selectedExperimentalBooking.classTime ? ` • ${selectedExperimentalBooking.classTime}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedExperimentalBooking(null)}
+                  className="p-2 hover:bg-slate-200/70 rounded-full transition-colors text-slate-400 shrink-0"
+                  aria-label="Fechar detalhes do agendamento"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 sm:p-7 space-y-5 overflow-y-auto custom-scrollbar">
+                {/* Status Badges */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedExperimentalBooking.attendanceConfirmation === "CONFIRMOU_VESPERA" ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-900 border border-indigo-200">
+                      <CalendarCheck size={13} className="text-indigo-700 shrink-0" />
+                      <span>Confirmou na véspera</span>
+                    </span>
+                  ) : selectedExperimentalBooking.attendanceConfirmation === "CONFIRMOU_NO_DIA" ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-200">
+                      <CheckCircle size={13} className="text-emerald-700 shrink-0" />
+                      <span>Confirmou no dia</span>
+                    </span>
+                  ) : selectedExperimentalBooking.attendanceConfirmation === "REAGENDOU" ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200">
+                      <History size={13} className="text-amber-700 shrink-0" />
+                      <span>Reagendou</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200">
+                      <Clock size={12} className="text-slate-400 shrink-0" />
+                      <span>Confirmação pendente</span>
+                    </span>
+                  )}
+
+                  {selectedExperimentalBooking.status === "AGENDAMENTO_CONFIRMADO" ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-teal-50 text-teal-800 border border-teal-200">
+                      <CheckCircle size={12} className="text-teal-600 shrink-0" />
+                      <span>Agendamento Confirmado</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
+                      <Clock size={12} className="text-amber-600 shrink-0" />
+                      <span>Pagamento Pendente</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Data e Horário */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2 text-slate-700">
+                      <Calendar size={16} className="text-indigo-600 shrink-0" />
+                      <span className="text-xs font-bold">
+                        Data da Aula:{" "}
+                        <strong className="text-indigo-950 font-black">
+                          {formatDateBR(selectedExperimentalBooking.date)}
+                        </strong>
+                        {selectedExperimentalBooking.dayOfWeek ? ` (${selectedExperimentalBooking.dayOfWeek})` : ""}
+                      </span>
+                    </div>
+                    {selectedExperimentalBooking.classTime && (
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                        <Clock size={14} className="text-indigo-500 shrink-0" />
+                        <span>{selectedExperimentalBooking.classTime}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {((selectedExperimentalBooking.rescheduleCount && selectedExperimentalBooking.rescheduleCount > 0) ||
+                    selectedExperimentalBooking.attendanceConfirmation === "REAGENDOU") && (
+                    <div className="pt-2 border-t border-slate-200/70">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                        <History size={12} />
+                        Data atualizada após reagendamento
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Dados de Contato */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Contato do(a) Aluno(a)
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-slate-700 font-semibold">
+                    <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-100">
+                      <Phone size={14} className="text-indigo-500 shrink-0" />
+                      <span className="break-all">
+                        {selectedExperimentalBooking.studentPhone || "Telefone não informado"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-100">
+                      <Mail size={14} className="text-indigo-500 shrink-0" />
+                      <span className="break-all">
+                        {selectedExperimentalBooking.studentEmail || "E-mail não informado"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Observações Internas Completas */}
+                <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700 flex items-center gap-1.5">
+                    <MessageSquare size={13} className="shrink-0" />
+                    Observações Internas
+                  </p>
+                  {selectedExperimentalBooking.notes ? (
+                    <p className="text-sm text-slate-800 font-medium leading-relaxed whitespace-pre-wrap break-words bg-white/90 p-3.5 rounded-xl border border-indigo-100/80">
+                      {selectedExperimentalBooking.notes}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">
+                      Nenhuma observação interna registrada para este agendamento.
+                    </p>
+                  )}
+                </div>
+
+                {/* Histórico de Reagendamentos (se houver) */}
+                {selectedExperimentalBooking.rescheduleHistory && selectedExperimentalBooking.rescheduleHistory.length > 0 && (
+                  <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 flex items-center gap-1.5">
+                      <History size={13} /> Histórico de Reagendamentos ({selectedExperimentalBooking.rescheduleCount || selectedExperimentalBooking.rescheduleHistory.length})
+                    </p>
+                    <div className="space-y-2">
+                      {selectedExperimentalBooking.rescheduleHistory.map((h, idx) => (
+                        <div key={idx} className="p-2.5 bg-white rounded-xl text-xs space-y-1 border border-amber-100">
+                          <div className="flex flex-wrap justify-between gap-2 font-bold text-slate-700">
+                            <span>De: {formatDateBR(h.previousDate)} ({h.previousTime})</span>
+                            <span>Para: {formatDateBR(h.newDate)} ({h.newTime})</span>
+                          </div>
+                          {h.reason && <p className="text-slate-500 italic whitespace-pre-wrap break-words">"{h.reason}"</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedExperimentalBooking.createdByName && (
+                  <p className="text-[11px] font-semibold text-slate-400 text-right">
+                    Agendado por: <span className="text-slate-600 font-bold">{selectedExperimentalBooking.createdByName}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-5 sm:p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedExperimentalBooking(null)}
+                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all shadow-md"
+                >
+                  Fechar
+                </button>
               </div>
             </motion.div>
           </div>
