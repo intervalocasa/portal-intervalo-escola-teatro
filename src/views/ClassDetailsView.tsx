@@ -4,6 +4,7 @@
  */
 
 import { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   ArrowLeft, 
@@ -30,7 +31,8 @@ import {
   Phone,
   Mail,
   History,
-  CheckCircle
+  CheckCircle,
+  Eye
 } from "lucide-react";
 import { Class, User, UserRole, ExperimentalClassBooking } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
@@ -335,8 +337,8 @@ export const ClassDetailsView = ({
       transition={{ duration: 0.3 }}
       className="w-full md:max-w-none md:min-h-screen md:rounded-none max-w-6xl bg-white rounded-[24px] shadow-theater overflow-hidden border border-white flex flex-col relative"
     >
-      <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-20">
-         <div className="absolute top-6 left-6 md:top-10 md:left-10 z-20">
+      <div className="bg-gradient-to-br from-[#016a86] to-[#014e63] px-5 py-8 sm:p-10 text-center relative overflow-hidden flex flex-col items-center gap-2 md:py-20">
+         <div className="absolute top-4 left-4 sm:top-6 sm:left-6 md:top-10 md:left-10 z-20">
            <BackButton 
             onClick={() => setView(role === "Aluno" ? "dashboard" : "classes_list")}
             className="!text-white pointer-events-auto"
@@ -344,35 +346,35 @@ export const ClassDetailsView = ({
          </div>
          <Logo className="h-10 md:h-16 w-auto mb-1 brightness-0 invert" />
          <h1 className="text-white text-xl md:text-5xl font-black uppercase tracking-tight">{targetClass.code}</h1>
-         <div className="flex items-center gap-3 mt-2">
-           <span className="px-4 py-1.5 bg-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white border border-white/10 backdrop-blur-md">
+         <div className="flex items-center flex-wrap justify-center gap-2 sm:gap-3 mt-2">
+           <span className="px-3 sm:px-4 py-1.5 bg-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white border border-white/10 backdrop-blur-md">
              {targetClass.type}
            </span>
-           <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10 backdrop-blur-md ${targetClass.isActive ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+           <span className={`px-3 sm:px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10 backdrop-blur-md ${targetClass.isActive ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
              {targetClass.isActive ? 'Ativa' : 'Inativa'}
            </span>
          </div>
       </div>
-      <div className="flex-1 p-8 md:p-16 overflow-y-auto custom-scrollbar bg-slate-50">
+      <div className="flex-1 p-3 sm:p-6 md:p-16 overflow-y-auto custom-scrollbar bg-slate-50">
         <div className="max-w-6xl mx-auto w-full">
           
           {/* Layout: Sidebar on right for stats/teacher, main content on left */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-10">
             
-            <div className="lg:col-span-2 space-y-10">
+            <div className="lg:col-span-2 space-y-6 sm:space-y-10 min-w-0">
               
               {/* Tab Switcher */}
-              <div className="flex p-1.5 bg-white rounded-[24px] border border-slate-100 shadow-sm w-fit">
+              <div className="flex p-1.5 bg-white rounded-[24px] border border-slate-100 shadow-sm w-full sm:w-fit">
                 <button
                   onClick={() => setActiveTab("elenco")}
-                  className={`px-8 py-3 rounded-[20px] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${activeTab === "elenco" ? 'bg-pro-teal text-white shadow-lg shadow-teal-900/10' : 'text-slate-400 hover:text-slate-600'}`}
+                  className={`flex-1 sm:flex-none justify-center px-4 sm:px-8 py-3 rounded-[20px] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${activeTab === "elenco" ? 'bg-pro-teal text-white shadow-lg shadow-teal-900/10' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   <LayoutGrid size={16} />
                   Elenco
                 </button>
                 <button
                   onClick={() => setActiveTab("mural")}
-                  className={`px-8 py-3 rounded-[20px] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${activeTab === "mural" ? 'bg-pro-teal text-white shadow-lg shadow-teal-900/10' : 'text-slate-400 hover:text-slate-600'}`}
+                  className={`flex-1 sm:flex-none justify-center px-4 sm:px-8 py-3 rounded-[20px] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${activeTab === "mural" ? 'bg-pro-teal text-white shadow-lg shadow-teal-900/10' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   <MessageSquare size={16} />
                   Mural da Turma
@@ -381,11 +383,11 @@ export const ClassDetailsView = ({
 
               {activeTab === "elenco" ? (
                 /* Elenco View */
-                <div className="bg-white p-8 md:p-12 rounded-[40px] border border-slate-100 shadow-sm space-y-8 animate-in fade-in slide-in-from-bottom-4">
-                  <div className="flex items-center justify-between flex-wrap gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-pro-teal/5 rounded-2xl flex items-center justify-center text-pro-teal"><Users size={24} /></div>
-                      <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Estudantes do Elenco</h2>
+                <div className="bg-white p-4 sm:p-8 md:p-12 rounded-[28px] sm:rounded-[40px] border border-slate-100 shadow-sm space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                  <div className="flex items-center justify-between flex-wrap gap-3 sm:gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-pro-teal/5 rounded-2xl flex items-center justify-center text-pro-teal shrink-0"><Users size={22} /></div>
+                      <h2 className="text-lg sm:text-2xl font-black text-slate-800 uppercase tracking-tight">Estudantes do Elenco</h2>
                     </div>
                     {isGestorRole && (
                       <div className="flex flex-wrap gap-3">
@@ -434,25 +436,23 @@ export const ClassDetailsView = ({
 
                   {/* SEÇÃO DE AULAS EXPERIMENTAIS AGENDADAS (Visível para todos exceto Aluno) */}
                   {!isStudent && classExperimentalBookings.length > 0 && (
-                    <div className="p-6 md:p-7 bg-gradient-to-br from-indigo-50/90 via-sky-50/40 to-white rounded-3xl border-2 border-indigo-100 shadow-xs space-y-4">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-xs">
-                            <Sparkles size={20} />
+                    <div className="p-3.5 sm:p-6 md:p-7 bg-gradient-to-br from-indigo-50/90 via-sky-50/40 to-white rounded-2xl sm:rounded-3xl border-2 border-indigo-100 shadow-xs space-y-4">
+                      <div className="flex items-start sm:items-center gap-3">
+                        <div className="w-9 h-9 sm:w-10 sm:h-10 bg-indigo-600 text-white rounded-xl sm:rounded-2xl flex items-center justify-center shadow-xs shrink-0">
+                          <Sparkles size={18} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-sm sm:text-base font-black text-slate-800 uppercase tracking-tight leading-tight">
+                              Aulas Experimentais Agendadas
+                            </h3>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-600 text-white shrink-0">
+                              {classExperimentalBookings.length} {classExperimentalBookings.length === 1 ? "Agendamento" : "Agendamentos"}
+                            </span>
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">
-                                Aulas Experimentais Agendadas
-                              </h3>
-                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-600 text-white">
-                                {classExperimentalBookings.length} {classExperimentalBookings.length === 1 ? "Agendamento" : "Agendamentos"}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-500 font-medium">
-                              Alunos(as) com aula experimental agendada para esta turma
-                            </p>
-                          </div>
+                          <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                            Alunos(as) com aula experimental agendada para esta turma
+                          </p>
                         </div>
                       </div>
 
@@ -469,55 +469,53 @@ export const ClassDetailsView = ({
                                 setSelectedExperimentalBooking(exp);
                               }
                             }}
-                            className="p-4 bg-white rounded-2xl border border-indigo-100 shadow-2xs hover:border-indigo-400 hover:shadow-md transition-all flex flex-col gap-3 relative overflow-hidden cursor-pointer text-left group"
+                            className="p-3.5 sm:p-4 bg-white rounded-2xl border border-indigo-100 shadow-2xs hover:border-indigo-400 hover:shadow-md active:scale-[0.99] transition-all flex flex-col gap-3 relative cursor-pointer text-left group touch-manipulation w-full min-w-0"
                           >
                             {/* Cabeçalho do Card: Nome Completo e Status de Confirmação */}
-                            <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-2.5 min-w-0">
                               <div className="flex items-start gap-3 min-w-0">
-                                <div className="w-10 h-10 rounded-xl bg-indigo-100/80 text-indigo-700 font-black text-sm flex items-center justify-center shrink-0 shadow-2xs">
+                                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-100/80 text-indigo-700 font-black text-sm flex items-center justify-center shrink-0 shadow-2xs">
                                   {exp.studentName?.charAt(0)?.toUpperCase() || "A"}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-tight group-hover:text-indigo-700 transition-colors">
-                                      {exp.studentName}
-                                    </h4>
-                                    
-                                    {/* Status de Confirmação Prévia de Presença */}
-                                    <div className="shrink-0">
-                                      {exp.attendanceConfirmation === "CONFIRMOU_VESPERA" ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-900 border border-indigo-200 shadow-2xs whitespace-nowrap">
-                                          <CalendarCheck size={12} className="text-indigo-700 shrink-0" />
-                                          <span>Confirmou na véspera</span>
-                                        </span>
-                                      ) : exp.attendanceConfirmation === "CONFIRMOU_NO_DIA" ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-200 shadow-2xs whitespace-nowrap">
-                                          <CheckCircle size={12} className="text-emerald-700 shrink-0" />
-                                          <span>Confirmou no dia</span>
-                                        </span>
-                                      ) : exp.attendanceConfirmation === "REAGENDOU" ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200 shadow-2xs whitespace-nowrap">
-                                          <History size={12} className="text-amber-700 shrink-0" />
-                                          <span>Reagendou</span>
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 whitespace-nowrap">
-                                          <Clock size={11} className="text-slate-400 shrink-0" />
-                                          <span>Confirmação pendente</span>
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <p className="text-[11px] font-semibold text-slate-400 mt-1">
+                                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-snug break-words group-hover:text-indigo-700 transition-colors">
+                                    {exp.studentName}
+                                  </h4>
+                                  <p className="text-[11px] font-semibold text-slate-400 mt-0.5 break-words">
                                     {exp.course || targetClass.type} {exp.classTime ? `• ${exp.classTime}` : ""}
                                   </p>
                                 </div>
                               </div>
+
+                              {/* Status de Confirmação Prévia de Presença */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {exp.attendanceConfirmation === "CONFIRMOU_VESPERA" ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-900 border border-indigo-200 shadow-2xs">
+                                    <CalendarCheck size={12} className="text-indigo-700 shrink-0" />
+                                    <span>Confirmou na véspera</span>
+                                  </span>
+                                ) : exp.attendanceConfirmation === "CONFIRMOU_NO_DIA" ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-200 shadow-2xs">
+                                    <CheckCircle size={12} className="text-emerald-700 shrink-0" />
+                                    <span>Confirmou no dia</span>
+                                  </span>
+                                ) : exp.attendanceConfirmation === "REAGENDOU" ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200 shadow-2xs">
+                                    <History size={12} className="text-amber-700 shrink-0" />
+                                    <span>Reagendou</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200">
+                                    <Clock size={11} className="text-slate-400 shrink-0" />
+                                    <span>Confirmação pendente</span>
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             {/* Data da Aula & Reagendamento */}
-                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs flex-wrap gap-2">
-                              <div className="flex items-center gap-1.5 text-slate-700">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2.5 border-t border-slate-100 text-xs gap-1.5">
+                              <div className="flex items-center gap-1.5 text-slate-700 flex-wrap">
                                 <Calendar size={13} className="text-indigo-600 shrink-0" />
                                 <span className="font-bold">
                                   Data da Aula: <strong className="text-indigo-950 font-black">{formatDateBR(exp.date)}</strong>
@@ -531,8 +529,8 @@ export const ClassDetailsView = ({
 
                               {/* Alerta / Tag se reagendado */}
                               {((exp.rescheduleCount && exp.rescheduleCount > 0) || exp.attendanceConfirmation === "REAGENDOU") && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                                  <History size={11} />
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 w-fit">
+                                  <History size={11} className="shrink-0" />
                                   Data atualizada após reagendamento
                                 </span>
                               )}
@@ -540,23 +538,25 @@ export const ClassDetailsView = ({
 
                             {/* Detalhes de contato ou observação se houver */}
                             {(exp.studentPhone || exp.studentEmail || exp.notes) && (
-                              <div className="flex-1 flex flex-col justify-between text-[11px] text-slate-500 bg-slate-50/80 p-3 rounded-xl border border-slate-100 space-y-2">
+                              <div className="flex-1 flex flex-col justify-between text-[11px] text-slate-500 bg-slate-50/80 p-3 rounded-xl border border-slate-100 space-y-2 min-w-0">
                                 {(exp.studentPhone || exp.studentEmail) && (
-                                  <div className="flex items-center gap-3 flex-wrap">
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 flex-wrap min-w-0">
                                     {exp.studentPhone && (
-                                      <span className="flex items-center gap-1">
-                                        <Phone size={11} className="text-slate-400 shrink-0" /> {exp.studentPhone}
+                                      <span className="flex items-center gap-1.5">
+                                        <Phone size={11} className="text-slate-400 shrink-0" />
+                                        <span>{exp.studentPhone}</span>
                                       </span>
                                     )}
                                     {exp.studentEmail && (
-                                      <span className="flex items-center gap-1 break-all">
-                                        <Mail size={11} className="text-slate-400 shrink-0" /> {exp.studentEmail}
+                                      <span className="flex items-center gap-1.5 min-w-0">
+                                        <Mail size={11} className="text-slate-400 shrink-0" />
+                                        <span className="break-all">{exp.studentEmail}</span>
                                       </span>
                                     )}
                                   </div>
                                 )}
                                 {exp.notes && (
-                                  <div className={(exp.studentPhone || exp.studentEmail) ? "pt-2 border-t border-slate-200/70" : ""}>
+                                  <div className={(exp.studentPhone || exp.studentEmail) ? "pt-2 border-t border-slate-200/70 min-w-0" : "min-w-0"}>
                                     <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 mb-0.5 flex items-center gap-1">
                                       <MessageSquare size={10} className="shrink-0" />
                                       Observações Internas
@@ -569,11 +569,17 @@ export const ClassDetailsView = ({
                               </div>
                             )}
 
-                            <div className="flex items-center justify-end pt-1">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-500 group-hover:text-indigo-700 transition-colors">
-                                Clique para ver o card completo →
-                              </span>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedExperimentalBooking(exp);
+                              }}
+                              className="w-full mt-auto py-2.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 text-indigo-700 font-black uppercase tracking-wider text-[10px] flex items-center justify-center gap-1.5 transition-colors border border-indigo-100 touch-manipulation"
+                            >
+                              <Eye size={13} className="shrink-0" />
+                              <span>Ver card completo</span>
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -1192,203 +1198,206 @@ export const ClassDetailsView = ({
         )}
       </AnimatePresence>
 
-      {/* Experimental Class Booking Full Details Modal */}
-      <AnimatePresence>
-        {selectedExperimentalBooking && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedExperimentalBooking(null)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.94, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: 16 }}
-              className="relative w-full max-w-xl bg-white rounded-[36px] shadow-2xl overflow-hidden border border-white max-h-[90vh] flex flex-col"
-            >
-              {/* Modal Header */}
-              <div className="p-6 sm:p-7 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/90 via-sky-50/50 to-white flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white font-black text-lg flex items-center justify-center shrink-0 shadow-sm">
-                    {selectedExperimentalBooking.studentName?.charAt(0)?.toUpperCase() || "A"}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-0.5 flex items-center gap-1">
-                      <Sparkles size={11} /> Aula Experimental Agendada
-                    </p>
-                    <h3 className="text-lg sm:text-xl font-black text-slate-800 uppercase tracking-tight leading-snug break-words">
-                      {selectedExperimentalBooking.studentName}
-                    </h3>
-                    <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                      {selectedExperimentalBooking.course || targetClass?.type}
-                      {selectedExperimentalBooking.classGroup ? ` • ${selectedExperimentalBooking.classGroup}` : ""}
-                      {selectedExperimentalBooking.classTime ? ` • ${selectedExperimentalBooking.classTime}` : ""}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedExperimentalBooking(null)}
-                  className="p-2 hover:bg-slate-200/70 rounded-full transition-colors text-slate-400 shrink-0"
-                  aria-label="Fechar detalhes do agendamento"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div className="p-6 sm:p-7 space-y-5 overflow-y-auto custom-scrollbar">
-                {/* Status Badges */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {selectedExperimentalBooking.attendanceConfirmation === "CONFIRMOU_VESPERA" ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-900 border border-indigo-200">
-                      <CalendarCheck size={13} className="text-indigo-700 shrink-0" />
-                      <span>Confirmou na véspera</span>
-                    </span>
-                  ) : selectedExperimentalBooking.attendanceConfirmation === "CONFIRMOU_NO_DIA" ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-200">
-                      <CheckCircle size={13} className="text-emerald-700 shrink-0" />
-                      <span>Confirmou no dia</span>
-                    </span>
-                  ) : selectedExperimentalBooking.attendanceConfirmation === "REAGENDOU" ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200">
-                      <History size={13} className="text-amber-700 shrink-0" />
-                      <span>Reagendou</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200">
-                      <Clock size={12} className="text-slate-400 shrink-0" />
-                      <span>Confirmação pendente</span>
-                    </span>
-                  )}
-
-                  {selectedExperimentalBooking.status === "AGENDAMENTO_CONFIRMADO" ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-teal-50 text-teal-800 border border-teal-200">
-                      <CheckCircle size={12} className="text-teal-600 shrink-0" />
-                      <span>Agendamento Confirmado</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
-                      <Clock size={12} className="text-amber-600 shrink-0" />
-                      <span>Pagamento Pendente</span>
-                    </span>
-                  )}
-                </div>
-
-                {/* Data e Horário */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <Calendar size={16} className="text-indigo-600 shrink-0" />
-                      <span className="text-xs font-bold">
-                        Data da Aula:{" "}
-                        <strong className="text-indigo-950 font-black">
-                          {formatDateBR(selectedExperimentalBooking.date)}
-                        </strong>
-                        {selectedExperimentalBooking.dayOfWeek ? ` (${selectedExperimentalBooking.dayOfWeek})` : ""}
-                      </span>
+      {/* Experimental Class Booking Full Details Modal (portaled to document.body for mobile viewport reliability) */}
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {selectedExperimentalBooking && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedExperimentalBooking(null)}
+                className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.94, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.94, y: 16 }}
+                className="relative z-10 w-full max-w-xl bg-white rounded-[28px] sm:rounded-[36px] shadow-2xl overflow-hidden border border-white max-h-[90dvh] flex flex-col"
+              >
+                {/* Modal Header */}
+                <div className="p-4 sm:p-7 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/90 via-sky-50/50 to-white flex items-start justify-between gap-3 sm:gap-4 shrink-0">
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-600 text-white font-black text-base sm:text-lg flex items-center justify-center shrink-0 shadow-sm">
+                      {selectedExperimentalBooking.studentName?.charAt(0)?.toUpperCase() || "A"}
                     </div>
-                    {selectedExperimentalBooking.classTime && (
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                        <Clock size={14} className="text-indigo-500 shrink-0" />
-                        <span>{selectedExperimentalBooking.classTime}</span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-0.5 flex items-center gap-1">
+                        <Sparkles size={11} /> Aula Experimental Agendada
+                      </p>
+                      <h3 className="text-base sm:text-xl font-black text-slate-800 uppercase tracking-tight leading-snug break-words">
+                        {selectedExperimentalBooking.studentName}
+                      </h3>
+                      <p className="text-xs font-semibold text-slate-500 mt-0.5 break-words">
+                        {selectedExperimentalBooking.course || targetClass?.type}
+                        {selectedExperimentalBooking.classGroup ? ` • ${selectedExperimentalBooking.classGroup}` : ""}
+                        {selectedExperimentalBooking.classTime ? ` • ${selectedExperimentalBooking.classTime}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedExperimentalBooking(null)}
+                    className="p-2 hover:bg-slate-200/70 rounded-full transition-colors text-slate-400 shrink-0"
+                    aria-label="Fechar detalhes do agendamento"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-4 sm:p-7 space-y-4 sm:space-y-5 overflow-y-auto custom-scrollbar">
+                  {/* Status Badges */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedExperimentalBooking.attendanceConfirmation === "CONFIRMOU_VESPERA" ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-900 border border-indigo-200">
+                        <CalendarCheck size={13} className="text-indigo-700 shrink-0" />
+                        <span>Confirmou na véspera</span>
+                      </span>
+                    ) : selectedExperimentalBooking.attendanceConfirmation === "CONFIRMOU_NO_DIA" ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-200">
+                        <CheckCircle size={13} className="text-emerald-700 shrink-0" />
+                        <span>Confirmou no dia</span>
+                      </span>
+                    ) : selectedExperimentalBooking.attendanceConfirmation === "REAGENDOU" ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200">
+                        <History size={13} className="text-amber-700 shrink-0" />
+                        <span>Reagendou</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200">
+                        <Clock size={12} className="text-slate-400 shrink-0" />
+                        <span>Confirmação pendente</span>
+                      </span>
+                    )}
+
+                    {selectedExperimentalBooking.status === "AGENDAMENTO_CONFIRMADO" ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-teal-50 text-teal-800 border border-teal-200">
+                        <CheckCircle size={12} className="text-teal-600 shrink-0" />
+                        <span>Agendamento Confirmado</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
+                        <Clock size={12} className="text-amber-600 shrink-0" />
+                        <span>Pagamento Pendente</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Data e Horário */}
+                  <div className="p-3.5 sm:p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2 text-slate-700">
+                        <Calendar size={16} className="text-indigo-600 shrink-0" />
+                        <span className="text-xs font-bold">
+                          Data da Aula:{" "}
+                          <strong className="text-indigo-950 font-black">
+                            {formatDateBR(selectedExperimentalBooking.date)}
+                          </strong>
+                          {selectedExperimentalBooking.dayOfWeek ? ` (${selectedExperimentalBooking.dayOfWeek})` : ""}
+                        </span>
+                      </div>
+                      {selectedExperimentalBooking.classTime && (
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                          <Clock size={14} className="text-indigo-500 shrink-0" />
+                          <span>{selectedExperimentalBooking.classTime}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {((selectedExperimentalBooking.rescheduleCount && selectedExperimentalBooking.rescheduleCount > 0) ||
+                      selectedExperimentalBooking.attendanceConfirmation === "REAGENDOU") && (
+                      <div className="pt-2 border-t border-slate-200/70">
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                          <History size={12} />
+                          Data atualizada após reagendamento
+                        </span>
                       </div>
                     )}
                   </div>
 
-                  {((selectedExperimentalBooking.rescheduleCount && selectedExperimentalBooking.rescheduleCount > 0) ||
-                    selectedExperimentalBooking.attendanceConfirmation === "REAGENDOU") && (
-                    <div className="pt-2 border-t border-slate-200/70">
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
-                        <History size={12} />
-                        Data atualizada após reagendamento
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Dados de Contato */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2.5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    Contato do(a) Aluno(a)
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-slate-700 font-semibold">
-                    <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-100">
-                      <Phone size={14} className="text-indigo-500 shrink-0" />
-                      <span className="break-all">
-                        {selectedExperimentalBooking.studentPhone || "Telefone não informado"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-100">
-                      <Mail size={14} className="text-indigo-500 shrink-0" />
-                      <span className="break-all">
-                        {selectedExperimentalBooking.studentEmail || "E-mail não informado"}
-                      </span>
+                  {/* Dados de Contato */}
+                  <div className="p-3.5 sm:p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2.5">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Contato do(a) Aluno(a)
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-slate-700 font-semibold">
+                      <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-100">
+                        <Phone size={14} className="text-indigo-500 shrink-0" />
+                        <span className="break-all">
+                          {selectedExperimentalBooking.studentPhone || "Telefone não informado"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-100">
+                        <Mail size={14} className="text-indigo-500 shrink-0" />
+                        <span className="break-all">
+                          {selectedExperimentalBooking.studentEmail || "E-mail não informado"}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Observações Internas Completas */}
-                <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700 flex items-center gap-1.5">
-                    <MessageSquare size={13} className="shrink-0" />
-                    Observações Internas
-                  </p>
-                  {selectedExperimentalBooking.notes ? (
-                    <p className="text-sm text-slate-800 font-medium leading-relaxed whitespace-pre-wrap break-words bg-white/90 p-3.5 rounded-xl border border-indigo-100/80">
-                      {selectedExperimentalBooking.notes}
+                  {/* Observações Internas Completas */}
+                  <div className="p-3.5 sm:p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700 flex items-center gap-1.5">
+                      <MessageSquare size={13} className="shrink-0" />
+                      Observações Internas
                     </p>
-                  ) : (
-                    <p className="text-xs text-slate-400 italic">
-                      Nenhuma observação interna registrada para este agendamento.
-                    </p>
-                  )}
-                </div>
+                    {selectedExperimentalBooking.notes ? (
+                      <p className="text-sm text-slate-800 font-medium leading-relaxed whitespace-pre-wrap break-words bg-white/90 p-3.5 rounded-xl border border-indigo-100/80">
+                        {selectedExperimentalBooking.notes}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">
+                        Nenhuma observação interna registrada para este agendamento.
+                      </p>
+                    )}
+                  </div>
 
-                {/* Histórico de Reagendamentos (se houver) */}
-                {selectedExperimentalBooking.rescheduleHistory && selectedExperimentalBooking.rescheduleHistory.length > 0 && (
-                  <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100 space-y-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 flex items-center gap-1.5">
-                      <History size={13} /> Histórico de Reagendamentos ({selectedExperimentalBooking.rescheduleCount || selectedExperimentalBooking.rescheduleHistory.length})
-                    </p>
-                    <div className="space-y-2">
-                      {selectedExperimentalBooking.rescheduleHistory.map((h, idx) => (
-                        <div key={idx} className="p-2.5 bg-white rounded-xl text-xs space-y-1 border border-amber-100">
-                          <div className="flex flex-wrap justify-between gap-2 font-bold text-slate-700">
-                            <span>De: {formatDateBR(h.previousDate)} ({h.previousTime})</span>
-                            <span>Para: {formatDateBR(h.newDate)} ({h.newTime})</span>
+                  {/* Histórico de Reagendamentos (se houver) */}
+                  {selectedExperimentalBooking.rescheduleHistory && selectedExperimentalBooking.rescheduleHistory.length > 0 && (
+                    <div className="p-3.5 sm:p-4 bg-amber-50/50 rounded-2xl border border-amber-100 space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 flex items-center gap-1.5">
+                        <History size={13} /> Histórico de Reagendamentos ({selectedExperimentalBooking.rescheduleCount || selectedExperimentalBooking.rescheduleHistory.length})
+                      </p>
+                      <div className="space-y-2">
+                        {selectedExperimentalBooking.rescheduleHistory.map((h, idx) => (
+                          <div key={idx} className="p-2.5 bg-white rounded-xl text-xs space-y-1 border border-amber-100">
+                            <div className="flex flex-wrap justify-between gap-2 font-bold text-slate-700">
+                              <span>De: {formatDateBR(h.previousDate)} ({h.previousTime})</span>
+                              <span>Para: {formatDateBR(h.newDate)} ({h.newTime})</span>
+                            </div>
+                            {h.reason && <p className="text-slate-500 italic whitespace-pre-wrap break-words">"{h.reason}"</p>}
                           </div>
-                          {h.reason && <p className="text-slate-500 italic whitespace-pre-wrap break-words">"{h.reason}"</p>}
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {selectedExperimentalBooking.createdByName && (
-                  <p className="text-[11px] font-semibold text-slate-400 text-right">
-                    Agendado por: <span className="text-slate-600 font-bold">{selectedExperimentalBooking.createdByName}</span>
-                  </p>
-                )}
-              </div>
+                  {selectedExperimentalBooking.createdByName && (
+                    <p className="text-[11px] font-semibold text-slate-400 text-right">
+                      Agendado por: <span className="text-slate-600 font-bold">{selectedExperimentalBooking.createdByName}</span>
+                    </p>
+                  )}
+                </div>
 
-              {/* Modal Footer */}
-              <div className="p-5 sm:p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setSelectedExperimentalBooking(null)}
-                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all shadow-md"
-                >
-                  Fechar
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                {/* Modal Footer */}
+                <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedExperimentalBooking(null)}
+                    className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all shadow-md"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </motion.div>
   );
 };
