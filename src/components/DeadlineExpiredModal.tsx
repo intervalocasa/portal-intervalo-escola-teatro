@@ -10,6 +10,7 @@ interface DeadlineExpiredModalProps {
   formattedDeadline: string; // Ex: "05/09/2026"
   studentName?: string;
   className?: string;
+  isManuallyLocked?: boolean;
 }
 
 export const DeadlineExpiredModal: React.FC<DeadlineExpiredModalProps> = ({
@@ -19,7 +20,8 @@ export const DeadlineExpiredModal: React.FC<DeadlineExpiredModalProps> = ({
   referencePeriod,
   formattedDeadline,
   studentName,
-  className
+  className,
+  isManuallyLocked = false
 }) => {
   if (!isOpen) return null;
 
@@ -55,13 +57,19 @@ export const DeadlineExpiredModal: React.FC<DeadlineExpiredModalProps> = ({
             </span>
 
             <h3 className="text-xl font-black uppercase tracking-tight">
-              {isProfessor ? "Prazo de Lançamento Expirado" : "Prazo de Envio Expirado"}
+              {isManuallyLocked
+                ? "Diário Trancado pela Gestão"
+                : isProfessor
+                  ? "Prazo de Lançamento Expirado"
+                  : "Prazo de Envio Expirado"}
             </h3>
             
             <p className="text-rose-100 text-xs font-bold mt-1">
-              {isProfessor 
-                ? "Não é mais possível lançar ou editar este diário no sistema"
-                : "Não é mais possível enviar ou editar sua autoavaliação"}
+              {isManuallyLocked
+                ? "Os registros neste diário estão temporariamente bloqueados pelo Gestor ou Diretor Pedagógico"
+                : isProfessor 
+                  ? "Não é mais possível lançar ou editar este diário no sistema"
+                  : "Não é mais possível enviar ou editar sua autoavaliação"}
             </p>
 
             <button
@@ -77,20 +85,33 @@ export const DeadlineExpiredModal: React.FC<DeadlineExpiredModalProps> = ({
           <div className="p-6 md:p-8 space-y-6">
             {/* Explicação pedagógica */}
             <div className="text-xs text-slate-600 leading-relaxed space-y-2">
-              <p className="font-medium">
-                {isProfessor ? (
-                  <>
-                    Os diários de notas e frequência mensais devem ser lançados impreterivelmente até o <strong>dia 05 do mês seguinte</strong>.
-                  </>
-                ) : (
-                  <>
-                    As autoavaliações mensais devem ser entregues impreterivelmente até o <strong>dia 05 do mês seguinte</strong>.
-                  </>
-                )}
-              </p>
-              <p className="font-medium text-slate-500">
-                Como a data limite foi ultrapassada, o formulário para este período foi bloqueado pelo sistema.
-              </p>
+              {isManuallyLocked ? (
+                <>
+                  <p className="font-medium">
+                    O acesso de lançamento e edição para este diário foi <strong>trancado manualmente</strong> pelo Gestor ou Diretor Pedagógico.
+                  </p>
+                  <p className="font-medium text-slate-500">
+                    Para voltar a registrar notas ou alterações neste período, solicite a reabertura diretamente à coordenação/gestão.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium">
+                    {isProfessor ? (
+                      <>
+                        Os diários de notas e frequência mensais devem ser lançados impreterivelmente até o <strong>dia 05 do mês seguinte</strong>.
+                      </>
+                    ) : (
+                      <>
+                        As autoavaliações mensais devem ser entregues impreterivelmente até o <strong>dia 05 do mês seguinte</strong>.
+                      </>
+                    )}
+                  </p>
+                  <p className="font-medium text-slate-500">
+                    Como a data limite foi ultrapassada, o formulário para este período foi bloqueado pelo sistema.
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Caixa de detalhes */}

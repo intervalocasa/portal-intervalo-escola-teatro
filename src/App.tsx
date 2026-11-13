@@ -110,7 +110,7 @@ import { LessonPlansView } from "./views/LessonPlansView";
 import { ClassDiaryView } from "./views/ClassDiaryView";
 import { StageProductionsView } from "./views/StageProductionsView";
 import { FormativeDocumentsView } from "./views/FormativeDocumentsView";
-import { getMonthlyDeadline } from "./lib/deadlineUtils";
+import { getMonthlyDeadline, resolveMonthlyDiaryAccess } from "./lib/deadlineUtils";
 import { isDirectorOrGestor, isStaffOrAdmin, isProfessorOrTeacher, isStudentInactive, isStudentDesmatriculado, getUserDisplayName } from "./lib/userUtils";
 import { propagateClassUpdate, syncAllClassNamesAcrossDatabase } from "./services/classSyncService";
 
@@ -1682,20 +1682,25 @@ export default function App() {
       return;
     }
 
-    // Check monthly deadline
-    const deadlineInfo = getMonthlyDeadline(diaryFilterMonth, diaryFilterYear);
-    const currentUserRole = currentUser?.role || role;
-    if (deadlineInfo.isExpired && !isDirectorOrGestor(currentUserRole)) {
-      showNotification(`O prazo para lançamento do diário de ${deadlineInfo.formattedReference} encerrou em ${deadlineInfo.formattedDeadline}. Entre em contato com a direção.`, "Prazo Expirado", "error");
-      return;
-    }
-
     const teacherData = users.find(u => u.id === currentUser.uid);
     const studentData = users.find(u => u.id === selectedDiaryStudentId);
     const selectedClass = classes.find(c => c.id === selectedClassId);
 
     if (!selectedClass || !studentData) {
       console.error("Class or student not found", { selectedClass: !!selectedClass, studentData: !!studentData });
+      return;
+    }
+
+    // Check monthly deadline + manual lock/unlock override
+    const diaryAccess = resolveMonthlyDiaryAccess(selectedClass, diaryFilterMonth, diaryFilterYear);
+    const deadlineInfo = diaryAccess.deadlineInfo;
+    const currentUserRole = currentUser?.role || role;
+    if (diaryAccess.isLockedForProfessor && !isDirectorOrGestor(currentUserRole)) {
+      if (diaryAccess.isManuallyLocked) {
+        showNotification(`O diário de ${deadlineInfo.formattedReference} desta turma foi trancado manualmente pela gestão. Entre em contato com a direção.`, "Diário Trancado", "error");
+      } else {
+        showNotification(`O prazo para lançamento do diário de ${deadlineInfo.formattedReference} encerrou em ${deadlineInfo.formattedDeadline}. Entre em contato com a direção.`, "Prazo Expirado", "error");
+      }
       return;
     }
 
@@ -3242,6 +3247,7 @@ export default function App() {
             setSelectedDiaryStudentId={setSelectedDiaryStudentId}
             setDiaryFormData={setDiaryFormData}
             setView={setView}
+            showNotification={showNotification}
           />
         ) : view === "student_diary_form" ? (
           <StudentDiaryFormView 
@@ -3256,8 +3262,10 @@ export default function App() {
             handleSubmitDiary={handleDiarySubmit}
             handleAwardBadge={handleAwardBadge}
             userRole={role}
+            currentUser={users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || currentUser || null}
             setView={setView}
             evaluations={evaluations}
+            showNotification={showNotification}
           />
         ) : view === "manage_diaries" ? (
           <ManageDiariesView 
@@ -3273,6 +3281,9 @@ export default function App() {
             setDiaryFormData={setDiaryFormData}
             setView={setView}
             handleDeleteDiary={handleDeleteDiary}
+            userRole={role}
+            currentUser={users.find(u => u.id === currentUser?.uid) || users.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) || currentUser || null}
+            showNotification={showNotification}
           />
         ) : view === "school_agenda" ? (
           <div className="flex-1 space-y-6">
@@ -3346,6 +3357,7 @@ export default function App() {
             classes={classes}
             setView={setView}
             userRole={role}
+            showNotification={showNotification}
           />
         ) : view === "stage_productions" || view === "montagens_apresentacoes" ? (
           <StageProductionsView 

@@ -5,13 +5,15 @@
 
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Download, Search, LayoutGrid, Calendar, ChevronRight, BookOpen, CheckCircle2, Pencil, Trash2, Eye, ArrowLeft, MessageSquare, Clock, CheckCircle, PlusCircle, Filter } from "lucide-react";
-import { User, Class, Diary, Evaluation, PedagogicalMeetingRequest } from "../types";
+import { Download, Search, LayoutGrid, Calendar, ChevronRight, BookOpen, CheckCircle2, Pencil, Trash2, Eye, ArrowLeft, MessageSquare, Clock, CheckCircle, PlusCircle, Filter, Lock, Unlock } from "lucide-react";
+import { User, Class, Diary, Evaluation, PedagogicalMeetingRequest, UserRole } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { db } from "../lib/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { generateDiaryPDF } from "../lib/pdfExporter";
-import { getUserDisplayName, isStudentInactiveInClass } from "../lib/userUtils";
+import { getUserDisplayName, isStudentInactiveInClass, isDirectorOrGestor } from "../lib/userUtils";
+import { resolveMonthlyDiaryAccess } from "../lib/deadlineUtils";
+import { toggleMonthlyDiaryAccess } from "../services/diaryAccessService";
 
 interface ManageDiariesViewProps {
   diaries: Diary[];
@@ -26,6 +28,9 @@ interface ManageDiariesViewProps {
   setDiaryFormData: (data: any) => void;
   setView: (view: string) => void;
   handleDeleteDiary: (id: string) => void;
+  userRole?: UserRole | null;
+  currentUser?: any;
+  showNotification?: (message: string, title?: string, type?: "success" | "warning" | "error") => void;
 }
 
 export const ManageDiariesView = ({
@@ -40,13 +45,51 @@ export const ManageDiariesView = ({
   setDiaryFilterYear,
   setDiaryFormData,
   setView,
-  handleDeleteDiary
+  handleDeleteDiary,
+  userRole,
+  currentUser,
+  showNotification
 }: ManageDiariesViewProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterClassId, setFilterClassId] = useState<string>("all");
   const [filterMonth, setFilterMonth] = useState<string>("all");
   const [filterYear, setFilterYear] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [togglingKey, setTogglingKey] = useState<string | null>(null);
+
+  const isGestorOrDirector = isDirectorOrGestor(userRole || currentUser?.role);
+
+  const handleToggleClassMonthAccess = async (classObj: Class | undefined, month: number, year: number) => {
+    if (!classObj || !isGestorOrDirector) return;
+    const key = `${classObj.id}_${year}_${month}`;
+    if (togglingKey === key) return;
+    setTogglingKey(key);
+    try {
+      const result = await toggleMonthlyDiaryAccess(classObj, month, year, {
+        uid: currentUser?.uid || currentUser?.id,
+        name: getUserDisplayName(currentUser)
+      });
+      const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+      if (result.action === "reopened") {
+        showNotification?.(
+          `Lançamento de notas da turma ${classObj.code} (${monthLabel}) reaberto para os professores.`,
+          "Diário Reaberto",
+          "success"
+        );
+      } else {
+        showNotification?.(
+          `Lançamento de notas da turma ${classObj.code} (${monthLabel}) trancado para os professores.`,
+          "Diário Trancado",
+          "warning"
+        );
+      }
+    } catch (err) {
+      console.error("Erro ao alternar bloqueio do diário de turma:", err);
+      showNotification?.("Erro ao alterar status de abertura/trancamento do diário.", "Erro", "error");
+    } finally {
+      setTogglingKey(null);
+    }
+  };
 
   // Exclude inactive students from grade diaries
   const activeDiaries = useMemo(() => {
@@ -348,6 +391,63 @@ export const ManageDiariesView = ({
                   </select>
                 </div>
               </div>
+
+              {/* Controle rápido de Reabrir / Trancar Diário de Turma quando turma e mês estão filtrados */}
+              {isGestorOrDirector && filterClassId !== "all" && filterMonth !== "all" && (() => {
+                const selectedClassObj = classes.find(c => c.id === filterClassId);
+                if (!selectedClassObj) return null;
+                const resolvedYear = filterYear !== "all" ? Number(filterYear) : new Date().getFullYear();
+                const resolvedMonth = Number(filterMonth);
+                const access = resolveMonthlyDiaryAccess(selectedClassObj, resolvedMonth, resolvedYear);
+                const isBusy = togglingKey === `${selectedClassObj.id}_${resolvedYear}_${resolvedMonth}`;
+
+                return (
+                  <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      {access.isLockedForProfessor ? (
+                        <Lock size={15} className="text-rose-600 shrink-0" />
+                      ) : (
+                        <Unlock size={15} className="text-emerald-600 shrink-0" />
+                      )}
+                      <span className="font-bold text-slate-700">
+                        Diário da turma <strong className="text-slate-900">{selectedClassObj.code}</strong> ({access.deadlineInfo.formattedReference}):{" "}
+                        <span className={access.isLockedForProfessor ? "text-rose-600 font-black" : "text-emerald-700 font-black"}>
+                          {access.isManuallyUnlocked
+                            ? "Reaberto manualmente para professores"
+                            : access.isManuallyLocked
+                              ? "Trancado manualmente"
+                              : access.deadlineInfo.isExpired
+                                ? "Prazo regular encerrado (Bloqueado)"
+                                : `Aberto pelo prazo regular (até ${access.deadlineInfo.formattedDeadline})`}
+                        </span>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => handleToggleClassMonthAccess(selectedClassObj, resolvedMonth, resolvedYear)}
+                      className={`px-4 py-2 rounded-xl font-black uppercase tracking-wider text-[10px] flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 shrink-0 ${
+                        access.isLockedForProfessor
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          : "bg-rose-600 hover:bg-rose-700 text-white"
+                      }`}
+                    >
+                      {access.isLockedForProfessor ? (
+                        <>
+                          <Unlock size={13} />
+                          {isBusy ? "Reabrindo..." : "Reabrir Diário da Turma"}
+                        </>
+                      ) : (
+                        <>
+                          <Lock size={13} />
+                          {isBusy ? "Trancando..." : "Trancar Diário da Turma"}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden overflow-x-auto">
@@ -411,6 +511,35 @@ export const ManageDiariesView = ({
                          </td>
                          <td className="px-6 py-5 text-right px-8">
                             <div className="flex justify-end gap-2">
+                              {isGestorOrDirector && (() => {
+                                const clsObj = classes.find(c => c.id === d.classId);
+                                if (!clsObj) return null;
+                                const access = resolveMonthlyDiaryAccess(clsObj, d.month, d.year);
+                                const isBusy = togglingKey === `${clsObj.id}_${d.year}_${d.month}`;
+                                return (
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleClassMonthAccess(clsObj, d.month, d.year);
+                                    }}
+                                    className={`p-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1 px-3 text-[10px] font-black uppercase disabled:opacity-50 ${
+                                      access.isLockedForProfessor
+                                        ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-200"
+                                        : "bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white border border-rose-200"
+                                    }`}
+                                    title={
+                                      access.isLockedForProfessor
+                                        ? `Reabrir lançamento de notas da turma ${clsObj.code} (${String(d.month).padStart(2, "0")}/${d.year})`
+                                        : `Trancar lançamento de notas da turma ${clsObj.code} (${String(d.month).padStart(2, "0")}/${d.year})`
+                                    }
+                                  >
+                                    {access.isLockedForProfessor ? <Unlock size={14} /> : <Lock size={14} />}
+                                    <span className="hidden xl:inline">{access.isLockedForProfessor ? "Reabrir" : "Trancar"}</span>
+                                  </button>
+                                );
+                              })()}
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();

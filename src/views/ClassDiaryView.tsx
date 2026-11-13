@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Save,
   Lock,
+  Unlock,
   Search,
   Filter,
   Check,
@@ -44,9 +45,10 @@ import {
   deleteClassDailyDiary
 } from "../services/classDiaryService";
 import {
-  getClassDiaryDeadlineInfo,
-  ClassDiaryDeadlineInfo
+  ClassDiaryDeadlineInfo,
+  resolveClassDailyDiaryAccess
 } from "../lib/deadlineUtils";
+import { toggleDailyDiaryAccess } from "../services/diaryAccessService";
 import { isDirectorOrGestor, isStudentActiveInClass, isStudentInactiveInClass } from "../lib/userUtils";
 
 interface ClassDiaryViewProps {
@@ -55,6 +57,7 @@ interface ClassDiaryViewProps {
   classes: Class[];
   setView: (view: string) => void;
   userRole?: UserRole | null;
+  showNotification?: (message: string, title?: string, type?: "success" | "warning" | "error") => void;
 }
 
 export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
@@ -62,7 +65,8 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
   users,
   classes,
   setView,
-  userRole
+  userRole,
+  showNotification
 }) => {
   // Identify logged user & role
   const loggedUserId = currentUser?.uid || currentUser?.id || "";
@@ -101,6 +105,8 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
   // 24h Deadline Modal State
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState<boolean>(false);
   const [deadlineModalData, setDeadlineModalData] = useState<ClassDiaryDeadlineInfo | null>(null);
+  const [deadlineModalManuallyLocked, setDeadlineModalManuallyLocked] = useState<boolean>(false);
+  const [togglingDailyKey, setTogglingDailyKey] = useState<string | null>(null);
 
   // History / Logs State
   const [historyDiaries, setHistoryDiaries] = useState<ClassDailyDiary[]>([]);
@@ -187,11 +193,42 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
       .sort((a, b) => (a.name || a.artisticName || "").localeCompare(b.name || b.artisticName || "", "pt-BR"));
   }, [selectedClass, users]);
 
-  // Real-time Deadline Info for current selection
-  const currentDeadlineInfo = useMemo(() => {
+  // Real-time Deadline & Manual Override Info for current selection
+  const currentAccessInfo = useMemo(() => {
     if (!selectedClass || !selectedDate) return null;
-    return getClassDiaryDeadlineInfo(selectedDate, selectedClass.time);
+    return resolveClassDailyDiaryAccess(selectedClass, selectedDate);
   }, [selectedClass, selectedDate]);
+
+  const currentDeadlineInfo = currentAccessInfo?.deadlineInfo || null;
+
+  const handleToggleDailyDiaryAccess = async (classObj: Class | null | undefined, dateStr: string) => {
+    if (!classObj || !dateStr || !isGestorOrDirector) return;
+    const opKey = `${classObj.id}_${dateStr}`;
+    setTogglingDailyKey(opKey);
+    setErrorMessage(null);
+    try {
+      const actorName = currentTeacherUser?.name || currentTeacherUser?.artisticName || currentUser?.displayName || currentUser?.name || "Gestor";
+      const { action, deadlineInfo } = await toggleDailyDiaryAccess(classObj, dateStr, {
+        uid: loggedUserId || currentUser?.uid || "",
+        name: actorName
+      });
+      const [y, m, d] = dateStr.split("-");
+      const dateBr = y && m && d ? `${d}/${m}/${y}` : dateStr;
+      const msg = action === "reopened"
+        ? `Diário de aula de ${dateBr} (${classObj.code}) reaberto! ${deadlineInfo.isExpired ? "Lançamento liberado excepcionalmente para o professor." : "Regra padrão de 24h restaurada."}`
+        : `Diário de aula de ${dateBr} (${classObj.code}) trancado manualmente para professores.`;
+      setSaveSuccessMessage(msg);
+      showNotification?.(msg, action === "reopened" ? "Diário de Aula Reaberto" : "Diário de Aula Trancado", "success");
+      setTimeout(() => setSaveSuccessMessage(null), 5000);
+    } catch (err) {
+      console.error("Erro ao alternar bloqueio do diário de aula:", err);
+      const errMsg = "Não foi possível alterar o bloqueio deste diário de aula.";
+      setErrorMessage(errMsg);
+      showNotification?.(errMsg, "Erro", "error");
+    } finally {
+      setTogglingDailyKey(null);
+    }
+  };
 
   // When class and date are confirmed, load any existing record
   const handleConfirmSelection = async (overrideClassId?: string, overrideDate?: string) => {
@@ -208,13 +245,19 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
     }
 
     const classObj = classes.find(c => c.id === classIdToUse);
-    const deadlineInfo = getClassDiaryDeadlineInfo(dateToUse, classObj?.time);
+    const accessInfo = resolveClassDailyDiaryAccess(classObj, dateToUse);
+    const deadlineInfo = accessInfo.deadlineInfo;
 
-    // REGRA DE 24H: Professor só pode lançar diário até 24h após o término da aula
-    if (isProfessorOnly && deadlineInfo.isExpired) {
+    // REGRA DE 24H + Override Manual: Professor só pode lançar se não estiver bloqueado
+    if (isProfessorOnly && accessInfo.isLockedForProfessor) {
       setDeadlineModalData(deadlineInfo);
+      setDeadlineModalManuallyLocked(accessInfo.isManuallyLocked);
       setIsDeadlineModalOpen(true);
-      setErrorMessage("Não é possível fazer o lançamento da frequência pois perdeu o prazo de 24 horas.");
+      setErrorMessage(
+        accessInfo.isManuallyLocked
+          ? "Este diário de aula foi trancado manualmente pela Gestão / Direção Pedagógica."
+          : "Não é possível fazer o lançamento da frequência pois perdeu o prazo de 24 horas."
+      );
       return;
     }
 
@@ -287,12 +330,18 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
       return;
     }
 
-    // REGRA DE 24H: Validação estrita antes da gravação
-    const deadlineInfo = getClassDiaryDeadlineInfo(selectedDate, selectedClass.time);
-    if (isProfessorOnly && deadlineInfo.isExpired) {
+    // REGRA DE 24H + Override Manual: Validação estrita antes da gravação
+    const accessInfo = resolveClassDailyDiaryAccess(selectedClass, selectedDate);
+    const deadlineInfo = accessInfo.deadlineInfo;
+    if (isProfessorOnly && accessInfo.isLockedForProfessor) {
       setDeadlineModalData(deadlineInfo);
+      setDeadlineModalManuallyLocked(accessInfo.isManuallyLocked);
       setIsDeadlineModalOpen(true);
-      setErrorMessage("Não é possível fazer o lançamento da frequência pois perdeu o prazo de 24 horas.");
+      setErrorMessage(
+        accessInfo.isManuallyLocked
+          ? "Este diário de aula foi trancado manualmente pela Gestão / Direção Pedagógica."
+          : "Não é possível fazer o lançamento da frequência pois perdeu o prazo de 24 horas."
+      );
       return;
     }
 
@@ -680,20 +729,29 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                         value={selectedDate}
                         onChange={e => setSelectedDate(e.target.value)}
                         className={`w-full px-4 py-3.5 bg-slate-50 border rounded-2xl text-slate-800 text-sm font-bold focus:bg-white transition-all outline-none ${
-                          isProfessorOnly && currentDeadlineInfo?.isExpired
+                          isProfessorOnly && currentAccessInfo?.isLockedForProfessor
                             ? "border-rose-300 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10"
                             : "border-slate-200 focus:border-pro-teal focus:ring-4 focus:ring-pro-teal/10"
                         }`}
                       />
 
-                      {/* Badge dinâmico de status do prazo */}
-                      {selectedDate && currentDeadlineInfo && (
-                        <div className="pt-0.5">
+                      {/* Badge dinâmico de status do prazo + botão Reabrir/Trancar para Gestão */}
+                      {selectedDate && currentAccessInfo && currentDeadlineInfo && (
+                        <div className="pt-0.5 space-y-2">
                           {isProfessorOnly ? (
-                            currentDeadlineInfo.isExpired ? (
+                            currentAccessInfo.isLockedForProfessor ? (
                               <div className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-[11px] font-bold flex items-center gap-1.5">
-                                <Clock size={13} className="text-rose-600 shrink-0" />
-                                <span>Prazo de 24h encerrado ({currentDeadlineInfo.formattedTimeRemaining})</span>
+                                {currentAccessInfo.isManuallyLocked ? <Lock size={13} className="text-rose-600 shrink-0" /> : <Clock size={13} className="text-rose-600 shrink-0" />}
+                                <span>
+                                  {currentAccessInfo.isManuallyLocked
+                                    ? "Diário trancado manualmente pela Gestão"
+                                    : `Prazo de 24h encerrado (${currentDeadlineInfo.formattedTimeRemaining})`}
+                                </span>
+                              </div>
+                            ) : currentAccessInfo.isManuallyUnlocked ? (
+                              <div className="px-3 py-1.5 bg-sky-50 border border-sky-200 text-sky-800 rounded-xl text-[11px] font-bold flex items-center gap-1.5">
+                                <Unlock size={13} className="text-sky-600 shrink-0" />
+                                <span>Liberado excepcionalmente pela Gestão (prazo original encerrado em {currentDeadlineInfo.formattedDeadline})</span>
                               </div>
                             ) : (
                               <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-[11px] font-bold flex items-center gap-1.5">
@@ -702,9 +760,43 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                               </div>
                             )
                           ) : (
-                            <div className="px-3 py-1 bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-[11px] font-bold flex items-center gap-1.5">
-                              <Clock size={12} className="text-pro-teal shrink-0" />
-                              <span>Prazo professor: {currentDeadlineInfo.formattedDeadline} • Acesso Gestão Liberado</span>
+                            <div className="flex flex-col gap-1.5">
+                              <div className={`px-3 py-1.5 border rounded-xl text-[11px] font-bold flex items-center gap-1.5 ${
+                                currentAccessInfo.isLockedForProfessor
+                                  ? "bg-rose-50 border-rose-200 text-rose-700"
+                                  : currentAccessInfo.isManuallyUnlocked
+                                    ? "bg-sky-50 border-sky-200 text-sky-800"
+                                    : "bg-slate-100 border-slate-200 text-slate-600"
+                              }`}>
+                                <Clock size={12} className="shrink-0" />
+                                <span>
+                                  {currentAccessInfo.statusLabel} • Prazo 24h: {currentDeadlineInfo.formattedDeadline}
+                                </span>
+                              </div>
+                              {isGestorOrDirector && selectedClass && (
+                                <button
+                                  type="button"
+                                  disabled={togglingDailyKey === `${selectedClass.id}_${selectedDate}`}
+                                  onClick={() => handleToggleDailyDiaryAccess(selectedClass, selectedDate)}
+                                  className={`w-full px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 border transition-all cursor-pointer disabled:opacity-50 ${
+                                    currentAccessInfo.isLockedForProfessor
+                                      ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 shadow-sm"
+                                      : "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
+                                  }`}
+                                >
+                                  {togglingDailyKey === `${selectedClass.id}_${selectedDate}` ? (
+                                    <span>Atualizando...</span>
+                                  ) : currentAccessInfo.isLockedForProfessor ? (
+                                    <>
+                                      <Unlock size={13} /> Reabrir Diário de Aula
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Lock size={13} /> Trancar Diário de Aula
+                                    </>
+                                  )}
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -733,19 +825,47 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                   /* Resumo Selecionado */
                   <div className="bg-pro-teal/5 p-5 rounded-2xl border border-pro-teal/20 flex flex-wrap items-center justify-between gap-4">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="px-2.5 py-0.5 bg-pro-teal text-white text-[10px] font-black uppercase tracking-widest rounded-md">
                           {selectedClass?.type || "Turma"}
                         </span>
                         <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">
                           {selectedClass?.code}
                         </h3>
-                        {currentDeadlineInfo && (
+                        {currentAccessInfo && (
                           <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-md ${
-                            currentDeadlineInfo.isExpired ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"
+                            currentAccessInfo.isLockedForProfessor
+                              ? "bg-rose-100 text-rose-800"
+                              : currentAccessInfo.isManuallyUnlocked
+                                ? "bg-sky-100 text-sky-800"
+                                : "bg-emerald-100 text-emerald-800"
                           }`}>
-                            {currentDeadlineInfo.isExpired ? "Prazo 24h Expirado" : "Dentro do Prazo"}
+                            {currentAccessInfo.statusLabel}
                           </span>
+                        )}
+                        {isGestorOrDirector && selectedClass && currentAccessInfo && (
+                          <button
+                            type="button"
+                            disabled={togglingDailyKey === `${selectedClass.id}_${selectedDate}`}
+                            onClick={() => handleToggleDailyDiaryAccess(selectedClass, selectedDate)}
+                            className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border transition-all cursor-pointer disabled:opacity-50 ${
+                              currentAccessInfo.isLockedForProfessor
+                                ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 shadow-sm"
+                                : "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
+                            }`}
+                          >
+                            {togglingDailyKey === `${selectedClass.id}_${selectedDate}` ? (
+                              <span>Atualizando...</span>
+                            ) : currentAccessInfo.isLockedForProfessor ? (
+                              <>
+                                <Unlock size={12} /> Reabrir para Professor
+                              </>
+                            ) : (
+                              <>
+                                <Lock size={12} /> Trancar para Professor
+                              </>
+                            )}
+                          </button>
                         )}
                       </div>
                       <p className="text-xs font-bold text-slate-500 capitalize">
@@ -1227,6 +1347,8 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                   {filteredHistory.map(entry => {
                     const [y, m, d] = (entry.date || "").split("-");
                     const dateFormatted = y && m && d ? `${d}/${m}/${y}` : entry.date;
+                    const entryClassObj = classes.find(c => c.id === entry.classId);
+                    const entryAccessInfo = resolveClassDailyDiaryAccess(entryClassObj, entry.date);
 
                     return (
                       <div
@@ -1236,11 +1358,23 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                         <div className="space-y-3.5">
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <span className="px-2.5 py-0.5 bg-pro-teal/10 text-pro-teal text-[10px] font-black uppercase tracking-wider rounded-md">
-                                {classes.find(c => c.id === entry.classId)?.type || entry.classType || "Turma"}
-                              </span>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="px-2.5 py-0.5 bg-pro-teal/10 text-pro-teal text-[10px] font-black uppercase tracking-wider rounded-md">
+                                  {entryClassObj?.type || entry.classType || "Turma"}
+                                </span>
+                                {(entryAccessInfo.isManuallyUnlocked || entryAccessInfo.isManuallyLocked) && (
+                                  <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md flex items-center gap-1 ${
+                                    entryAccessInfo.isManuallyUnlocked
+                                      ? "bg-sky-100 text-sky-800"
+                                      : "bg-rose-100 text-rose-800"
+                                  }`}>
+                                    {entryAccessInfo.isManuallyUnlocked ? <Unlock size={10} /> : <Lock size={10} />}
+                                    {entryAccessInfo.statusLabel}
+                                  </span>
+                                )}
+                              </div>
                               <h4 className="text-base font-black text-slate-800 uppercase tracking-tight mt-1">
-                                {classes.find(c => c.id === entry.classId)?.code || entry.className || entry.classCode}
+                                {entryClassObj?.code || entry.className || entry.classCode}
                               </h4>
                             </div>
                             <div className="px-3 py-1 bg-slate-100 text-slate-800 text-xs font-black rounded-xl shrink-0 flex items-center gap-1.5 border border-slate-200">
@@ -1321,8 +1455,8 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                         </div>
 
                         {/* Botões de Ação */}
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
                               onClick={() => {
@@ -1338,10 +1472,10 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const clsObj = classes.find(c => c.id === entry.classId);
-                                  const dlInfo = getClassDiaryDeadlineInfo(entry.date, clsObj?.time || entry.classTime);
-                                  if (isProfessorOnly && dlInfo.isExpired) {
-                                    setDeadlineModalData(dlInfo);
+                                  const accessInfo = resolveClassDailyDiaryAccess(entryClassObj, entry.date);
+                                  if (isProfessorOnly && accessInfo.isLockedForProfessor) {
+                                    setDeadlineModalData(accessInfo.deadlineInfo);
+                                    setDeadlineModalManuallyLocked(accessInfo.isManuallyLocked);
                                     setIsDeadlineModalOpen(true);
                                     return;
                                   }
@@ -1353,6 +1487,32 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                                 className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5"
                               >
                                 <BookOpen size={14} /> Editar
+                              </button>
+                            )}
+
+                            {isGestorOrDirector && entryClassObj && (
+                              <button
+                                type="button"
+                                disabled={togglingDailyKey === `${entryClassObj.id}_${entry.date}`}
+                                onClick={() => handleToggleDailyDiaryAccess(entryClassObj, entry.date)}
+                                className={`px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                                  entryAccessInfo.isLockedForProfessor
+                                    ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 shadow-sm"
+                                    : "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
+                                }`}
+                                title={entryAccessInfo.isLockedForProfessor ? "Reabrir este diário de aula para o professor" : "Trancar este diário de aula para o professor"}
+                              >
+                                {togglingDailyKey === `${entryClassObj.id}_${entry.date}` ? (
+                                  <span>...</span>
+                                ) : entryAccessInfo.isLockedForProfessor ? (
+                                  <>
+                                    <Unlock size={13} /> Reabrir
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock size={13} /> Trancar
+                                  </>
+                                )}
                               </button>
                             )}
                           </div>
@@ -1597,7 +1757,7 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
               </div>
 
               {/* Rodapé do Modal */}
-              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -1606,16 +1766,47 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                   <Printer size={14} /> Imprimir / Salvar PDF
                 </button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {isGestorOrDirector && (() => {
+                    const clsObj = classes.find(c => c.id === viewingDetailDiary.classId);
+                    if (!clsObj) return null;
+                    const modalAccessInfo = resolveClassDailyDiaryAccess(clsObj, viewingDetailDiary.date);
+                    const isBusy = togglingDailyKey === `${clsObj.id}_${viewingDetailDiary.date}`;
+                    return (
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleToggleDailyDiaryAccess(clsObj, viewingDetailDiary.date)}
+                        className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                          modalAccessInfo.isLockedForProfessor
+                            ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 shadow-md"
+                            : "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
+                        }`}
+                      >
+                        {isBusy ? (
+                          <span>Atualizando...</span>
+                        ) : modalAccessInfo.isLockedForProfessor ? (
+                          <>
+                            <Unlock size={14} /> Reabrir Diário de Aula
+                          </>
+                        ) : (
+                          <>
+                            <Lock size={14} /> Trancar Diário de Aula
+                          </>
+                        )}
+                      </button>
+                    );
+                  })()}
                   {!isAuxiliar && (
                     <button
                       type="button"
                       onClick={() => {
                         const diaryToEdit = viewingDetailDiary;
                         const clsObj = classes.find(c => c.id === diaryToEdit.classId);
-                        const dlInfo = getClassDiaryDeadlineInfo(diaryToEdit.date, clsObj?.time || diaryToEdit.classTime);
-                        if (isProfessorOnly && dlInfo.isExpired) {
-                          setDeadlineModalData(dlInfo);
+                        const accessInfo = resolveClassDailyDiaryAccess(clsObj, diaryToEdit.date);
+                        if (isProfessorOnly && accessInfo.isLockedForProfessor) {
+                          setDeadlineModalData(accessInfo.deadlineInfo);
+                          setDeadlineModalManuallyLocked(accessInfo.isManuallyLocked);
                           setIsDeadlineModalOpen(true);
                           return;
                         }
@@ -1644,7 +1835,7 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
         )}
       </AnimatePresence>
 
-      {/* MODAL DE AVISO: PRAZO DE LANÇAMENTO EXPIRADO (REGRA DE 24H) */}
+      {/* MODAL DE AVISO: PRAZO DE LANÇAMENTO EXPIRADO OU DIÁRIO TRANCADO */}
       <AnimatePresence>
         {isDeadlineModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
@@ -1658,14 +1849,14 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
               <div className="p-6 bg-gradient-to-r from-rose-600 to-rose-700 text-white flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-white shrink-0 shadow-inner">
-                    <Clock size={26} className="animate-pulse" />
+                    {deadlineModalManuallyLocked ? <Lock size={26} /> : <Clock size={26} className="animate-pulse" />}
                   </div>
                   <div>
                     <h3 className="text-lg font-black tracking-tight uppercase">
-                      Prazo de Lançamento Expirado
+                      {deadlineModalManuallyLocked ? "Diário Trancado pela Gestão" : "Prazo de Lançamento Expirado"}
                     </h3>
                     <p className="text-xs text-rose-100 font-bold">
-                      Diário de Aula • Regra de 24 Horas
+                      {deadlineModalManuallyLocked ? "Diário de Aula • Bloqueio Manual Ativo" : "Diário de Aula • Regra de 24 Horas"}
                     </p>
                   </div>
                 </div>
@@ -1689,7 +1880,15 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                       Não é possível fazer o lançamento da frequência
                     </h4>
                     <p className="text-xs text-rose-700 leading-relaxed font-medium">
-                      O envio da chamada e do relato de aula deve ser realizado em até <strong>24 horas após a realização da aula</strong>. O prazo limite para esta aula foi ultrapassado.
+                      {deadlineModalManuallyLocked ? (
+                        <>
+                          Este diário de aula foi <strong>trancado manualmente</strong> pelo Gestor ou Diretor Pedagógico e não aceita novos lançamentos ou edições no momento.
+                        </>
+                      ) : (
+                        <>
+                          O envio da chamada e do relato de aula deve ser realizado em até <strong>24 horas após a realização da aula</strong>. O prazo limite para esta aula foi ultrapassado.
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1705,7 +1904,7 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                     </div>
 
                     <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
-                      <span className="font-bold text-slate-500">Prazo Limite Encerrou em:</span>
+                      <span className="font-bold text-slate-500">Prazo Limite Padrão (24h):</span>
                       <span className="font-black text-rose-600">
                         {deadlineModalData.formattedDeadline}
                       </span>
@@ -1714,7 +1913,7 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
                     <div className="flex justify-between items-center py-1">
                       <span className="font-bold text-slate-500">Status Atual:</span>
                       <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 font-black rounded-lg text-[11px]">
-                        {deadlineModalData.formattedTimeRemaining}
+                        {deadlineModalManuallyLocked ? "Trancado pela Gestão" : deadlineModalData.formattedTimeRemaining}
                       </span>
                     </div>
                   </div>
@@ -1722,7 +1921,7 @@ export const ClassDiaryView: React.FC<ClassDiaryViewProps> = ({
 
                 {/* Orientação Pedagógica */}
                 <p className="text-xs text-slate-500 leading-relaxed font-medium bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                  💡 Caso necessite registrar a frequência de uma aula passada por motivo justificado, favor entrar em contato com o <strong>Gestor</strong> ou o <strong>Diretor Pedagógico</strong> da instituição para solicitar a liberação excepcional.
+                  💡 Caso necessite registrar ou alterar a frequência desta aula, favor entrar em contato com o <strong>Gestor</strong> ou o <strong>Diretor Pedagógico</strong> da instituição para solicitar a liberação excepcional.
                 </p>
               </div>
 

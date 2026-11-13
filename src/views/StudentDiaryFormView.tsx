@@ -5,7 +5,7 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Save, HelpCircle, CheckCircle2, Download, Clock, Lock, AlertTriangle, Calendar, ChevronRight } from "lucide-react";
+import { ArrowLeft, Save, HelpCircle, CheckCircle2, Download, Clock, Lock, Unlock, AlertTriangle, Calendar, ChevronRight } from "lucide-react";
 import { User, Class } from "../types";
 import { Avatar, BackButton } from "../components/CommonComponents";
 import { 
@@ -25,7 +25,8 @@ import { Award, Star } from "lucide-react";
 import { UserRole } from "../types";
 import { generateDiaryPDF } from "../lib/pdfExporter";
 import { getUserDisplayName, getUserSecondaryName, isDirectorOrGestor, isStudentInactiveInClass } from "../lib/userUtils";
-import { getMonthlyDeadline } from "../lib/deadlineUtils";
+import { resolveMonthlyDiaryAccess } from "../lib/deadlineUtils";
+import { toggleMonthlyDiaryAccess } from "../services/diaryAccessService";
 import { DeadlineExpiredModal } from "../components/DeadlineExpiredModal";
 
 interface StudentDiaryFormViewProps {
@@ -40,8 +41,10 @@ interface StudentDiaryFormViewProps {
   handleSubmitDiary: (status: "rascunho" | "concluido") => void;
   handleAwardBadge: (studentId: string, badgeDef: any, customMessage?: string, forceUniqueKey?: string, classId?: string) => Promise<void>;
   userRole?: UserRole | null;
+  currentUser?: any;
   setView: (view: string) => void;
   evaluations?: any[];
+  showNotification?: (message: string, title?: string, type?: "success" | "warning" | "error") => void;
 }
 
 export const StudentDiaryFormView = ({
@@ -56,10 +59,13 @@ export const StudentDiaryFormView = ({
   handleSubmitDiary,
   handleAwardBadge,
   userRole,
+  currentUser,
   setView,
-  evaluations = []
+  evaluations = [],
+  showNotification
 }: StudentDiaryFormViewProps) => {
   const [showExpiredModal, setShowExpiredModal] = useState(false);
+  const [isTogglingAccess, setIsTogglingAccess] = useState(false);
   const student = users.find(u => u.id === selectedDiaryStudentId);
   const targetClass = classes.find(c => c.id === selectedClassId);
   const isSenior60 = is60PlusClass(targetClass?.type, targetClass?.code);
@@ -72,21 +78,54 @@ export const StudentDiaryFormView = ({
 
   const isGestorOrDirector = isDirectorOrGestor(userRole);
 
-  const deadlineInfo = useMemo(() => {
-    return getMonthlyDeadline(diaryFilterMonth, diaryFilterYear);
-  }, [diaryFilterMonth, diaryFilterYear]);
+  const diaryAccess = useMemo(() => {
+    return resolveMonthlyDiaryAccess(targetClass, diaryFilterMonth, diaryFilterYear);
+  }, [targetClass, diaryFilterMonth, diaryFilterYear]);
+
+  const deadlineInfo = diaryAccess.deadlineInfo;
 
   const isInactiveStudent = useMemo(() => {
     if (!student || !targetClass) return false;
     return isStudentInactiveInClass(student, targetClass);
   }, [student, targetClass]);
 
+  const handleToggleDiaryAccess = async () => {
+    if (!targetClass || !isGestorOrDirector || isTogglingAccess) return;
+    setIsTogglingAccess(true);
+    try {
+      const result = await toggleMonthlyDiaryAccess(
+        targetClass,
+        diaryFilterMonth,
+        diaryFilterYear,
+        { uid: currentUser?.uid || currentUser?.id, name: getUserDisplayName(currentUser) }
+      );
+      if (result.action === "reopened") {
+        showNotification?.(
+          `Lançamento de notas da turma ${targetClass.code} (${deadlineInfo.formattedReference}) reaberto para os professores.`,
+          "Diário Reaberto",
+          "success"
+        );
+      } else {
+        showNotification?.(
+          `Lançamento de notas da turma ${targetClass.code} (${deadlineInfo.formattedReference}) trancado para os professores.`,
+          "Diário Trancado",
+          "warning"
+        );
+      }
+    } catch (err) {
+      console.error("Erro ao alternar status do diário de turma:", err);
+      showNotification?.("Não foi possível alterar o bloqueio deste diário.", "Erro", "error");
+    } finally {
+      setIsTogglingAccess(false);
+    }
+  };
+
   const handleValidatedSubmit = (status: "rascunho" | "concluido") => {
     if (isInactiveStudent) {
       alert("Alunos desmatriculados ou trancados não devem ter lançamentos no diário.");
       return;
     }
-    if (deadlineInfo.isExpired && !isGestorOrDirector) {
+    if (diaryAccess.isLockedForProfessor && !isGestorOrDirector) {
       setShowExpiredModal(true);
       return;
     }
@@ -254,15 +293,43 @@ export const StudentDiaryFormView = ({
                  {targetClass?.code} • {new Date(0, (diaryFilterMonth || 1) - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()} {diaryFilterYear}
                </p>
                <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border backdrop-blur-md ${
-                 deadlineInfo.isExpired 
+                 diaryAccess.isLockedForProfessor
                    ? "bg-rose-500/20 text-rose-200 border-rose-400/30" 
                    : "bg-emerald-500/20 text-emerald-200 border-emerald-400/30"
                }`}>
-                 {deadlineInfo.isExpired ? <Lock size={12} /> : <Clock size={12} />}
-                 {deadlineInfo.isExpired 
-                   ? `Prazo expirado (${deadlineInfo.formattedDeadline})` 
-                   : `Prazo até ${deadlineInfo.formattedDeadline} às 23:59`}
+                 {diaryAccess.isLockedForProfessor ? <Lock size={12} /> : diaryAccess.isManuallyUnlocked ? <Unlock size={12} /> : <Clock size={12} />}
+                 {diaryAccess.isManuallyUnlocked
+                   ? `Reaberto manualmente (prazo regular: ${deadlineInfo.formattedDeadline})`
+                   : diaryAccess.isManuallyLocked
+                     ? `Trancado manualmente pela gestão`
+                     : deadlineInfo.isExpired 
+                       ? `Prazo expirado (${deadlineInfo.formattedDeadline})` 
+                       : `Prazo até ${deadlineInfo.formattedDeadline} às 23:59`}
                </div>
+               {isGestorOrDirector && targetClass && (
+                 <button
+                   type="button"
+                   onClick={handleToggleDiaryAccess}
+                   disabled={isTogglingAccess}
+                   className={`px-3.5 py-2 font-black uppercase tracking-widest text-[10px] rounded-lg shadow-lg active:scale-95 transition-all flex items-center gap-1.5 border disabled:opacity-50 ${
+                     diaryAccess.isLockedForProfessor
+                       ? "bg-emerald-500 hover:bg-emerald-400 text-white border-emerald-300/40"
+                       : "bg-rose-500 hover:bg-rose-400 text-white border-rose-300/40"
+                   }`}
+                 >
+                   {diaryAccess.isLockedForProfessor ? (
+                     <>
+                       <Unlock size={13} />
+                       {isTogglingAccess ? "Reabrindo..." : "Reabrir Diário"}
+                     </>
+                   ) : (
+                     <>
+                       <Lock size={13} />
+                       {isTogglingAccess ? "Trancando..." : "Trancar Diário"}
+                     </>
+                   )}
+                 </button>
+               )}
                <button
                  type="button"
                  onClick={handleDownloadPDF}
@@ -802,7 +869,7 @@ export const StudentDiaryFormView = ({
       </div>
     </motion.div>
 
-    {/* MODAL DE PRAZO DE DIÁRIO EXPIRADO */}
+    {/* MODAL DE PRAZO DE DIÁRIO EXPIRADO / TRANCADO */}
     <DeadlineExpiredModal
       isOpen={showExpiredModal}
       onClose={() => setShowExpiredModal(false)}
@@ -811,6 +878,7 @@ export const StudentDiaryFormView = ({
       formattedDeadline={deadlineInfo.formattedDeadline}
       studentName={getUserDisplayName(student)}
       className={targetClass ? `${targetClass.code} - ${targetClass.type}` : undefined}
+      isManuallyLocked={diaryAccess.isManuallyLocked}
     />
   </>
   );

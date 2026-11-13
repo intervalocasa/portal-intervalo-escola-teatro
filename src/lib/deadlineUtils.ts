@@ -1,6 +1,7 @@
 /**
  * Utilitários para controle de prazos mensais de entrega de diários e autoavaliações.
  */
+import { Class, DiaryAccessOverrideEntry, DiaryAccessOverrideStatus } from "../types";
 
 export interface MonthlyDeadlineInfo {
   referenceMonth: number;
@@ -176,5 +177,115 @@ export function getClassDiaryDeadlineInfo(
     formattedClassEnd,
     formattedDeadline,
     formattedTimeRemaining
+  };
+}
+
+export interface MonthlyDiaryAccessInfo {
+  deadlineInfo: MonthlyDeadlineInfo;
+  key: string;
+  overrideStatus: DiaryAccessOverrideStatus | null;
+  isManuallyUnlocked: boolean;
+  isManuallyLocked: boolean;
+  isLockedForProfessor: boolean;
+}
+
+export interface ClassDailyDiaryAccessInfo {
+  deadlineInfo: ClassDiaryDeadlineInfo;
+  key: string;
+  overrideStatus: DiaryAccessOverrideStatus | null;
+  isManuallyUnlocked: boolean;
+  isManuallyLocked: boolean;
+  isLockedForProfessor: boolean;
+  statusLabel: string;
+}
+
+export function getMonthlyDiaryKey(month: number, year: number): string {
+  const safeMonth = Math.min(Math.max(Number(month) || 1, 1), 12);
+  const safeYear = Number(year) || new Date().getFullYear();
+  return `${safeYear}-${String(safeMonth).padStart(2, "0")}`;
+}
+
+function extractOverrideStatus(
+  entry?: DiaryAccessOverrideStatus | DiaryAccessOverrideEntry | null
+): DiaryAccessOverrideStatus | null {
+  if (!entry) return null;
+  if (typeof entry === "string") {
+    return entry === "unlocked" || entry === "locked" ? entry : null;
+  }
+  if (typeof entry === "object" && (entry.status === "unlocked" || entry.status === "locked")) {
+    return entry.status;
+  }
+  return null;
+}
+
+/**
+ * Resolve acesso efetivo ao Diário de Turma (Notas) mantendo a regra padrão de prazo mensal,
+ * mas considerando liberação ("unlocked") ou trancamento ("locked") manual por Gestor/Diretor Pedagógico.
+ */
+export function resolveMonthlyDiaryAccess(
+  classObj: Partial<Class> | null | undefined,
+  month: number,
+  year: number,
+  now: Date = new Date()
+): MonthlyDiaryAccessInfo {
+  const deadlineInfo = getMonthlyDeadline(month, year, 5, now);
+  const key = getMonthlyDiaryKey(month, year);
+  const overrideStatus = extractOverrideStatus(classObj?.diaryAccessOverrides?.[key]);
+  const isManuallyUnlocked = overrideStatus === "unlocked";
+  const isManuallyLocked = overrideStatus === "locked";
+
+  const isLockedForProfessor = isManuallyUnlocked
+    ? false
+    : isManuallyLocked
+      ? true
+      : deadlineInfo.isExpired;
+
+  return {
+    deadlineInfo,
+    key,
+    overrideStatus,
+    isManuallyUnlocked,
+    isManuallyLocked,
+    isLockedForProfessor
+  };
+}
+
+/**
+ * Resolve acesso efetivo ao Diário de Aula (Chamada e Relato) mantendo a regra padrão de 24h,
+ * mas considerando liberação ("unlocked") ou trancamento ("locked") manual por Gestor/Diretor Pedagógico.
+ */
+export function resolveClassDailyDiaryAccess(
+  classObj: Partial<Class> | null | undefined,
+  classDateStr: string,
+  now: Date = new Date()
+): ClassDailyDiaryAccessInfo {
+  const deadlineInfo = getClassDiaryDeadlineInfo(classDateStr, classObj?.time, now);
+  const key = classDateStr || "";
+  const overrideStatus = key ? extractOverrideStatus(classObj?.dailyDiaryAccessOverrides?.[key]) : null;
+  const isManuallyUnlocked = overrideStatus === "unlocked";
+  const isManuallyLocked = overrideStatus === "locked";
+
+  const isLockedForProfessor = isManuallyUnlocked
+    ? false
+    : isManuallyLocked
+      ? true
+      : deadlineInfo.isExpired;
+
+  const statusLabel = isManuallyUnlocked
+    ? "Reaberto pela Gestão"
+    : isManuallyLocked
+      ? "Trancado pela Gestão"
+      : deadlineInfo.isExpired
+        ? "Prazo 24h Expirado"
+        : "Dentro do Prazo";
+
+  return {
+    deadlineInfo,
+    key,
+    overrideStatus,
+    isManuallyUnlocked,
+    isManuallyLocked,
+    isLockedForProfessor,
+    statusLabel
   };
 }

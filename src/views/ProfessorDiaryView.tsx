@@ -5,12 +5,13 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "motion/react";
-import { UserCircle, Presentation, ArrowLeft, Drama, Download, Clock, Lock, AlertTriangle, ShieldCheck, BookOpen, ChevronRight } from "lucide-react";
+import { UserCircle, Presentation, ArrowLeft, Drama, Download, Clock, Lock, Unlock, AlertTriangle, ShieldCheck, BookOpen, ChevronRight } from "lucide-react";
 import { User, Class, Diary, Evaluation } from "../types";
 import { Logo, Avatar, BackButton } from "../components/CommonComponents";
 import { generateDiaryPDF } from "../lib/pdfExporter";
 import { getUserDisplayName, getUserSecondaryName, isDirectorOrGestor, isStudentActiveInClass } from "../lib/userUtils";
-import { getMonthlyDeadline } from "../lib/deadlineUtils";
+import { resolveMonthlyDiaryAccess } from "../lib/deadlineUtils";
+import { toggleMonthlyDiaryAccess } from "../services/diaryAccessService";
 import { DeadlineExpiredModal } from "../components/DeadlineExpiredModal";
 
 interface ProfessorDiaryViewProps {
@@ -28,6 +29,7 @@ interface ProfessorDiaryViewProps {
   setSelectedDiaryStudentId: (id: string) => void;
   setDiaryFormData: (data: any) => void;
   setView: (view: string) => void;
+  showNotification?: (message: string, title?: string, type?: "success" | "warning" | "error") => void;
 }
 
 export const ProfessorDiaryView = ({
@@ -44,10 +46,12 @@ export const ProfessorDiaryView = ({
   currentUser,
   setSelectedDiaryStudentId,
   setDiaryFormData,
-  setView
+  setView,
+  showNotification
 }: ProfessorDiaryViewProps) => {
   const [showExpiredModal, setShowExpiredModal] = useState(false);
   const [expiredModalStudent, setExpiredModalStudent] = useState<string | undefined>(undefined);
+  const [isTogglingAccess, setIsTogglingAccess] = useState(false);
 
   const isGestorOrDirector = isDirectorOrGestor(currentUser?.role);
 
@@ -60,9 +64,42 @@ export const ProfessorDiaryView = ({
 
   const targetClass = classes.find(c => c.id === selectedClassId);
 
-  const deadlineInfo = useMemo(() => {
-    return getMonthlyDeadline(diaryFilterMonth, diaryFilterYear);
-  }, [diaryFilterMonth, diaryFilterYear]);
+  const diaryAccess = useMemo(() => {
+    return resolveMonthlyDiaryAccess(targetClass, diaryFilterMonth, diaryFilterYear);
+  }, [targetClass, diaryFilterMonth, diaryFilterYear]);
+
+  const deadlineInfo = diaryAccess.deadlineInfo;
+
+  const handleToggleDiaryAccess = async () => {
+    if (!targetClass || !isGestorOrDirector || isTogglingAccess) return;
+    setIsTogglingAccess(true);
+    try {
+      const result = await toggleMonthlyDiaryAccess(
+        targetClass,
+        diaryFilterMonth,
+        diaryFilterYear,
+        { uid: currentUser?.id, name: getUserDisplayName(currentUser) }
+      );
+      if (result.action === "reopened") {
+        showNotification?.(
+          `Lançamento de notas da turma ${targetClass.code} (${deadlineInfo.formattedReference}) reaberto para os professores.`,
+          "Diário Reaberto",
+          "success"
+        );
+      } else {
+        showNotification?.(
+          `Lançamento de notas da turma ${targetClass.code} (${deadlineInfo.formattedReference}) trancado para os professores.`,
+          "Diário Trancado",
+          "warning"
+        );
+      }
+    } catch (err) {
+      console.error("Erro ao alternar status do diário de turma:", err);
+      showNotification?.("Não foi possível alterar o bloqueio deste diário.", "Erro", "error");
+    } finally {
+      setIsTogglingAccess(false);
+    }
+  };
 
   const classStudents = useMemo(() => {
     if (!targetClass) return [];
@@ -191,29 +228,71 @@ export const ProfessorDiaryView = ({
                 </div>
               </div>
 
-              {/* Banner de status do prazo */}
-              <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              {/* Banner de status do prazo + Controle manual (Gestor/Diretor) */}
+              <div className="pt-3 border-t border-slate-100 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2">
-                  <Clock size={16} className={deadlineInfo.isExpired ? (isGestorOrDirector ? "text-amber-600" : "text-rose-600") : "text-pro-teal"} />
+                  <Clock size={16} className={diaryAccess.isLockedForProfessor ? (isGestorOrDirector ? "text-amber-600" : "text-rose-600") : "text-pro-teal"} />
                   <span className="font-bold text-slate-600">
                     Prazo institucional para diários de <strong>{deadlineInfo.formattedReference}</strong>:
                   </span>
                 </div>
-                {deadlineInfo.isExpired ? (
-                  isGestorOrDirector ? (
-                    <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 font-black uppercase tracking-wider text-[10px] rounded-xl border border-amber-200">
-                      <ShieldCheck size={12} className="text-amber-600" /> Prazo regular de professores encerrado ({deadlineInfo.formattedDeadline}) • Lançamento administrativo liberado
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {diaryAccess.isManuallyUnlocked ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 font-black uppercase tracking-wider text-[10px] rounded-xl border border-emerald-200">
+                      <Unlock size={12} className="text-emerald-600 shrink-0" />
+                      <span>Reaberto manualmente para professores (prazo regular: {deadlineInfo.formattedDeadline})</span>
                     </div>
+                  ) : diaryAccess.isManuallyLocked ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 font-black uppercase tracking-wider text-[10px] rounded-xl border border-rose-200">
+                      <Lock size={12} className="shrink-0" />
+                      <span>Trancado manualmente pela gestão (prazo regular: {deadlineInfo.formattedDeadline})</span>
+                    </div>
+                  ) : deadlineInfo.isExpired ? (
+                    isGestorOrDirector ? (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 font-black uppercase tracking-wider text-[10px] rounded-xl border border-amber-200">
+                        <ShieldCheck size={12} className="text-amber-600 shrink-0" /> Prazo regular encerrado ({deadlineInfo.formattedDeadline}) • Bloqueado p/ professores
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 font-black uppercase tracking-wider text-[10px] rounded-xl border border-rose-200">
+                        <Lock size={12} className="shrink-0" /> Prazo encerrou em {deadlineInfo.formattedDeadline} às 23:59
+                      </div>
+                    )
                   ) : (
-                    <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 font-black uppercase tracking-wider text-[10px] rounded-xl border border-rose-200">
-                      <Lock size={12} /> Prazo encerrou em {deadlineInfo.formattedDeadline} às 23:59
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 font-black uppercase tracking-wider text-[10px] rounded-xl border border-emerald-200">
+                      Até {deadlineInfo.formattedDeadline} às 23:59 ({deadlineInfo.daysRemaining} dias restantes)
                     </div>
-                  )
-                ) : (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 font-black uppercase tracking-wider text-[10px] rounded-xl border border-emerald-200">
-                    Até {deadlineInfo.formattedDeadline} às 23:59 ({deadlineInfo.daysRemaining} dias restantes)
-                  </div>
-                )}
+                  )}
+
+                  {isGestorOrDirector && targetClass && (
+                    <button
+                      type="button"
+                      onClick={handleToggleDiaryAccess}
+                      disabled={isTogglingAccess}
+                      className={`px-3.5 py-1.5 rounded-xl font-black uppercase tracking-wider text-[10px] flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 border ${
+                        diaryAccess.isLockedForProfessor
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                          : "bg-rose-600 hover:bg-rose-700 text-white border-rose-600"
+                      }`}
+                      title={
+                        diaryAccess.isLockedForProfessor
+                          ? "Reabrir o lançamento de notas deste diário de turma para os professores"
+                          : "Trancar o lançamento de notas deste diário de turma para os professores"
+                      }
+                    >
+                      {diaryAccess.isLockedForProfessor ? (
+                        <>
+                          <Unlock size={12} />
+                          {isTogglingAccess ? "Reabrindo..." : "Reabrir Diário da Turma"}
+                        </>
+                      ) : (
+                        <>
+                          <Lock size={12} />
+                          {isTogglingAccess ? "Trancando..." : "Trancar Diário da Turma"}
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -246,7 +325,7 @@ export const ProfessorDiaryView = ({
                       <div 
                         key={sid}
                         onClick={() => {
-                          if (deadlineInfo.isExpired && !isGestorOrDirector) {
+                          if (diaryAccess.isLockedForProfessor && !isGestorOrDirector) {
                             setExpiredModalStudent(getUserDisplayName(student));
                             setShowExpiredModal(true);
                             return;
@@ -279,7 +358,7 @@ export const ProfessorDiaryView = ({
                           setView("student_diary_form");
                         }}
                         className={`bg-white p-5 rounded-[28px] border shadow-sm transition-all group flex flex-col md:flex-row md:items-center gap-6 cursor-pointer ${
-                          deadlineInfo.isExpired && !isGestorOrDirector
+                          diaryAccess.isLockedForProfessor && !isGestorOrDirector
                             ? "border-slate-100 hover:border-rose-300 hover:bg-rose-50/10" 
                             : "border-slate-100 hover:shadow-md hover:border-pro-teal/30"
                         }`}
@@ -389,7 +468,7 @@ export const ProfessorDiaryView = ({
         </div>
       </motion.div>
 
-      {/* MODAL DE PRAZO DE DIÁRIO EXPIRADO */}
+      {/* MODAL DE PRAZO DE DIÁRIO EXPIRADO / TRANCADO */}
       <DeadlineExpiredModal
         isOpen={showExpiredModal}
         onClose={() => setShowExpiredModal(false)}
@@ -398,6 +477,7 @@ export const ProfessorDiaryView = ({
         formattedDeadline={deadlineInfo.formattedDeadline}
         studentName={expiredModalStudent}
         className={targetClass ? `${targetClass.code} - ${targetClass.type}` : undefined}
+        isManuallyLocked={diaryAccess.isManuallyLocked}
       />
     </>
   );

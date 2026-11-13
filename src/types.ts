@@ -126,6 +126,15 @@ export interface User {
   desmatriculadoEm?: string;
 }
 
+export type DiaryAccessOverrideStatus = "unlocked" | "locked";
+
+export interface DiaryAccessOverrideEntry {
+  status: DiaryAccessOverrideStatus;
+  updatedAt?: string;
+  updatedByUid?: string;
+  updatedByName?: string;
+}
+
 export interface Class {
   id: string;
   type: string;
@@ -141,6 +150,8 @@ export interface Class {
   unenrollmentDates?: Record<string, string>;
   studentPaymentTypes?: Record<string, "Pagante" | "Isento">;
   studentEnrollmentStatuses?: Record<string, "Ativo" | "Trancado" | "Desmatriculado" | "Inativo">;
+  diaryAccessOverrides?: Record<string, DiaryAccessOverrideStatus | DiaryAccessOverrideEntry>;
+  dailyDiaryAccessOverrides?: Record<string, DiaryAccessOverrideStatus | DiaryAccessOverrideEntry>;
   year: string;
 }
 
